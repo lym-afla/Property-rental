@@ -3,4 +3,4 @@ FROM ratings
 WHERE movie_id IN
     (SELECT id
     FROM movies
-    WHERE title = 2012);
+    WHERE year = 2012);
