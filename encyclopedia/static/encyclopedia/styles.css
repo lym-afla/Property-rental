@@ -36,3 +36,24 @@ textarea {
 .sidebar h2 {
     margin-top: 5px;
 }
+
+
+/* https://codepen.io/vishalsks/pen/YzzpQGQ */
+.results {
+    position: relative;
+    display: block;
+    height: 50px;
+}
+
+.ind {
+    position: absolute;
+}
+
+.link {
+    font-size: x-large;
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
