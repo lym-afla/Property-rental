@@ -1,5 +1,7 @@
 from django.shortcuts import render
 import markdown2
+from django.urls import reverse
+from django.http import HttpResponseRedirect
 
 from . import util
 
@@ -14,3 +16,16 @@ def entry(request, entry):
         "article": entry,
         "content": markdown2.markdown(util.get_entry(entry))
     })
+    
+def search(request):
+    print(request.GET)
+    if request.GET:
+        search_list = []
+        articles = util.list_entries()
+        for line in articles:
+            if request.GET.get('q') in line:
+                search_list.append(line)
+        return render(request, "encyclopedia/search.html", {
+            "search": search_list
+        })
+    return HttpResponseRedirect(reverse("index"))
