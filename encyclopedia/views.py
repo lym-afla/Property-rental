@@ -36,10 +36,13 @@ def search(request):
     return HttpResponseRedirect(reverse("index"))
 
 class NewEntry(forms.Form):
-    title = forms.CharField(label="title")
-    content = forms.JSONField(label="content")
+    title = forms.CharField(label="Title")
+    content = forms.CharField(label="Content", widget=forms.Textarea)
 
 def add_page(request):
+    
+    # https://simpleisbetterthancomplex.com/article/2017/08/19/how-to-render-django-form-manually.html#accessing-the-form-fields-individually
+    
     return render(request, "encyclopedia/add-entry.html", {
         "form": NewEntry()
     })

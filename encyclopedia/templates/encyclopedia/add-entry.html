@@ -1,18 +1,37 @@
 {% extends "encyclopedia/layout.html" %}
 
 {% block title %}
-    Add entry
+Add entry
 {% endblock %}
 
 {% block body %}
 
-    <h1>Add new entry:</h1>
+<h1>Add new entry:</h1>
 
-    <form action="" method="post">
-        {% csrf_token %}
-        {{ form }}
-        <input type="submit">
-    </form>
-    <a href="{% url 'index' %}">View Tasks</a>
+<form action="" method="post" novalidate>
+    {% csrf_token %}
+
+    <table>
+        {% for field in form %}
+        <tr>
+            <th>{{ field.label_tag }}</th>
+            <td>
+                {% if field.errors %}
+                <ul>
+                    {% for error in field.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {{ field }}
+                {% if field.help_text %}
+                    <br />{{ field.help_text }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    <button type="submit">Submit</button>
+</form>
 
 {% endblock %}
