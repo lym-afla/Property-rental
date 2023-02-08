@@ -11,6 +11,14 @@ Add entry
 <form action="" method="post" novalidate>
     {% csrf_token %}
 
+    {% if form.non_field_errors %}
+    <ul>
+        {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
     <table>
         {% for field in form %}
         <tr>
@@ -24,9 +32,6 @@ Add entry
                 </ul>
                 {% endif %}
                 {{ field }}
-                {% if field.help_text %}
-                    <br />{{ field.help_text }}
-                {% endif %}
             </td>
         </tr>
         {% endfor %}

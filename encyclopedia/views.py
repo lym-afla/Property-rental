@@ -36,13 +36,32 @@ def search(request):
     return HttpResponseRedirect(reverse("index"))
 
 class NewEntry(forms.Form):
-    title = forms.CharField(label="Title")
-    content = forms.CharField(label="Content", widget=forms.Textarea)
+    title = forms.CharField(
+        label="Title",
+        widget=forms.TextInput(attrs={'placeholder': 'Title for new entry'})
+        )
+    content = forms.CharField(
+        label="Content",
+        widget=forms.Textarea(attrs={'placeholder': 'Content for new entry'})
+        )
+    
+    def clean(self):
+        cleaned_data = super(NewEntry, self).clean()
+        title = cleaned_data.get('title')
+        content = cleaned_data.get('content')
+        if not title and not content:
+            raise forms.ValidationError('You have to write something!')
 
 def add_page(request):
-    
     # https://simpleisbetterthancomplex.com/article/2017/08/19/how-to-render-django-form-manually.html#accessing-the-form-fields-individually
+
+    if request.method == 'POST':
+        form = NewEntry(request.POST)
+        if form.is_valid():
+            pass
+    else:
+        form = NewEntry()    
     
     return render(request, "encyclopedia/add-entry.html", {
-        "form": NewEntry()
+        "form": form
     })
