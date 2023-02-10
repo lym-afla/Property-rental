@@ -3,6 +3,7 @@ import markdown2
 from django.urls import reverse
 from django.http import HttpResponseRedirect
 from django import forms
+from django.utils.timezone import datetime
 
 from . import util
 
@@ -19,6 +20,7 @@ def entry(request, entry):
     })
     
 def search(request):
+    now = datetime.now()
     if request.GET:
         search_list = []
         articles = util.list_entries()
@@ -42,15 +44,19 @@ class NewEntry(forms.Form):
         )
     content = forms.CharField(
         label="Content",
-        widget=forms.Textarea(attrs={'placeholder': 'Content for new entry'})
+        widget=forms.Textarea(attrs={'placeholder': 'Content for new entry. Must be in markdown format'})
         )
     
+    # Check for any data in both fields and title existing in titles
     def clean(self):
-        cleaned_data = super(NewEntry, self).clean()
+        cleaned_data = super().clean()
         title = cleaned_data.get('title')
         content = cleaned_data.get('content')
         if not title and not content:
             raise forms.ValidationError('You have to write something!')
+        if title in util.list_entries():
+            self.add_error('title', 'Please use unique title name')
+            raise forms.ValidationError('Title already exists')
 
 def add_page(request):
     # https://simpleisbetterthancomplex.com/article/2017/08/19/how-to-render-django-form-manually.html#accessing-the-form-fields-individually
@@ -58,9 +64,31 @@ def add_page(request):
     if request.method == 'POST':
         form = NewEntry(request.POST)
         if form.is_valid():
-            pass
+            util.save_entry(form.cleaned_data['title'],form.cleaned_data['content'])
+            return HttpResponseRedirect(reverse("entry", args=[form.cleaned_data['title']]))
     else:
         form = NewEntry()    
+    
+    return render(request, "encyclopedia/add-entry.html", {
+        "form": form
+    })
+    
+def edit_page(request):
+    if request.method == 'POST':
+        form = NewEntry(request.POST)
+        if form.is_valid():
+            util.save_entry(form.cleaned_data['title'],form.cleaned_data['content'])
+            return HttpResponseRedirect(reverse("entry", args=[form.cleaned_data['title']]))
+    elif request.GET.get('e'):
+        entry = request.GET['e']
+        form = NewEntry(initial={'title': entry, 'content': util.get_entry(entry.lower())})
+        form.fields['title'].widget = forms.HiddenInput()
+        return render(request, "encyclopedia/add-entry.html", {
+            "form": form,
+            "entry": entry
+        })
+    else:
+        form = NewEntry()
     
     return render(request, "encyclopedia/add-entry.html", {
         "form": form

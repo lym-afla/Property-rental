@@ -1,11 +1,14 @@
 {% load static %}
-
 <!DOCTYPE html>
-
 <html lang="en">
     <head>
-        <title>{% block title %}{% endblock %}</title>
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+        <title>
+            {% block title %}{% endblock %}
+        </title>
+        <link rel="stylesheet"
+              href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+              integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+              crossorigin="anonymous">
         <link href="{% static 'encyclopedia/styles.css' %}" rel="stylesheet">
     </head>
     <body>
@@ -21,17 +24,14 @@
                 <div>
                     <a href="{% url 'new_page' %}">Create New Page</a>
                 </div>
-                <div>
-                    Random Page
-                </div>
+                <div>Random Page</div>
                 {% block nav %}
-                {% endblock %}
+                {% endblock nav %}
             </div>
             <div class="main col-lg-10 col-md-9">
                 {% block body %}
-                {% endblock %}
+                {% endblock body %}
             </div>
         </div>
-
     </body>
 </html>
