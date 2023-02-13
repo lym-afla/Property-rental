@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect
 from django import forms
 from django.utils.timezone import datetime
+import random
 
 from . import util
 
@@ -57,6 +58,21 @@ class NewEntry(forms.Form):
         if title in util.list_entries():
             self.add_error('title', 'Please use unique title name')
             raise forms.ValidationError('Title already exists')
+        
+class EditEntry(NewEntry):
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['title'].widget = forms.HiddenInput()
+    
+    def clean(self):
+        cleaned_data = super(NewEntry, self).clean()
+        title = cleaned_data.get('title')
+        content = cleaned_data.get('content')
+        if not content:
+            raise forms.ValidationError('You have to write something!')
+        if title not in util.list_entries():
+            raise forms.ValidationError('Title does not exist')
 
 def add_page(request):
     # https://simpleisbetterthancomplex.com/article/2017/08/19/how-to-render-django-form-manually.html#accessing-the-form-fields-individually
@@ -75,21 +91,25 @@ def add_page(request):
     
 def edit_page(request):
     if request.method == 'POST':
-        form = NewEntry(request.POST)
+        form = EditEntry(request.POST)
         if form.is_valid():
             util.save_entry(form.cleaned_data['title'],form.cleaned_data['content'])
             return HttpResponseRedirect(reverse("entry", args=[form.cleaned_data['title']]))
     elif request.GET.get('e'):
         entry = request.GET['e']
-        form = NewEntry(initial={'title': entry, 'content': util.get_entry(entry.lower())})
-        form.fields['title'].widget = forms.HiddenInput()
+        form = EditEntry(initial={'title': entry, 'content': util.get_entry(entry.lower())})
+        # form.fields['title'].widget = forms.HiddenInput()
         return render(request, "encyclopedia/add-entry.html", {
             "form": form,
             "entry": entry
         })
     else:
-        form = NewEntry()
+        form = EditEntry()
     
     return render(request, "encyclopedia/add-entry.html", {
         "form": form
     })
+    
+def random_page(request):
+    pages_list = util.list_entries()
+    return HttpResponseRedirect(reverse("entry", args=[pages_list[random.randint(0, len(pages_list) - 1)]]))

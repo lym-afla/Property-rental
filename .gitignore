@@ -1,7 +1,9 @@
 /cs50w-project2*
 
 /encyclopedia/__*
+/wiki/__*
 
 /.vscode
+/venv
 
 /__pycache__
