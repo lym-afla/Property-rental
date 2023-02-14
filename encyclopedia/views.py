@@ -1,7 +1,7 @@
 from django.shortcuts import render
 import markdown2
 from django.urls import reverse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, Http404
 from django import forms
 from django.utils.timezone import datetime
 import random
@@ -15,6 +15,8 @@ def index(request):
     })
 
 def entry(request, entry):
+    if entry not in util.list_entries():
+        raise Http404
     return render(request, "encyclopedia/entry.html", {
         "article": entry,
         "content": markdown2.markdown(util.get_entry(entry))
