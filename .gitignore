@@ -1,0 +1,4 @@
+venv
+
+/commerce/__*
+/auctions/__*
