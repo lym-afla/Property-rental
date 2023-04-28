@@ -6,6 +6,7 @@ from django.urls import reverse
 from django import forms
 
 from .models import User
+from .forms import NewListing
 
 
 def index(request):
@@ -63,30 +64,15 @@ def register(request):
     else:
         return render(request, "auctions/register.html")
 
-class NewListing(forms.Form):
-    title = forms.CharField(
-        label='Title',
-        widget=forms.TextInput(attrs={'placeholder': 'Title for new listing'})
-    )
-    description = forms.CharField(
-        label='Description',
-        widget=forms.Textarea(attrs={'placeholder': 'Describe the new listing'})
-    )
-    starting_bid = forms.DecimalField(
-        label='Starting bid',
-        decimal_places=2
-    )
-    image_URL = forms.URLField(label='URL to listing image', required=False)
-    CATEGORIES = (
-        ('1', 'Fashion'),
-        ('2', 'Toys'),
-        ('3', 'Electronics'),
-        ('4', 'Home')
-    )
-    category = forms.ChoiceField(choices=CATEGORIES)
-
 def create_listing(request):
-    if request.method("POST"):
+    if request.method == "POST":
         listing = NewListing(request.POST)
         if listing.is_valid():
-            
+            return HttpResponseRedirect(reverse("index"))
+        
+    else:
+        form = NewListing()
+    
+    return render(request, "auctions/new-listing.html", {
+        'form': form
+    })

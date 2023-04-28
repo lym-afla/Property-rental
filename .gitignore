@@ -2,3 +2,4 @@ venv
 
 /commerce/__*
 /auctions/__*
+/auctions/migrations
