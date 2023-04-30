@@ -3,5 +3,25 @@
 {% block body %}
     <h2>Active Listings</h2>
 
-    TODO
+    <table class="table">
+        <tbody>
+          {% for listing in listings %}
+          <tr>
+            <td>
+                {% if listing.image_URL %}
+                    <img src="{{ listing.image_URL }}" alt="{{ listing.title }}" style="max-width: 100px;">
+                {% else %}
+                  <img src="https://via.placeholder.com/100x100.png?text=No+Image" alt="No Image" style="max-width: 100px;">
+                {% endif %}
+            </td>
+            <td>
+                <h5> <a href="{% url ''}"></a> {{ listing.title }}</h5>
+                <p>{{ listing.description }}</p>
+                <p>Price: ${{ listing.starting_bid }}</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      
 {% endblock %}
