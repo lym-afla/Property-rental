@@ -5,8 +5,8 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 
-from .models import User, Listing
-from .forms import NewListing
+from .models import User, Listing, Bid
+from .forms import NewListing, NewBid
 
 
 def index(request):
@@ -82,5 +82,33 @@ def create_listing(request):
         form = NewListing()
     
     return render(request, "auctions/new-listing.html", {
+        'form': form
+    })
+    
+def show_listing(request, listing_id):
+    listing = Listing.objects.get(id=listing_id)
+    if listing.bid_set.all().exists():
+        price = listing.bid_set.latest('created').price
+    else:
+        price = listing.starting_bid
+    bids = listing.bid_set.all().count()
+    initial_form_data = {'price': price}
+    
+    # Get new Bid
+    if request.method == "POST":
+        form = NewBid(request.POST, initial=initial_form_data)
+        if form.is_valid():
+            bid = form.save(commit=False)
+            bid.listing = listing
+            bid.owner = request.user
+            bid.save()
+    else:
+        
+        form = NewBid(initial=initial_form_data)
+        
+    return render(request, "auctions/show-listing.html", {
+        'listing': listing,
+        'price': price,
+        'bids': bids,
         'form': form
     })

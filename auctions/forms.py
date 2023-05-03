@@ -1,8 +1,13 @@
 from django import forms
-from .models import Listing
+from .models import Listing, Auction_category, Bid
 from django.core.exceptions import ValidationError
 
-class NewListing(forms.ModelForm):       
+class NewListing(forms.ModelForm):
+    
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self.fields['category'].choices = [('', '--------')] + [(cat.id, cat.category_name) for cat in Auction_category.objects.all()]
+
     class Meta:
         model = Listing
         fields = ['title',
@@ -30,3 +35,25 @@ class NewListing(forms.ModelForm):
         if starting_bid < 0:
             raise forms.ValidationError('Starting bid cannot be negative.')
         return starting_bid
+
+class NewBid(forms.ModelForm):
+    class Meta:
+        model = Bid
+        fields = ['price']
+        labels = {
+            'price': 'Enter Bid'
+        }
+        help_texts = {
+            'price': 'Bid cannot be lower than the current listing price.'
+        }
+        widgets = {
+            'price': forms.NumberInput(attrs={'class': 'form-control', 'data-prefix': '$'})
+        }
+        
+    def clean_price(self):
+        price = self.cleaned_data['price']
+
+        if price < self.initial['price']:
+            raise forms.ValidationError('Bid cannot be lower than the current listing price.')
+                
+        return price

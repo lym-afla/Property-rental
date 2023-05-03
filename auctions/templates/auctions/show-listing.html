@@ -1,0 +1,49 @@
+{% extends 'auctions/layout.html' %}
+{% load widget_tweaks %}
+
+{% block body %}
+
+    <h2>Listing: {{ listing.title }} </h2>
+    <img id="img-{{ listing.id}}" src="{{ listing.image_URL }}" alt="Listing Image">
+    <p>{{ listing.description }}</p>
+    <h2> ${{ price }} </h2>
+    {% if bids == 0 %}
+        <p>No bids so far.</p>
+    {% else %}
+        <p>{{ bids }} bid(s) so far.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% for field in form %}
+        <div class="input-group mb-3">
+            <span class="input-group-text mr-2" id="inputGroup-sizing-default">$</span>
+            {% if form.is_bound %}
+                {% if field.errors %}
+                    {{ field | add_class:"is-invalid" }}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback">
+                            {{ error }}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    {{ field | add_class:"is-valid" }}
+                {% endif %}
+            {% else %}
+                {{ field }}
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Place Bid</button>
+    </form>
+
+    <h2>Details</h2>
+    <li>Listed by: {{ listing.owner.username }}</li>
+    <li>Category: {% if listing.category.category_name %}
+                    {{ listing.category.category_name }}
+                {% else %}
+                    No category
+                {% endif %}</li>
+
+{% endblock %}
