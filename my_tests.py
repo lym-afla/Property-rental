@@ -18,7 +18,17 @@ print(listing.owner.username, listing.owner.email, listing.owner.first_name, lis
 # for i in listing.bid_set.all():
 #     print(i.price, i.listing.id, i.id, i.bidder)
 
-listing = Listing.objects.get(id=1)
+listing = Listing.objects.get(id=0)
 # price = listing.bid_set.latest('created')
-print(listing.bid_set.exists())
-print(listing.bid_set.all().count())
+# print(listing.bid_set.exists())
+# print(listing.bid_set.all().count())
+# for x in listing.bid_set.all():
+#     print(x.price)
+# print(listing.bid_set.latest('created').price)
+
+listings = Listing.objects.all()
+for entry in listings:
+    entry.price = entry.bid_set.latest('created').price if entry.bid_set.exists() else entry.starting_bid
+
+for x in listings:
+    print(x.price)

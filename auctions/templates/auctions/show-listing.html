@@ -3,47 +3,62 @@
 
 {% block body %}
 
-    <h2>Listing: {{ listing.title }} </h2>
-    <img id="img-{{ listing.id}}" src="{{ listing.image_URL }}" alt="Listing Image">
-    <p>{{ listing.description }}</p>
-    <h2> ${{ price }} </h2>
-    {% if bids == 0 %}
-        <p>No bids so far.</p>
-    {% else %}
-        <p>{{ bids }} bid(s) so far.</p>
-    {% endif %}
+    <div class="container-fluid">
+        <div class="row justify-content-start">
+            <div class="col">
 
-    <form method="post">
-        {% csrf_token %}
-
-        {% for field in form %}
-        <div class="input-group mb-3">
-            <span class="input-group-text mr-2" id="inputGroup-sizing-default">$</span>
-            {% if form.is_bound %}
-                {% if field.errors %}
-                    {{ field | add_class:"is-invalid" }}
-                    {% for error in field.errors %}
-                        <div class="invalid-feedback">
-                            {{ error }}
-                        </div>
-                    {% endfor %}
+                <h2>Listing: {{ listing.title }} </h2>
+                <img id="img-{{ listing.id}}" src="{{ listing.image_URL }}" alt="Listing Image">
+                <p class="lead">{{ listing.description }}</p>
+                <h2> ${{ price }} </h2>
+                {% if bids == 0 %}
+                    <p class="small text-muted mb-0">No bids so far.</p>
                 {% else %}
-                    {{ field | add_class:"is-valid" }}
+                    <p class="small text-muted mb-0">{{ bids }} bid(s) so far.</p>
                 {% endif %}
-            {% else %}
-                {{ field }}
-            {% endif %}
-        </div>
-        {% endfor %}
-        <button type="submit" class="btn btn-primary">Place Bid</button>
-    </form>
 
-    <h2>Details</h2>
-    <li>Listed by: {{ listing.owner.username }}</li>
-    <li>Category: {% if listing.category.category_name %}
-                    {{ listing.category.category_name }}
-                {% else %}
-                    No category
-                {% endif %}</li>
+                {% if user.is_authenticated %}
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% for field in form %}
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text mr-2" id="inputGroup-sizing-default">$</span>
+                                </div>
+                                {% if form.is_bound %}
+                                    {% if field.errors %}
+                                        {{ field | add_class:"is-invalid" }}
+                                        {% for error in field.errors %}
+                                            <div class="invalid-feedback">
+                                                {{ error }}
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        {{ field }}
+                                    {% endif %}
+                                {% else %}
+                                    {{ field }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-primary">Place Bid</button>
+                    </form>
+                {% endif %}
+
+                <h3 class="mt-4">Details</h3>
+                <ul>
+                    <li>Listed by: {{ listing.owner.username }}</li>
+                    <li>Category: {% if listing.category.category_name %}
+                                    {{ listing.category.category_name }}
+                                {% else %}
+                                    No category
+                                {% endif %}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
 
 {% endblock %}

@@ -11,6 +11,8 @@ from .forms import NewListing, NewBid
 
 def index(request):
     listings = Listing.objects.all()
+    for entry in listings:
+        entry.price = entry.bid_set.latest('created').price if entry.bid_set.exists() else entry.starting_bid
     return render(request, "auctions/index.html", {
         'listings': listings
     })
@@ -102,6 +104,8 @@ def show_listing(request, listing_id):
             bid.listing = listing
             bid.owner = request.user
             bid.save()
+            price = bid.price
+            bids += 1
     else:
         
         form = NewBid(initial=initial_form_data)

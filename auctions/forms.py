@@ -53,7 +53,11 @@ class NewBid(forms.ModelForm):
     def clean_price(self):
         price = self.cleaned_data['price']
 
-        if price < self.initial['price']:
+        listing = self.instance.price if self.instance else None
+        if listing and price <= listing:
+                raise forms.ValidationError('Bid cannot be lower than the current listing price.')
+
+        if price <= self.initial['price']:
             raise forms.ValidationError('Bid cannot be lower than the current listing price.')
                 
         return price
