@@ -32,3 +32,9 @@ for entry in listings:
 
 for x in listings:
     print(x.price)
+    
+u = User.objects.get(id=4)
+print(u, u.watchlist_listings())
+
+for x in u.watchlist_listings():
+    print(x)

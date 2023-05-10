@@ -4,8 +4,9 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
-from .models import User, Listing, Bid
+from .models import User, Listing, Bid, Watchlist
 from .forms import NewListing, NewBid
 
 
@@ -87,32 +88,58 @@ def create_listing(request):
         'form': form
     })
     
-def show_listing(request, listing_id):
+def show_listing(request, listing_id, form=None):
     listing = Listing.objects.get(id=listing_id)
+    
     if listing.bid_set.all().exists():
         price = listing.bid_set.latest('created').price
     else:
         price = listing.starting_bid
     bids = listing.bid_set.all().count()
-    initial_form_data = {'price': price}
     
-    # Get new Bid
+    if form is None:
+        initial_form_data = {'price': price}
+        form = NewBid(initial=initial_form_data)
+    else:
+        price = form.cleaned_data['price']
+    
     if request.method == "POST":
         form = NewBid(request.POST, initial=initial_form_data)
         if form.is_valid():
             bid = form.save(commit=False)
             bid.listing = listing
-            bid.owner = request.user
+            bid.bidder = request.user
             bid.save()
             price = bid.price
             bids += 1
-    else:
-        
-        form = NewBid(initial=initial_form_data)
-        
+            form = NewBid(initial={'price': price})
+    
+    try:
+        user_watchlist = request.user.watchlist_listings()
+    except:
+        user_watchlist = []
+    
     return render(request, "auctions/show-listing.html", {
         'listing': listing,
         'price': price,
         'bids': bids,
-        'form': form
+        'form': form,
+        'user_watchlist': user_watchlist,
     })
+    
+@login_required
+def add_to_watchlist(request, listing_id):
+    listing = Listing.objects.get(id=listing_id)
+    if request.method == "POST":
+        if listing.owner != request.user:
+            if Watchlist.objects.filter(listing=listing, user=request.user).exists():
+                messages.error(request, "You already added this listing to your watchlist.")
+                return HttpResponseRedirect(reverse("show_listing", args=[listing.id]))
+            watchlist = Watchlist(listing=listing, user=request.user)
+            watchlist.save()
+            return HttpResponseRedirect(reverse("show_listing", args=(listing.id,)))
+        else:
+            messages.error(request, "You cannot add your own listing to your watchlist.")
+            return HttpResponseRedirect(reverse("show_listing", args=(listing.id,)))
+    else:
+        return show_listing(request, listing_id)

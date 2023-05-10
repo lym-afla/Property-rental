@@ -5,7 +5,9 @@ from django.db.models.signals import post_save
 
 
 class User(AbstractUser):
-    pass
+    
+    def watchlist_listings(self):
+        return [ x.listing for x in Watchlist.objects.filter(user=self) ]
 
 class Auction_category(models.Model):
     id = models.AutoField(primary_key=True)
@@ -48,3 +50,8 @@ class Comment(models.Model):
     # comment_id = models.IntegerField(primary_key=True, default=0)
     pass
 
+
+class Watchlist(models.Model):
+    id = models.AutoField(primary_key=True)
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)

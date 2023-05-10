@@ -15,7 +15,7 @@
                 {% endif %}
             </td>
             <td>
-                <h5> <a href="{% url 'listing' listing.id %}">{{ listing.title }}</a></h5>
+                <h5> <a href="{% url 'show_listing' listing.id %}">{{ listing.title }}</a></h5>
                 <p>{{ listing.description }}</p>
                 <p>Price: ${{ listing.price }}</p>
             </td>

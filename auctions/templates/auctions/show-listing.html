@@ -7,8 +7,26 @@
         <div class="row justify-content-start">
             <div class="col">
 
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-danger">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+
                 <h2>Listing: {{ listing.title }} </h2>
-                <img id="img-{{ listing.id}}" src="{{ listing.image_URL }}" alt="Listing Image">
+                
+                <form action="{% url 'add_to_watchlist' listing.id %}" method="post">
+                    {% csrf_token %}
+                    {% if user.is_authenticated %}
+                        {% if listing in user_watchlist %}
+                            <button type="submit" disabled class="btn btn-outline-secondary">Added to Watchlist</button>
+                        {% else %}
+                            <button type="submit" class="btn btn-outline-secondary">Add to Watchlist</button>
+                        {% endif %}
+                    {% endif %}
+                </form>
+
+                <img id="img-{{ listing.id }}" src="{{ listing.image_URL }}" alt="Listing Image">
                 <p class="lead">{{ listing.description }}</p>
                 <h2> ${{ price }} </h2>
                 {% if bids == 0 %}

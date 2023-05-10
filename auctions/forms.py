@@ -43,9 +43,6 @@ class NewBid(forms.ModelForm):
         labels = {
             'price': 'Enter Bid'
         }
-        help_texts = {
-            'price': 'Bid cannot be lower than the current listing price.'
-        }
         widgets = {
             'price': forms.NumberInput(attrs={'class': 'form-control', 'data-prefix': '$'})
         }
@@ -55,7 +52,7 @@ class NewBid(forms.ModelForm):
 
         listing = self.instance.price if self.instance else None
         if listing and price <= listing:
-                raise forms.ValidationError('Bid cannot be lower than the current listing price.')
+            raise forms.ValidationError('Bid cannot be lower than the current listing price.')
 
         if price <= self.initial['price']:
             raise forms.ValidationError('Bid cannot be lower than the current listing price.')
