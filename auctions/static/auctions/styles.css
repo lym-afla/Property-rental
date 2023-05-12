@@ -10,3 +10,7 @@ body {
 td:first-child {
     width: 20%;
   }
+
+.inactive {
+    opacity: 0.5;
+}

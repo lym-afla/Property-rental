@@ -22,9 +22,9 @@
                             <form action="{% url 'edit_watchlist' listing.id %}" method="post">
                             {% csrf_token %}
                                 {% if listing in user_watchlist %}
-                                    <button type="submit" class="badge badge-secondary" name="Remove" value="Remove">Watchlist</button>
+                                    <button type="submit" class="badge badge-secondary" name="Remove" value="Remove" title="Remove from Watchlist">Watchlist</button>
                                 {% else %}
-                                    <button type="submit" class="btn btn-outline-secondary" name="Add" value="Add">Add to Watchlist</button>
+                                    <button type="submit" class="btn btn-outline-secondary" name="Add" value="Add" title="Add to Watchlist">Add to Watchlist</button>
                                 {% endif %}
                             </form>
                         {% else %}
@@ -43,7 +43,11 @@
                     </div>
                 {% endif %}
                 
-                <img id="img-{{ listing.id }}" src="{{ listing.image_URL }}" class="mt-2" alt="Listing Image">
+                {% if listing.image_URL %}
+                    <img id="img-{{ listing.id }}" src="{{ listing.image_URL }}" class="mt-2" alt="Listing Image" style="max-width:250px;">
+                {% else %}
+                    <img src="https://via.placeholder.com/100x100.png?text=No+Image" class="mt-2" alt="No Image" style="max-width:100px;">
+                {% endif %}
                 <p class="lead">{{ listing.description }}</p>
                 <h2> ${{ price }} </h2>
                 {% if bids == 0 %}

@@ -6,7 +6,7 @@
     <table class="table">
         <tbody>
           {% for listing in listings %}
-          <tr>
+          <tr {% if not listing.active %} class="inactive"{% endif %}>
             <td>
                 {% if listing.image_URL %}
                     <img src="{{ listing.image_URL }}" alt="{{ listing.title }}" style="max-width: 100px;">
@@ -27,6 +27,10 @@
                   {% endif %}
                 {% endif %}
             </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="2">No active listings</td>
           </tr>
           {% endfor %}
         </tbody>

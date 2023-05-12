@@ -20,16 +20,20 @@ def index(request):
         link = request.GET["link"]
         if link == "Watchlist":
             listings = user_watchlist
-        # else: if link is 'one of category' then listings are all listings in that category
+        elif link == "No-category":
+            try:
+                listings = Listing.objects.filter(category__isnull=True, active=True)
+            except:
+                listings = []
         else:
             # check if link is a category name
             try:
                 category = Auction_category.objects.get(category_name=link)
-                listings = Listing.objects.filter(category=category)
+                listings = Listing.objects.filter(category=category, active=True)
             except Auction_category.DoesNotExist:
-                listings = Listing.objects.all()
+                listings = Listing.objects.filter(active=True).all()
     else:
-        listings = Listing.objects.all()
+        listings = Listing.objects.filter(active=True).all()
     
     for entry in listings:
         entry.price = entry.bid_set.latest('created').price if entry.bid_set.exists() else entry.starting_bid
@@ -218,4 +222,10 @@ def add_comment(request, listing_id):
     return render(request, "auctions/add-comment.html", {
         'listing': listing,
         'form': form
+    })
+    
+def categories(request):
+    categories = Auction_category.objects.all()
+    return render(request, "auctions/categories.html", {
+        'categories': categories
     })
