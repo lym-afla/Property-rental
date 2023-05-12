@@ -21,11 +21,11 @@
                 <a class="nav-link" href="{% url 'index' %}">Active Listings</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" href="">Categories</a>
+                <a class="nav-link" href="{% url 'index' %}">Categories</a>
             </li>
             {% if user.is_authenticated %}
                 <li class="nav-item">
-                    <a class="nav-link" href="">Watchlist
+                    <a class="nav-link" href="{% url 'index' %}?link=Watchlist">Watchlist
                         {% if user.watchlist_set.count > 0 %}
                             <span class="badge badge-secondary text-white">{{ user.watchlist_set.count }}</span>
                         {% endif %}

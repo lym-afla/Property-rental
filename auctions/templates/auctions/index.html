@@ -18,6 +18,14 @@
                 <h5> <a href="{% url 'show_listing' listing.id %}">{{ listing.title }}</a></h5>
                 <p>{{ listing.description }}</p>
                 <p>Price: ${{ listing.price }}</p>
+                {% if not listing.active %}
+                  <span class="badge badge-secondary">Closed</span>
+                {% endif %}
+                {% if user.is_authenticated %}
+                  {% if listing in user_watchlist %}
+                    <span class="badge badge-secondary">Watchlist</span>
+                  {% endif %}
+                {% endif %}
             </td>
           </tr>
           {% endfor %}

@@ -1,21 +1,19 @@
 from django import forms
-from .models import Listing, Auction_category, Bid
+from .models import Listing, Auction_category, Bid, Comment
 from django.core.exceptions import ValidationError
 
 class NewListing(forms.ModelForm):
-    
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     self.fields['category'].choices = [('', '--------')] + [(cat.id, cat.category_name) for cat in Auction_category.objects.all()]
 
     class Meta:
         model = Listing
+        
         fields = ['title',
                   'description',
                   'starting_bid',
                   'image_URL',
                   'category'
                   ]
+                
         labels = {
             'title': 'Title',
             'description': 'Description',
@@ -29,7 +27,7 @@ class NewListing(forms.ModelForm):
             'image_URL': forms.URLInput(attrs={'class': 'form-control'}),
             'category': forms.Select(attrs={'class': 'form-control'})
         }
-        
+    
     def clean_starting_bid(self):
         starting_bid = self.cleaned_data['starting_bid']
         if starting_bid < 0:
@@ -51,10 +49,21 @@ class NewBid(forms.ModelForm):
         price = self.cleaned_data['price']
 
         listing = self.instance.price if self.instance else None
-        if listing and price <= listing:
-            raise forms.ValidationError('Bid cannot be lower than the current listing price.')
+        if (listing and price <= listing) or (price <= self.initial['price']):
+            raise forms.ValidationError('Bid cannot be lower or equal than the current listing price.')
 
-        if price <= self.initial['price']:
-            raise forms.ValidationError('Bid cannot be lower than the current listing price.')
+        # if price <= self.initial['price']:
+        #     raise forms.ValidationError('Bid cannot be lower or equal than the current listing price.')
                 
         return price
+    
+class NewComment(forms.ModelForm):
+    class Meta:
+        model = Comment
+        fields = ['comment']
+        labels = {
+            'comment': 'Comment'
+        }
+        widgets = {
+            'comment': forms.Textarea(attrs={'class': 'form-control'})
+        }

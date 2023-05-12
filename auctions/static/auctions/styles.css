@@ -1,3 +1,12 @@
 body {
     padding: 10px;
 }
+
+.badge {
+    font-size: 1rem;
+    border: none;
+}
+
+td:first-child {
+    width: 20%;
+  }

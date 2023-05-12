@@ -31,10 +31,14 @@ for entry in listings:
     entry.price = entry.bid_set.latest('created').price if entry.bid_set.exists() else entry.starting_bid
 
 for x in listings:
-    print(x.price)
+    try:
+        # latest_bid = x.bid_set.latest('price')
+        print(x.id, x.starting_bid, x.bid_set.latest('price').bidder)
+    except Bid.DoesNotExist:
+        print(x.id, x.starting_bid, 'No bids yet')
     
-u = User.objects.get(id=4)
-print(u, u.watchlist_listings())
+# u = User.objects.get(id=4)
+# print(u, u.watchlist_listings())
 
-for x in u.watchlist_listings():
-    print(x)
+# for x in u.watchlist_listings():
+#     print(x)
