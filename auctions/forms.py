@@ -1,6 +1,5 @@
 from django import forms
-from .models import Listing, Auction_category, Bid, Comment
-from django.core.exceptions import ValidationError
+from .models import Listing, Bid, Comment
 
 class NewListing(forms.ModelForm):
 
@@ -46,14 +45,17 @@ class NewBid(forms.ModelForm):
         }
         
     def clean_price(self):
-        price = self.cleaned_data['price']
+        cleaned_data = super().clean()
+        price = cleaned_data['price']
+        listing = self.initial.get('listing')
+        latest_bid = Bid.objects.filter(listing=listing).latest('created') if listing.bid_set.exists() else None
+        starting_bid = listing.starting_bid
 
-        listing = self.instance.price if self.instance else None
-        if (listing and price <= listing) or (price <= self.initial['price']):
-            raise forms.ValidationError('Bid cannot be lower or equal than the current listing price.')
+        if latest_bid and price <= latest_bid.price:
+            raise forms.ValidationError('Bid must be higher than the latest bid.')
 
-        # if price <= self.initial['price']:
-        #     raise forms.ValidationError('Bid cannot be lower or equal than the current listing price.')
+        if not latest_bid and price < starting_bid:
+            raise forms.ValidationError('Bid must be higher than or equal to the starting bid.')
                 
         return price
     

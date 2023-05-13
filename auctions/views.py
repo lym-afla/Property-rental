@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login, logout
 from django.db import IntegrityError
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -8,7 +8,6 @@ from django.contrib import messages
 
 from .models import User, Listing, Watchlist, Comment, Auction_category
 from .forms import NewListing, NewBid, NewComment
-
 
 def index(request):
     try:
@@ -123,7 +122,8 @@ def show_listing(request, listing_id, form=None):
     bids = listing.bid_set.all().count()
     
     if form is None:
-        initial_form_data = {'price': price}
+        # Passing listing to the template in order to check for existing bids or starging price
+        initial_form_data = {'price': price, 'listing': listing}
         form = NewBid(initial=initial_form_data)
     else:
         price = form.cleaned_data['price']
