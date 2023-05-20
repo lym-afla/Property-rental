@@ -63,7 +63,7 @@
                 {% endif %}
 
                 {% if listing.active %}
-                    {% if user.is_authenticated %}
+                    {% if user.is_authenticated and listing not in user.listing_set.all %}
                         <form method="post">
                             {% csrf_token %}
 
