@@ -1,0 +1,5 @@
+# Virtual environment
+carbon-mail
+
+/mail/__*
+/project3/__*
