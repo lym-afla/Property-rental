@@ -2,4 +2,5 @@
 carbon-mail
 
 /mail/__*
+/mail/migrations/
 /project3/__*
