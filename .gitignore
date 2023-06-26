@@ -1,5 +1,6 @@
 # Virtual environment
 carbon-mail
+AW-mail
 
 /mail/__*
 /mail/migrations/
