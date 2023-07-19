@@ -1,7 +1,7 @@
 # Virtual environment
-carbon-mail
-AW-mail
+carbon-network
+AW-network
 
-/mail/__*
-/mail/migrations/
-/project3/__*
+/network/__*
+/network/migrations/
+/project4/__*

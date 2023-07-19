@@ -1,5 +1,25 @@
 {% extends "network/layout.html" %}
+{% load static %}
 
 {% block body %}
-    TODO
-{% endblock %}
+    
+    <div id="posts-view">
+    </div>
+
+    <div id="new-post-view" class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h3 class="mb-4">New Post</h3>
+                <form id="new-post-form">
+                    <textarea class="form-control mb-2" id="new-post-text" placeholder="Enter new post here"></textarea>
+                    <input type="submit" class="btn btn-primary" value="Post"/>
+                </form>
+            </div>
+        </div>
+    </div>
+
+{% endblock body %}
+
+{% block script %}
+    <script src="{% static 'network/network.js' %}"></script>
+{% endblock script %}
