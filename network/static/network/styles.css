@@ -1,4 +1,73 @@
-.nav-link#new-post:hover {
+.navbar {
+  position: fixed;
+  top: 0;
+  width: 100%;
+}
+
+body {
+  padding-top: 60px; /* Adjust the top padding to match the height of the navbar */
+}
+
+.nav-link#new-post-button:hover {
     cursor: pointer;
   }
   
+.post {
+  border: 1px solid lightgrey;
+  padding: 10px 10px 10px 10px;
+  margin: 0 0 10px 0;
+}
+
+.timestamp {
+  color: grey;
+}
+
+#user-profile-container {
+  border: 2px solid black;
+  margin: 20px 0 10px 0;
+  padding: 10px;
+}
+
+.profile-stat {
+  display: inline-block;
+  margin-right: 20px;
+}
+
+.stat-label {
+  font-weight: bold;
+  margin-right: 5px;
+}
+
+.stat-value {
+  color: #007bff;
+  font-weight: bold;
+}
+
+.separator {
+  position: relative;
+  border: none;
+  height: 2px;
+  background-color: lightgrey;
+  margin: 30px 0 20px 0;
+}
+
+.separator::before {
+  content: "Posts";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 10px;
+  background-color: white;
+  font-weight: bold;
+}
+
+.container-fluid {
+  display: flex;
+  flex-direction: column;
+}
+
+.posts-container {
+  flex: 1;
+  overflow-y: auto;
+}

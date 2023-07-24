@@ -3,15 +3,27 @@
 
 {% block body %}
     
-    <div id="posts-view">
+    <div id="posts-view" class="container-fluid mt-4">
+        <h2>All Posts</h2>
+        {% for post in posts %}
+            <div class="post">
+                <h4><a href="{% url 'user_profile' post.user.username %}">{{ post.user.username }}</a></h4>
+                <div>{{ post.content }}</div>
+                <div class="timestamp">{{ post.timestamp }}</div>
+                <div class="likes">
+                    <img src="{% static 'network/likes-icon.png' %}" alt="Likes" width="20" height="20">
+                    <span>{{ post.likes_count }}</span>
+                </div>
+            </div>
+        {% endfor %}
     </div>
 
-    <div id="new-post-view" class="container-fluid mt-4">
+    <div id="new-post-view" class="container-fluid mt-4" display='none'>
         <div class="row">
             <div class="col-12">
                 <h3 class="mb-4">New Post</h3>
                 <form id="new-post-form">
-                    <textarea class="form-control mb-2" id="new-post-text" placeholder="Enter new post here"></textarea>
+                    <textarea class="form-control mb-2" id="new-post-text" name="post-content" placeholder="Enter new post here"></textarea>
                     <input type="submit" class="btn btn-primary" value="Post"/>
                 </form>
             </div>
@@ -21,5 +33,5 @@
 {% endblock body %}
 
 {% block script %}
-    <script src="{% static 'network/network.js' %}"></script>
+    <script src="{% static 'network/main.js' %}"></script>
 {% endblock script %}
