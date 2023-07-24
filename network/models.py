@@ -14,6 +14,15 @@ class Post(models.Model):
     def likes_count(self):
         return self.likes.filter(like=True).count()
     
+    # Prepare the response for the respective API
+    def serialize(self):
+        return {
+            "username": self.user.username,
+            "content": self.content,
+            "timestamp": self.timestamp.strftime("%B %d, %Y, %#I:%M %p").replace('PM', 'p.m.').replace('AM', 'a.m.'),
+            "likes_count": self.likes_count()
+        }
+    
 class Comment(models.Model):
     post = models.ForeignKey("Post", on_delete=models.CASCADE, related_name='comments')
     user = models.ForeignKey("User", on_delete=models.CASCADE, related_name='comments')

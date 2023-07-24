@@ -5,10 +5,10 @@
 }
 
 body {
-  padding-top: 60px; /* Adjust the top padding to match the height of the navbar */
+  padding-top: 60px;
 }
 
-.nav-link#new-post-button:hover {
+#new-post-button:hover, #following-button:hover, #all-posts-button:hover {
     cursor: pointer;
   }
   

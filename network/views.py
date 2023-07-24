@@ -6,17 +6,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
+from django.core import serializers
 
 from .models import User, Post, Comment
 
 
 def index(request):
     
-    posts = Post.objects.order_by("-timestamp")[:10]
-    
-    return render(request, "network/index.html", {
-        'posts': posts,
-    })
+    return render(request, "network/index.html")
 
 
 def login_view(request):
@@ -129,3 +126,21 @@ def follow_user(request, username):
             "is_following": True,
             "followers_count": target_user.followers.count()
             })
+        
+def get_posts(request, filter):
+    
+    if filter == 'all':
+        posts = Post.objects
+    elif filter == 'following':
+        if request.user.is_authenticated:
+            posts = Post.objects.filter(user__in=request.user.following.all())
+        else:
+            return JsonResponse({"error": "User not logged in"})
+    else:
+        return JsonResponse({"error": "Invalid filter."}, status=400)
+    
+    posts = posts.order_by('-timestamp')[:10]
+    seriazlied_posts = [post.serialize() for post in posts]
+    print(seriazlied_posts)
+
+    return JsonResponse(seriazlied_posts, safe=False, status=200)
