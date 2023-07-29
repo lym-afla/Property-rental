@@ -7,13 +7,17 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.core import serializers
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from .models import User, Post, Comment
 
+posts_load_limit = 10
 
 def index(request):
     
-    return render(request, "network/index.html")
+    section = request.GET.get('section', 'all-posts')
+    
+    return render(request, "network/index.html", {'section': section})
 
 
 def login_view(request):
@@ -92,7 +96,7 @@ def user_profile(request, username):
             'followers': user.followers.count(),
             'following': user.following.count(),
             'posts_count': user.posts.count(),
-            'posts': user.posts.order_by("-timestamp")[:10],
+            'posts': user.posts.order_by("-timestamp")[:posts_load_limit],
             'user': request.user,
             'profile_user': user
         })
@@ -129,7 +133,7 @@ def follow_user(request, username):
         
 def get_posts(request, filter):
     
-    if filter == 'all':
+    if filter == 'all-posts':
         posts = Post.objects
     elif filter == 'following':
         if request.user.is_authenticated:
@@ -138,9 +142,26 @@ def get_posts(request, filter):
             return JsonResponse({"error": "User not logged in"})
     else:
         return JsonResponse({"error": "Invalid filter."}, status=400)
-    
-    posts = posts.order_by('-timestamp')[:10]
-    seriazlied_posts = [post.serialize() for post in posts]
-    print(seriazlied_posts)
 
-    return JsonResponse(seriazlied_posts, safe=False, status=200)
+    posts = posts.order_by('-timestamp')
+    
+    # Pagination
+    page = request.GET.get('page')
+    paginator = Paginator(posts, posts_load_limit)
+    try:
+        posts = paginator.page(page)
+    except PageNotAnInteger:
+        posts = paginator.page(1)
+    except EmptyPage:
+        posts = paginator.page(paginator.num_pages)
+    
+    has_next_page = posts.has_next()
+    has_previous_page = posts.has_previous()
+    
+    seriazlied_posts = [post.serialize() for post in posts]
+
+    return JsonResponse({
+        "posts": seriazlied_posts,
+        "has_next_page": has_next_page,
+        "has_previous_page": has_previous_page
+        }, safe=False, status=200)

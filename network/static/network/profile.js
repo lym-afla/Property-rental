@@ -11,6 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (followForm) {
         followForm.addEventListener('submit', followFunction);
     };
+
+    document.querySelector('#all-posts-button').addEventListener('click', () => forward_to_page('all-posts'));
+    document.querySelector('#new-post-button').addEventListener('click', () => forward_to_page('new-post'));
+    document.querySelector('#following-button').addEventListener('click', () => forward_to_page('following'));
+
 })
 
 function followFunction(event) {
@@ -46,4 +51,9 @@ function followFunction(event) {
         document.getElementById('profile-followers').textContent = data.followers_count;
     })
     .catch((error) => console.error('Error:', error));
+}
+
+function forward_to_page(section) {
+    const url = `/?section=${section}`;
+    window.location.href = url;
 }

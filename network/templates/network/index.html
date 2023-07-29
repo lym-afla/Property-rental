@@ -5,10 +5,17 @@
 
     <script>
         const likesIconURL = "{% static 'network/likes-icon.png' %}";
+        const section = "{{ section }}";
     </script>
     
     <div id="posts-view" class="container-fluid mt-4">
         <h2>All Posts</h2>
+        <div class="posts-container">
+        </div>
+        <nav aria-label="Posts pagination">
+            <ul class="pagination justify-content-center">
+            </ul>
+        </nav>
     </div>
 
     <div id="new-post-view" class="container-fluid mt-4" display='none'>

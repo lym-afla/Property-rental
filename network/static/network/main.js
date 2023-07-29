@@ -1,54 +1,81 @@
+
 document.addEventListener('DOMContentLoaded', () => {
     // Add event listeners for New post button to work, but only if it exists (it does not exist when user is not logged in)
     if (document.querySelector('#new-post-button')) {
-        document.querySelector('#new-post-button').addEventListener('click', () => new_post());
+        document.querySelector('#new-post-button').addEventListener('click', function() {
+            
+            const section = 'new-post';
+
+            // history.pushState({section: section}, "", '?section=new-post');
+            new_post();
+        });
     };
 
     if (document.querySelector('#following-button')) {
-        document.querySelector('#following-button').addEventListener('click', () => load_posts('following'));
+        document.querySelector('#following-button').addEventListener('click', function() {
+            
+            const section = 'following';
+           
+            // history.pushState({section: section}, "", '?section=following');            
+            load_posts('following');
+        });
     };
 
-    document.querySelector('#all-posts-button').addEventListener('click', () => load_posts('all'));
+    document.querySelector('#all-posts-button').addEventListener('click', function() {
+        
+        const section = 'all-posts';
 
-    // By default, load list of posts
-    // load_posts('all');
+        // history.push State({section: section}, "", '?section=all-posts');
+        load_posts('all-posts');
+    });
 
-    // Create follow/unfollow functionality
-    const followForm = document.querySelector('#follow-form');
-    if (followForm) {
-        followForm.addEventListener('submit', followFunction);
-    };
-    
-    // Fix the height of posts container on Profile page
-    const containerMargin = document.querySelector('.container-fluid').offsetTop;
-    if (containerMargin) {
-        // Set the height of the container-fluid to the remaining height after subtracting the navbar height
-        document.querySelector('.container-fluid').style.height = `calc(100vh - ${containerMargin}px)`;
-    };
+    console.log(section);
+    if (section === 'new-post') {
+        new_post();
+    } else {
+        load_posts(section);
+    }
 
+    // Adding event listener for the popstate event
+    // window.addEventListener('popstate', function(event) {
+    //     if (event.state) {
+    //         const previousSection = event.state?.section;
+    //         if (previousSection === 'following') {
+    //             load_posts('following');
+    //         } else if (previousSection === 'new-post') {
+    //             new_post();
+    //         } else if (previousSection === 'all-posts') {
+    //             load_posts('all');
+    //         }
+    //     } else {
+    //         history.back();
+    //     }
+    // });
 });
 
-function load_posts(filter) {
+function load_posts(filter, page = 1) {
 
     // Show the mailbox and hide other views
     document.querySelector('#posts-view').style.display = 'block';
     document.querySelector('#new-post-view').style.display = 'none';
 
     // Set the appropriate header based on the filter
-    if (filter === 'all') {
+    if (filter === 'all-posts') {
         document.querySelector('#posts-view h2').textContent = 'All Posts';
     } else if (filter === 'following') {
-        document.querySelector('#posts-view h2').textContent = 'Posts from users following';
+        document.querySelector('#posts-view h2').textContent = 'Following';
     } else {
-        throw new Error('Invalid filter');
+        throw new Error('Invalid section filter');
     }
 
-    fetch(`posts/${filter}`)
+    fetch(`posts/${filter}?page=${page}`)
     .then(response => response.json())
-    .then(posts => {
+    .then(data => {
+        const posts = data.posts;
+        const hasNextPage = data.has_next_page;
+        const hasPreviousPage = data.has_previous_page;
         document.querySelectorAll('.post').forEach(postElement => postElement.remove());
         posts.forEach(post => {
-            console.log(post);
             const postDiv = document.createElement('div');
             postDiv.classList.add('post');
 
@@ -83,9 +110,47 @@ function load_posts(filter) {
             postDiv.appendChild(postTimestamp);
             postDiv.appendChild(postLikes);
 
-            document.querySelector('#posts-view').appendChild(postDiv);
+            document.querySelector('.posts-container').appendChild(postDiv);
         });
+        renderPagination(hasNextPage, hasPreviousPage, filter, page);
+    })
+    .catch(error => {
+        console.log(error);
     });
+}
+
+function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
+
+    const paginationContainer = document.querySelector('.pagination');
+    paginationContainer.innerHTML = '';
+
+    const liElement = document.createElement('li');
+    liElement.classList.add('page-item');
+
+    if (hasPreviousPage) {
+        const previousLinkElement = document.createElement('a');
+        previousLinkElement.classList.add('page-link');
+        previousLinkElement.href = '#';
+        previousLinkElement.textContent = 'Previous';
+        previousLinkElement.addEventListener('click', () => {
+            load_posts(filter, currentPage - 1);
+        });
+        liElement.appendChild(previousLinkElement);
+    }
+
+    if (hasNextPage) {
+        const NextLinkElement = document.createElement('a');
+        NextLinkElement.classList.add('page-link');
+        NextLinkElement.href = '#';
+        NextLinkElement.textContent = 'Next';
+        NextLinkElement.addEventListener('click', () => {
+            load_posts(filter, currentPage + 1);
+        });
+        liElement.appendChild(NextLinkElement);
+    }
+
+    paginationContainer.appendChild(liElement);
+
 }
 
 function new_post() {
@@ -116,39 +181,4 @@ function new_post() {
         })
     }
 
-}
-
-function followFunction(event) {
-    const followButton = document.querySelector('#follow-button');
-    const profileUsername = document.querySelector('#user-profile-container').dataset.username;
-    
-    event.preventDefault(); // Prevent the default form submission behavior
-
-    const formData = new FormData(document.querySelector('#follow-form'));
-    const csrfToken = formData.get("csrfmiddlewaretoken");
-
-    fetch(`/profile/${profileUsername}/follow/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-        },
-        body: formData
-    })
-    .then((response) => {
-        if (response.ok) {
-            return response.json()
-        } else {
-            throw new Error("Network response was not ok")
-        }
-    })
-    .then((data) => {
-        if (data.is_following) {
-            followButton.textContent = 'Unfollow';
-        } else {
-            followButton.textContent = 'Follow';
-        };
-        // Update the followers count
-        document.getElementById('profile-followers').textContent = data.followers_count;
-    })
-    .catch((error) => console.error('Error:', error));
 }
