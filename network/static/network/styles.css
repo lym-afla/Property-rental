@@ -67,7 +67,7 @@ body {
   flex-direction: column;
 }
 
-.posts-container {
+.profile-posts-container {
   flex: 1;
   overflow-y: auto;
 }

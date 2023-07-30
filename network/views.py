@@ -91,17 +91,29 @@ def user_profile(request, username):
     
     try:
         user = get_object_or_404(User, username=username)
-        
-        return render(request, 'network/profile.html', {
-            'followers': user.followers.count(),
-            'following': user.following.count(),
-            'posts_count': user.posts.count(),
-            'posts': user.posts.order_by("-timestamp")[:posts_load_limit],
-            'user': request.user,
-            'profile_user': user
-        })
     except User.DoesNotExist:
         return Http404("User does not exist")
+        
+    # posts = user.posts.order_by("-timestamp")
+
+    # # Pagination
+    # page = request.GET.get('page', 1)
+    # paginator = Paginator(posts, posts_load_limit)
+    # posts = paginator.get_page(page)
+    
+    # has_next_page = posts.has_next()
+    # has_previous_page = posts.has_previous()
+    
+    # seriazlied_posts = [post.serialize() for post in posts]
+    
+    return render(request, 'network/profile.html', {
+        'followers': user.followers.count(),
+        'following': user.following.count(),
+        'posts_count': user.posts.count(),
+        'user': request.user,
+        'profile_user': user
+    })
+    
     
 @login_required
 def follow_user(request, username):
@@ -131,7 +143,7 @@ def follow_user(request, username):
             "followers_count": target_user.followers.count()
             })
         
-def get_posts(request, filter):
+def get_posts(request, filter='profile', profile_username=None):
     
     if filter == 'all-posts':
         posts = Post.objects
@@ -140,6 +152,12 @@ def get_posts(request, filter):
             posts = Post.objects.filter(user__in=request.user.following.all())
         else:
             return JsonResponse({"error": "User not logged in"})
+    elif filter == 'profile':
+        try:
+            profile_user = get_object_or_404(User, username=profile_username)
+        except User.DoesNotExist:
+            return Http404("User does not exist")
+        posts = profile_user.posts
     else:
         return JsonResponse({"error": "Invalid filter."}, status=400)
 
@@ -148,12 +166,7 @@ def get_posts(request, filter):
     # Pagination
     page = request.GET.get('page')
     paginator = Paginator(posts, posts_load_limit)
-    try:
-        posts = paginator.page(page)
-    except PageNotAnInteger:
-        posts = paginator.page(1)
-    except EmptyPage:
-        posts = paginator.page(paginator.num_pages)
+    posts = paginator.get_page(page)
     
     has_next_page = posts.has_next()
     has_previous_page = posts.has_previous()

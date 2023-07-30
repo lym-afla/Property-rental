@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#new-post-button').addEventListener('click', () => forward_to_page('new-post'));
     document.querySelector('#following-button').addEventListener('click', () => forward_to_page('following'));
 
+    load_posts('profile');
+
 })
 
 function followFunction(event) {
