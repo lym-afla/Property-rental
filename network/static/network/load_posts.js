@@ -4,7 +4,7 @@ function load_posts(filter, page = 1) {
     let url = '';
     let header;
     
-    if (filter === 'all-posts' || filter === 'following') {
+    if (filter === 'all-posts') {
         header = 'All Posts';
     } else if (filter === 'following') {
         header = 'Following';
