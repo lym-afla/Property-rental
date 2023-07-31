@@ -17,6 +17,7 @@ class Post(models.Model):
     # Prepare the response for the respective API
     def serialize(self):
         return {
+            "id": self.id,
             "username": self.user.username,
             "content": self.content,
             "timestamp": self.timestamp.strftime("%B %d, %Y, %#I:%M %p").replace('PM', 'p.m.').replace('AM', 'a.m.'),

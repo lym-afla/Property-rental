@@ -114,7 +114,6 @@ def user_profile(request, username):
         'profile_user': user
     })
     
-    
 @login_required
 def follow_user(request, username):
     
@@ -171,10 +170,32 @@ def get_posts(request, filter='profile', profile_username=None):
     has_next_page = posts.has_next()
     has_previous_page = posts.has_previous()
     
-    seriazlied_posts = [post.serialize() for post in posts]
+    serialized_posts = [post.serialize() for post in posts]
+    serialized_posts = [{**post, 'is_author': True} if post['username'] == request.user.username else {**post, 'is_author': False} for post in serialized_posts]
 
     return JsonResponse({
-        "posts": seriazlied_posts,
+        "posts": serialized_posts,
         "has_next_page": has_next_page,
         "has_previous_page": has_previous_page
         }, safe=False, status=200)
+
+@csrf_exempt
+@login_required    
+def edit_post(request, id):
+    
+    # Query for requested post
+    try:
+        post = Post.objects.get(pk=id)
+    except Post.DoesNotExist:
+        return JsonResponse({"error": "Post not found."}, status=404)
+    
+    if request.method == 'PUT':
+        data = json.loads(request.body)
+        post.content = data['content']
+        post.save()
+    else:
+        JsonResponse({
+            'error': 'PUT request required.'
+        }, status=400)
+        
+    return JsonResponse(post, safe=False, status=200)

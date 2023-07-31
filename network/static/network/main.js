@@ -29,7 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
         load_posts('all-posts');
     });
 
-    console.log(section);
     if (section === 'new-post') {
         new_post();
     } else {

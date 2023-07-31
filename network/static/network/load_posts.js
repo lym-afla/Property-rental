@@ -34,6 +34,7 @@ function load_posts(filter, page = 1) {
         const hasPreviousPage = data.has_previous_page;
         document.querySelectorAll('.post').forEach(postElement => postElement.remove());
         posts.forEach(post => {
+
             const postDiv = document.createElement('div');
             postDiv.classList.add('post');
 
@@ -49,6 +50,17 @@ function load_posts(filter, page = 1) {
 
             const postContent = document.createElement('div');
             postContent.textContent = post.content;
+            postContent.classList.add('post-content');
+
+            let editLink;
+
+            if (post.is_author) {
+                editLink = document.createElement('a');
+                editLink.classList.add('edit-link');
+                editLink.href = '#';
+                editLink.textContent = 'Edit';
+                editLink.dataset.post = JSON.stringify(post);
+            }
 
             const postTimestamp = document.createElement('div');
             postTimestamp.classList.add('timestamp');
@@ -70,6 +82,9 @@ function load_posts(filter, page = 1) {
             if (postUsername) {
                 postDiv.appendChild(postUsername);
             }
+            if (editLink) {
+                postDiv.appendChild(editLink);
+            }
             postDiv.appendChild(postContent);
             postDiv.appendChild(postTimestamp);
             postDiv.appendChild(postLikes);
@@ -77,6 +92,7 @@ function load_posts(filter, page = 1) {
             document.querySelector('.posts-container').appendChild(postDiv);
         });
         renderPagination(hasNextPage, hasPreviousPage, filter, page);
+        attachEditLinkEventListeners();
     })
     .catch(error => {
         console.log(error);
@@ -115,4 +131,101 @@ function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
 
     paginationContainer.appendChild(liElement);
 
+}
+
+function editPost(post, postContent) {
+
+    console.log(postContent);
+    
+    postContent.parentElement.querySelector('.edit-link').style.display = 'none';
+
+    const postTextArea = document.createElement('textarea');
+    postTextArea.classList.add('form-control', 'mb-2');
+    postTextArea.value = postContent.textContent;
+    postContent.replaceWith(postTextArea);
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.classList.add('btn', 'btn-primary', 'mr-2');
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.classList.add('btn', 'btn-secondary');
+
+    saveButton.addEventListener('click', () => {
+        saveEditedPost(post, postTextArea);
+    });
+
+    cancelButton.addEventListener('click', () => {
+        cancelEditedPost(postTextArea);
+    });
+
+    const postDiv = postTextArea.parentElement;
+    postDiv.insertBefore(saveButton, postDiv.children[3]);
+    postDiv.insertBefore(cancelButton, postDiv.children[4]);
+}
+
+function saveEditedPost(post, postTextArea) {
+
+    const newContent = postTextArea.value;
+
+    console.log(post.id);
+
+    fetch(`/posts/${post.id}/edit`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({content: newContent})
+    })
+    .then(response => response.json())
+    .then(post => {
+        const postContent = document.createElement('div');
+        postContent.textContent = postTextArea.value;
+        postContent.classList.add('post-content');
+        postTextArea.replaceWith(postContent);
+
+        document.querySelectorAll('.post .btn').forEach(button => {
+            button.style.display = 'none';
+        });
+
+        document.querySelector('#edit-link').style.display = 'block';
+
+        attachEditLinkEventListeners();
+
+    })
+    .catch(erorr => {
+        console.log(error);
+    });
+}
+
+// Cancel editing
+function cancelEditedPost(postTextArea) {
+
+    const postContent = document.createElement('div');
+    postContent.textContent = postTextArea.value;
+    postContent.classList.add('post-content');
+    postTextArea.replaceWith(postContent);
+
+    // Hide Save and Cancel buttons
+    postContent.parentElement.querySelectorAll('.post .btn').forEach(button => {
+        button.style.display = 'none';
+    });
+
+    // console.log(postContent);
+    postContent.parentElement.querySelector('.edit-link').style.display = 'block';
+
+    attachEditLinkEventListeners();
+}
+
+function attachEditLinkEventListeners() {
+    const editLinks = document.querySelectorAll('.edit-link');
+    editLinks.forEach(editLink => {
+        editLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            const post = JSON.parse(editLink.dataset.post);
+            const postContent = editLink.parentElement.querySelector('.post-content');
+            console.log(postContent);
+            editPost(post, postContent);
+        });
+    });
 }
