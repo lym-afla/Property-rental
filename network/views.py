@@ -177,8 +177,9 @@ def get_posts(request, filter='profile', profile_username=None):
         else {**post, 'is_author': False}
         for post in serialized_posts
         ]
-    for post in serialized_posts:
-        post['liked'] = request.user.likes.filter(post_id=post['id']).exists()
+    if request.user.is_authenticated:
+        for post in serialized_posts:
+            post['liked'] = request.user.likes.filter(post_id=post['id']).exists()
         
     return JsonResponse({
         "posts": serialized_posts,

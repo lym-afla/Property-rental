@@ -2,6 +2,10 @@
 
 {% block body %}
 
+    <script>
+        document.querySelector('#all-posts-button').addEventListener('click', () => window.location.href = '/');
+    </script>
+
     <h2>Login</h2>
 
     {% if message %}

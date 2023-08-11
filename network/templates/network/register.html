@@ -1,6 +1,11 @@
 {% extends "network/layout.html" %}
+{% load static %}
 
 {% block body %}
+
+    <script>
+        document.querySelector('#all-posts-button').addEventListener('click', () => window.location.href = '/');
+    </script>
 
     <h2>Register</h2>
 
@@ -27,4 +32,4 @@
 
     Already have an account? <a href="{% url 'login' %}">Log In here.</a>
 
-{% endblock %}
+{% endblock body %}

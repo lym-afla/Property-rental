@@ -109,8 +109,9 @@ function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
     const paginationContainer = document.querySelector('.pagination');
     paginationContainer.innerHTML = '';
 
-    const liElement = document.createElement('li');
-    liElement.classList.add('page-item');
+    const previousLiElement = document.createElement('li');
+    previousLiElement.classList.add('page-item');
+    previousLiElement.style.marginRight = '10px';
 
     if (hasPreviousPage) {
         const previousLinkElement = document.createElement('a');
@@ -120,8 +121,12 @@ function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
         previousLinkElement.addEventListener('click', () => {
             load_posts(filter, currentPage - 1);
         });
-        liElement.appendChild(previousLinkElement);
+        previousLiElement.appendChild(previousLinkElement);
     }
+
+    const nextLiElement = document.createElement('li');
+    nextLiElement.classList.add('page-item');
+    nextLiElement.style.marginLeft = '10px';
 
     if (hasNextPage) {
         const NextLinkElement = document.createElement('a');
@@ -131,10 +136,11 @@ function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
         NextLinkElement.addEventListener('click', () => {
             load_posts(filter, currentPage + 1);
         });
-        liElement.appendChild(NextLinkElement);
+        nextLiElement.appendChild(NextLinkElement);
     }
 
-    paginationContainer.appendChild(liElement);
+    paginationContainer.appendChild(previousLiElement);
+    paginationContainer.appendChild(nextLiElement);
 
 }
 
