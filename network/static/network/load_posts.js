@@ -1,3 +1,4 @@
+
 function load_posts(filter, page = 1) {
 
     // Set the variable for fetch function and appropriate header based on the filter
@@ -59,7 +60,7 @@ function load_posts(filter, page = 1) {
                 editLink.classList.add('edit-link');
                 editLink.href = '#';
                 editLink.textContent = 'Edit';
-                editLink.dataset.post = JSON.stringify(post);
+                editLink.dataset.post_id = post.id;
             }
 
             const postTimestamp = document.createElement('div');
@@ -69,15 +70,19 @@ function load_posts(filter, page = 1) {
             const postLikes = document.createElement('div');
             postLikes.classList.add('likes');
             const likesIcon = document.createElement('img');
-            likesIcon.src = likesIconURL;
+            likesIcon.src = post.liked ? likedIconURL : notLikedIconURL;
             likesIcon.alt = 'Likes';
             likesIcon.width = '20';
             likesIcon.height = '20';
             likesIcon.style.marginRight = '5px';
+            post.likesIcon = likesIcon;
             const likesCount = document.createElement('span');
             likesCount.textContent = post.likes_count;
+            post.likesCount = likesCount;
             postLikes.appendChild(likesIcon);
             postLikes.appendChild(likesCount);
+            likesIcon.addEventListener('click', () => like(post));
+            
 
             if (postUsername) {
                 postDiv.appendChild(postUsername);
@@ -133,9 +138,7 @@ function renderPagination(hasNextPage, hasPreviousPage, filter, currentPage) {
 
 }
 
-function editPost(post, postContent) {
-
-    console.log(postContent);
+function editPost(post_id, postContent) {
     
     postContent.parentElement.querySelector('.edit-link').style.display = 'none';
 
@@ -143,6 +146,8 @@ function editPost(post, postContent) {
     postTextArea.classList.add('form-control', 'mb-2');
     postTextArea.value = postContent.textContent;
     postContent.replaceWith(postTextArea);
+
+    postTextArea.focus(); // Set focus on the textarea
 
     const saveButton = document.createElement('button');
     saveButton.textContent = 'Save';
@@ -152,7 +157,7 @@ function editPost(post, postContent) {
     cancelButton.classList.add('btn', 'btn-secondary');
 
     saveButton.addEventListener('click', () => {
-        saveEditedPost(post, postTextArea);
+        saveEditedPost(post_id, postTextArea);
     });
 
     cancelButton.addEventListener('click', () => {
@@ -164,35 +169,33 @@ function editPost(post, postContent) {
     postDiv.insertBefore(cancelButton, postDiv.children[4]);
 }
 
-function saveEditedPost(post, postTextArea) {
+function saveEditedPost(post_id, postTextArea) {
 
     const newContent = postTextArea.value;
 
-    console.log(post.id);
-
-    fetch(`/posts/${post.id}/edit`, {
+    fetch(`/posts/${post_id}/edit`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({content: newContent})
     })
-    .then(response => response.json())
-    .then(post => {
-        const postContent = document.createElement('div');
-        postContent.textContent = postTextArea.value;
-        postContent.classList.add('post-content');
-        postTextArea.replaceWith(postContent);
+    .then(response => {
+        if (response.ok) {
+            const postContent = document.createElement('div');
+            postContent.textContent = postTextArea.value;
+            postContent.classList.add('post-content');
+            postTextArea.replaceWith(postContent);
 
-        document.querySelectorAll('.post .btn').forEach(button => {
-            button.style.display = 'none';
-        });
+            document.querySelectorAll('.post .btn').forEach(button => {
+                button.remove();
+            });
 
-        document.querySelector('#edit-link').style.display = 'block';
-
-        attachEditLinkEventListeners();
-
-    })
+            postContent.parentElement.querySelector('.edit-link').style.display = 'block';    
+        } else {
+            console.log('Error occured during update');
+        }
+    }) 
     .catch(erorr => {
         console.log(error);
     });
@@ -206,15 +209,13 @@ function cancelEditedPost(postTextArea) {
     postContent.classList.add('post-content');
     postTextArea.replaceWith(postContent);
 
-    // Hide Save and Cancel buttons
+    // Delete Save and Cancel buttons
     postContent.parentElement.querySelectorAll('.post .btn').forEach(button => {
-        button.style.display = 'none';
+        button.remove();
     });
 
-    // console.log(postContent);
     postContent.parentElement.querySelector('.edit-link').style.display = 'block';
 
-    attachEditLinkEventListeners();
 }
 
 function attachEditLinkEventListeners() {
@@ -222,10 +223,46 @@ function attachEditLinkEventListeners() {
     editLinks.forEach(editLink => {
         editLink.addEventListener('click', (event) => {
             event.preventDefault();
-            const post = JSON.parse(editLink.dataset.post);
+            const post_id = editLink.dataset.post_id;
             const postContent = editLink.parentElement.querySelector('.post-content');
-            console.log(postContent);
-            editPost(post, postContent);
+            editPost(post_id, postContent);
         });
     });
+}
+
+function like(post) {
+
+    fetch(`/posts/${post.id}/like`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({like: !post.liked})
+    })
+    .then(response => {
+        if (response.ok) {
+            let likesIcon = post.likesIcon;
+            let likesCount = post.likesCount;
+            
+            // Update the likes icon image source
+            likesIcon.src = post.liked ? notLikedIconURL : likedIconURL;
+
+            if (post.liked) {
+                post.likes_count -= 1;    
+            } else {
+                post.likes_count += 1;
+            }
+
+            likesCount.textContent = post.likes_count;
+
+            // Toggle like status
+            post.liked = !post.liked;
+
+        } else {
+            console.log('Error occured during the update.')
+        }
+    })
+    .catch(error => {
+        console.log(error)
+    })
 }

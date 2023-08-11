@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core import serializers
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .models import User, Post, Comment
+from .models import User, Post, Like
 
 posts_load_limit = 10
 
@@ -171,8 +171,15 @@ def get_posts(request, filter='profile', profile_username=None):
     has_previous_page = posts.has_previous()
     
     serialized_posts = [post.serialize() for post in posts]
-    serialized_posts = [{**post, 'is_author': True} if post['username'] == request.user.username else {**post, 'is_author': False} for post in serialized_posts]
-
+    serialized_posts = [
+        {**post, 'is_author': True}
+        if post['username'] == request.user.username
+        else {**post, 'is_author': False}
+        for post in serialized_posts
+        ]
+    for post in serialized_posts:
+        post['liked'] = request.user.likes.filter(post_id=post['id']).exists()
+        
     return JsonResponse({
         "posts": serialized_posts,
         "has_next_page": has_next_page,
@@ -189,13 +196,38 @@ def edit_post(request, id):
     except Post.DoesNotExist:
         return JsonResponse({"error": "Post not found."}, status=404)
     
-    if request.method == 'PUT':
+    if request.user != post.user:
+        return JsonResponse({
+            'error': "Cannot edit other user's post."
+        }, status=400)
+    elif request.method == 'PUT':
         data = json.loads(request.body)
         post.content = data['content']
         post.save()
+        return JsonResponse({}, status=204)
     else:
-        JsonResponse({
+        return JsonResponse({
             'error': 'PUT request required.'
         }, status=400)
-        
-    return JsonResponse(post, safe=False, status=200)
+            
+@csrf_exempt
+@login_required
+def like(request, id):
+    
+    try:
+        post = Post.objects.get(pk=id)
+    except Post.DoesNotExist:
+        return JsonResponse({'error': 'Post not found.'}, status=404)
+    
+    if request.method == 'PUT':
+        data = json.loads(request.body)
+        is_liked = data.get('like', False)
+        if is_liked:
+            Like.objects.create(user=request.user, post=post)
+        else:
+            Like.objects.filter(user=request.user, post=post).delete()
+        return JsonResponse({}, status=200)
+    else:
+        return JsonResponse({
+            'error': 'PUT request required.'
+        }, status=400)

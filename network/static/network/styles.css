@@ -8,7 +8,7 @@ body {
   padding-top: 60px;
 }
 
-#new-post-button:hover, #following-button:hover, #all-posts-button:hover {
+#new-post-button:hover, #following-button:hover, #all-posts-button:hover, .likes img:hover {
     cursor: pointer;
   }
   

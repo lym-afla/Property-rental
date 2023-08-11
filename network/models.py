@@ -11,8 +11,8 @@ class Post(models.Model):
     content = models.TextField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True)
     
-    def likes_count(self):
-        return self.likes.filter(like=True).count()
+    # def likes_count(self):
+    #     return self.likes.filter(like=True).count()
     
     # Prepare the response for the respective API
     def serialize(self):
@@ -21,7 +21,7 @@ class Post(models.Model):
             "username": self.user.username,
             "content": self.content,
             "timestamp": self.timestamp.strftime("%B %d, %Y, %#I:%M %p").replace('PM', 'p.m.').replace('AM', 'a.m.'),
-            "likes_count": self.likes_count()
+            "likes_count": self.likes.count()
         }
     
 class Comment(models.Model):
@@ -33,4 +33,4 @@ class Comment(models.Model):
 class Like(models.Model):
     user = models.ForeignKey("User", on_delete=models.CASCADE, related_name='likes')
     post = models.ForeignKey("Post", on_delete=models.CASCADE, related_name='likes')
-    like = models.BooleanField(default=False)
+    # like = models.BooleanField(default=False)

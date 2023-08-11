@@ -2,32 +2,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Add event listeners for New post button to work, but only if it exists (it does not exist when user is not logged in)
     if (document.querySelector('#new-post-button')) {
-        document.querySelector('#new-post-button').addEventListener('click', function() {
-            
-            const section = 'new-post';
-
-            // history.pushState({section: section}, "", '?section=new-post');
-            new_post();
-        });
-    };
+        document.querySelector('#new-post-button').addEventListener('click', () => new_post());
+    }
 
     if (document.querySelector('#following-button')) {
-        document.querySelector('#following-button').addEventListener('click', function() {
-            
-            const section = 'following';
-           
-            // history.pushState({section: section}, "", '?section=following');            
-            load_posts('following');
-        });
-    };
+        document.querySelector('#following-button').addEventListener('click', () => load_posts('following'));
+    }
 
-    document.querySelector('#all-posts-button').addEventListener('click', function() {
-        
-        const section = 'all-posts';
-
-        // history.push State({section: section}, "", '?section=all-posts');
-        load_posts('all-posts');
-    });
+    document.querySelector('#all-posts-button').addEventListener('click', () => load_posts('all-posts'));
 
     if (section === 'new-post') {
         new_post();
@@ -35,21 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
         load_posts(section);
     }
 
-    // Adding event listener for the popstate event
-    // window.addEventListener('popstate', function(event) {
-    //     if (event.state) {
-    //         const previousSection = event.state?.section;
-    //         if (previousSection === 'following') {
-    //             load_posts('following');
-    //         } else if (previousSection === 'new-post') {
-    //             new_post();
-    //         } else if (previousSection === 'all-posts') {
-    //             load_posts('all');
-    //         }
-    //     } else {
-    //         history.back();
-    //     }
-    // });
 });
 
 function new_post() {

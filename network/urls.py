@@ -16,4 +16,5 @@ urlpatterns = [
     path("posts/<str:filter>", views.get_posts, name="get_posts"),
     path("profile/<str:profile_username>/posts", views.get_posts, name="get_posts"),
     path("posts/<int:id>/edit", views.edit_post, name="edit_post"),
+    path("posts/<int:id>/like", views.like, name="like")
 ]
