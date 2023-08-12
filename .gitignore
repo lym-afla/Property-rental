@@ -1,7 +1,6 @@
 # Virtual environment
-carbon-network
-AW-network
-carbon-network
+carbon-rental
+AW-rental
 
 /network/__*
 /network/migrations/
