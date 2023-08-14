@@ -2,6 +2,6 @@
 carbon-rental
 AW-rental
 
-/network/__*
+/property_rental/__*
 /network/migrations/
-/project4/__*
+/rentals/__*

@@ -1,0 +1,66 @@
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+.content-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.content-background-color {
+    flex: 1;
+    background-color: #f2f4f6;
+    overflow: auto;
+}
+
+/* CSS for the grey circle */
+.circle-bg {
+    width: 50px;
+    height: 50px;
+    background-color: #f2f4f6;
+    border-radius: 50%;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto;
+}
+
+.dashboard-svg-icon {
+    width: 30px;
+    height: 30px;
+}
+
+/* CSS for the payment details table */
+.table-bordered td, .table-bordered th {
+    border: none;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: #f2f4f6; /* Alternate row background color */
+}
+
+.row-name {
+    font-weight: bold;
+}
+
+.red-circle::before {
+    content: "\f057"; /* Unicode for red circle icon */
+    font-family: "Font Awesome 5 Free";
+    color: red;
+    font-size: 18px;
+}
+
+.green-circle::before {
+    content: "\f058"; /* Unicode for green circle icon */
+    font-family: "Font Awesome 5 Free";
+    color: green;
+    font-size: 18px;
+}
+
+/* CSS for removing border line on top of the table heading */
+.table thead {
+    border-top: 1px solid transparent;
+}
+

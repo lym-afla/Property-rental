@@ -1,0 +1,20 @@
+<table class="table table-bordered table-striped m-0">
+    <thead>
+        <tr>
+            <th></th>
+            {% for month in months %}
+                <th class="text-center">{{ month }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+            <tr>
+                <th scope="row" class="row-name">{{ row.name }}</th>
+                {% for cell in row.cells %}
+                    <td class="text-center {% if cell.color == 'red' %}red-circle{% else %}green-circle{% endif %}"></td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
