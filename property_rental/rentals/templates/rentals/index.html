@@ -3,22 +3,16 @@
 
 {% block title %}Property rental - Home{% endblock title %}
 
-{% block head %}
-    <!-- Include React and ReactDOM -->
-    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-{% endblock head %}
-
 {% block content %}
 
     <div class="container-fluid pt-3">
         <!-- First Row -->
         <div class="row mb-4">
-            <div id="dashboard-card-1" class="col-md-3"></div>
-            <div id="dashboard-card-2" class="col-md-3"></div>
-            <div id="dashboard-card-3" class="col-md-3"></div>
-            <div id="dashboard-card-4" class="col-md-3"></div>
+            {% for card in dashboard_card_props %}
+                <div class="col-md-3">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link=card.logoLink number=card.number number_text=card.number_text text=card.text %}
+                </div>
+            {% endfor %}
         </div>
         <!-- Second Row -->
         <div class="row">
@@ -51,69 +45,3 @@
     </div>
 
 {% endblock content %}
-
-{% block reactscript %}
-
-    <script type="text/babel">
-
-        function DashboardCard(props) {
-            return (
-                <div className="card bg-white border-0">
-                    <div className="card-body text-center">
-                        {/* Icon */}
-                        <div className="circle-bg">
-                            <img src={props.logoLink} alt="Dashboard Icon" className="dashboard-svg-icon" />
-                        </div>
-                                
-                        {/* Number */}
-                        <div className="mt-2">
-                            <span className="display-4">{props.number}</span><span className="fs-5">{props.number_text}</span>
-                        </div>
-                                
-                        {/* Text */}
-                        <div className="mt-2">
-                            <p className="mb-0">{props.text}</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Render Dashboard components
-        const dashboardCardProps1 = {
-            logoLink: "{% static 'rentals/hourglass.svg' %}",
-            number: "X",
-            number_text: " months",
-            text: "Tenant in the property",
-        };
-
-        const dashboardCardProps2 = {
-            logoLink: "{% static 'rentals/cash-coin.svg' %}",
-            number: "$10,000",
-            number_text: "",
-            text: "Revenue YTD",
-        };
-
-        const dashboardCardProps3 = {
-            logoLink: "{% static 'rentals/cash-coin.svg' %}",
-            number: "$3,000",
-            number_text: "",
-            text: "Income YTD",
-        };
-        
-        const dashboardCardProps4 = {
-            logoLink: "{% static 'rentals/exclamation-diamond-fill.svg' %}",
-            number: "$1,000",
-            number_text: "",
-            text: "Rent due",
-        };
-    
-        // Render components
-        ReactDOM.render(<DashboardCard {...dashboardCardProps1} />, document.getElementById('dashboard-card-1'));
-        ReactDOM.render(<DashboardCard {...dashboardCardProps2} />, document.getElementById('dashboard-card-2'));
-        ReactDOM.render(<DashboardCard {...dashboardCardProps3} />, document.getElementById('dashboard-card-3'));
-        ReactDOM.render(<DashboardCard {...dashboardCardProps4} />, document.getElementById('dashboard-card-4'));
-            
-    </script>
-
-{% endblock reactscript %}

@@ -3,5 +3,5 @@ carbon-rental
 AW-rental
 
 /property_rental/__*
-/network/migrations/
+/rentals/migrations/
 /rentals/__*

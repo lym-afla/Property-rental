@@ -1,0 +1,46 @@
+<div class="modal fade" id="createPropertyModal" tabindex="-1" aria-labelledby="createPropertyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createPropertyModalLabel">Create new property</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="createPropertyModalBody">
+                <form method="post" id="createPropertyForm">
+                    {% csrf_token %}
+                    {% for field in property_form %}
+                        {% if field.name != 'value_currency' %}
+                            <div class="mb-3">
+                                {% if field.name == 'property_value' %}
+                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            {{ property_form.value_currency }}
+                                        </div>
+                                        <div class="col-md-8">
+                                            {{ field }}
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                    {{ field }}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                    <div class="invalid-feedback">
+                        {% for field in property_form %}
+                            {% if field.errors %}
+                                {{ field.label }}: {{ field.errors|join:", " }}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="modal-footer justify-content-between">
+                        <button type="submit" class="btn btn-primary flex-fill col-md-5" data-bs-dismiss="modal">Create property</button>
+                        <button type="button" class="btn btn-secondary flex-fill col-md-5" data-bs-dismiss="modal">Close</button>
+                    </div>                            
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

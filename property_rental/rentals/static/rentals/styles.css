@@ -6,7 +6,7 @@ html, body {
 .content-wrapper {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: calc(100vh - 56.889px);
 }
 
 .content-background-color {

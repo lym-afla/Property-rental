@@ -1,0 +1,91 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h2>Properties</h2>
+        <button type="button" id="newPropertyButton" class="btn btn-primary mb-3">Create new property</button>
+        
+        {% if messages %}
+            <div class="alert alert-danger">
+                <ul>
+                    {% for message in messages %}
+                    <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        
+        <table id="propertiesTable" class="table table-bordered">
+            <thead>
+                <tr>
+                    <th rowspan="2">Property</th>
+                    <th class="text-center" rowspan="2">Location</th>
+                    <th class="text-center" rowspan="2">For rent since</th>
+                    <th class="text-center" rowspan="2">Status</th>
+                    <th class="text-center" colspan="3">All Time</th>
+                    <th class="text-center" rowspan="2"></th>
+                    <th class="text-center" colspan="3">YTD</th>
+                </tr>
+                <tr>
+                    <th class="text-center" >Gross Income</th>
+                    <th class="text-center" >Expenses</th>
+                    <th class="text-center" >Net Income</th>
+                    <th class="text-center" >Gross Income</th>
+                    <th class="text-center" >Expenses</th>
+                    <th class="text-center" >Net Income</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+
+        <div id="propertyDetailsContainer" class="container-fluid pt-3" style="display: none">
+            <!-- First Row -->
+            <div class="row mb-4">
+                <div class="col-md-3" id="propertyLocationCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link=card.logoLink number="" number_text="" text="Location" %}
+                </div>
+                <div class="col-md-3" id="propertyBedroomsCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link=card.logoLink number="" number_text="" text="bedrooms" %}
+                </div>
+                <div class="col-md-3" id="propertyAreaCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link=card.logoLink number="" number_text="" text="sq. meters" %}
+                </div>
+                <div class="col-md-3" id="propertyValueCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link=card.logoLink number=card.number number_text="" text="Property value" %}
+                </div>
+            </div>
+            <!-- Second Row -->
+            <div class="row">
+                <div class="col-md-6">
+                    <!-- Cash P&L Table -->
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <h5 class="card-title fw-bold p-3">P&L</h5>
+                            <div class="table-responsive">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <!-- Tenants -->
+                    <div class="card">
+                        <div class="card-body p-0">
+                            <h5 class="card-title fw-bold p-3">Payment schedule</h5>
+                            <!-- Content of Payment Details goes here -->
+                            <div class="table-responsive">
+                                {% include "rentals/payments_table.html" %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+{% endblock content %}
+
+{% block script %}
+    <script src="{% static 'rentals/properties.js' %}"></script>
+{% endblock script %}
