@@ -43,6 +43,7 @@ function newPropertyClickHandler(event) {
         console.log('Modal already fetched');
         
         const form = document.querySelector('#createPropertyForm');
+        console.log(form);
         form.reset();
 
         const modal = new bootstrap.Modal(document.getElementById('createPropertyModal'));
@@ -51,6 +52,10 @@ function newPropertyClickHandler(event) {
 
     document.querySelector('.modal-footer .btn-primary').textContent = 'Create property';
     
+
+    // !!! Because of async nature of promise.then the below may be run before the data is fetched in the 'if' above. So, form is not defined 
+
+    console.log(form);
     // Reassign event listeners
     form.removeEventListener('submit', submitSaveProperty);
     form.removeEventListener('submit', submitEditProperty);
