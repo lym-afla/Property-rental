@@ -12,11 +12,12 @@ from rest_framework import serializers
 from .forms import CustomUserCreationForm, PropertyForm
 from .models import Property, Landlord
 
+# Using built-in serializers as the manual did not recognize currencies properly
 class PropertySerializer(serializers.ModelSerializer):
     class Meta:
         model = Property
         fields = '__all__'
-
+        
 def index(request):
     
     if request.user.is_authenticated:
@@ -172,7 +173,7 @@ def property_details(request, property_id):
                     'name': property.name,
                     'location': property.location,
                     'num_bedrooms': property.num_bedrooms,
-                    'area': property.area,
+                    'area': float(property.area) if property.area else None,
                     'currency': property.value_currency,
                     'property_value': property.property_value,
                 }                
@@ -181,25 +182,19 @@ def property_details(request, property_id):
                 property.delete()
                 return JsonResponse({'message': 'Property deleted successfully'}, status=204)
             elif request.method == 'PUT':
-                serializer = PropertySerializer(instance=property, data=request.body)
-                if serializer.is_valid():
-                    serializer.save()
-                # # Parse the PUT data from request.body
-                # json_data = json.loads(request.body)
-                # form = PropertyForm(json_data, instance=property)                
-                # if form.is_valid():
-                #     property.name = form.cleaned_data['name']
-                #     property.location = form.cleaned_data['location']
-                #     property.num_bedrooms = form.cleaned_data['num_bedrooms']
-                #     property.area = form.cleaned_data['area']
-                #     property.value_currency = form.cleaned_data['currency']
-                #     property.property_value = form.cleaned_data['property_value']
-                #     property.save()
-                    
-                    return JsonResponse({'success': True}, status=201)
-                else:
-                    print(serializer.errors)
-                    return JsonResponse({'errors': serializer.errors}, status=400)                
+                try:
+                    json_data = json.loads(request.body)
+                    # Retain the existing 'owned_by' value
+                    json_data['owned_by'] = property.owned_by.id                    
+                    serializer = PropertySerializer(instance=property, data=json_data)
+                    if serializer.is_valid():
+                        serializer.save()
+                        return JsonResponse({'success': True}, status=201)
+                    else:
+                        print(f"printing serializer.errors: {serializer.errors}")
+                        return JsonResponse({'errors': serializer.errors}, status=400)
+                except json.JSONDecodeError:
+                    return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
             else:
                 return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
         else:

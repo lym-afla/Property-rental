@@ -1,14 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
 
-    // By default, load the inbox
+    // By default, load the main table
     load_property_table();
-
-    // Add event listener to the OK button in the success modal
-    const successModal = document.getElementById('successModal');
-    const okButton = successModal.querySelector('.btn-secondary');
-    okButton.addEventListener('click', function() {
-        load_property_table();
-    });
 
     // Add event listener to the "New Property" button
     const newPropertyButton = document.getElementById('newPropertyButton');
@@ -104,8 +97,10 @@ function load_property_details(propertyId) {
         // Populate the parameters in the dashboard cards
         document.querySelector('#propertyLocationCard .display-4').textContent = property.location;
         document.querySelector('#propertyBedroomsCard .display-4').textContent = property.num_bedrooms;
-        document.querySelector('#propertyAreaCard .display-4').textContent = property.area ? property.area : 'NA';
-        document.querySelector('#propertyValueCard .display-4').textContent = property.property_value ? property.property_value : 'NA';
+        document.querySelector('#propertyAreaCard .display-4').textContent = 
+            (typeof property.area === 'number' && !isNaN(property.area)) ? property.area.toFixed(0) : 'NA';
+        document.querySelector('#propertyValueCard .display-4').textContent = 
+            (typeof property.property_value === 'number' && !isNaN(property.property_value)) ? property.property_value.toFixed(0) : 'NA';
 
         // After populating the cards, set their heights
         setLocationCardHeight();
@@ -174,27 +169,12 @@ function editClickHandler(event) {
             // Update the formFetched variable to indicate that the form has been fetched
             propertyFormFetched = true;
         })
-        .then(() => {
-            const form = document.querySelector('#createPropertyForm');
-        })
     } else {
         console.log('Modal already fetched');
         const modal = new bootstrap.Modal(document.getElementById('createPropertyModal'));
         modal.show();
         preFillPropertyForm();
-
-        // const form = document.querySelector('#createPropertyForm');
     }
-
-    // Reassign event listeners
-    // const form = document.querySelector('#createPropertyForm');
-    // console.log(form);
-    // if (form) {
-    // form.removeEventListener('submit', submitSaveProperty);
-    // form.removeEventListener('submit', submitEditProperty);
-    // form.addEventListener('submit', submitEditProperty);
-    // }
-
 }
 
 // Pre-fill data for editing form
@@ -216,15 +196,6 @@ function preFillPropertyForm() {
     form.removeEventListener('submit', submitSaveProperty);
     form.removeEventListener('submit', submitEditProperty);
     form.addEventListener('submit', submitEditProperty);
-}
-
-// Handling edit submission
-function submitEditProperty(event) {
-    event.preventDefault(); // Prevent the default form submission
-    const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
-    console.log(propertyId);
-    console.log('editing property');
-    save_edit_property(action='edit', propertyId); // Call the edit_property function    
 }
 
 // Delete click handler

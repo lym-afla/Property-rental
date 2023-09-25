@@ -2,9 +2,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // JavaScript to Fetch and Show the Form
     const newPropertyLink = document.getElementById('newPropertyLink');
-    newPropertyLink.addEventListener('click', newPropertyClickHandler);
+    if (newPropertyLink) {
+        newPropertyLink.addEventListener('click', newPropertyClickHandler);
+    }
 
-    
 });
 
 // Define a variable to track whether the form has been fetched
@@ -31,7 +32,9 @@ function newPropertyClickHandler(event) {
 
             // Attach an event listener to the form's submit event
             const form = document.querySelector('#createPropertyForm');
-            // form.addEventListener('submit', submitSaveProperty);
+            form.removeEventListener('submit', submitSaveProperty);
+            form.removeEventListener('submit', submitEditProperty);
+            form.addEventListener('submit', submitSaveProperty);
 
             // Update the formFetched variable to indicate that the form has been fetched
             propertyFormFetched = true;
@@ -43,42 +46,30 @@ function newPropertyClickHandler(event) {
         console.log('Modal already fetched');
         
         const form = document.querySelector('#createPropertyForm');
-        console.log(form);
         form.reset();
+        form.removeEventListener('submit', submitSaveProperty);
+        form.removeEventListener('submit', submitEditProperty);
+        form.addEventListener('submit', submitSaveProperty);
 
         const modal = new bootstrap.Modal(document.getElementById('createPropertyModal'));
         modal.show();
-    }
-
-    document.querySelector('.modal-footer .btn-primary').textContent = 'Create property';
-    
-
-    // !!! Because of async nature of promise.then the below may be run before the data is fetched in the 'if' above. So, form is not defined 
-
-    console.log(form);
-    // Reassign event listeners
-    form.removeEventListener('submit', submitSaveProperty);
-    form.removeEventListener('submit', submitEditProperty);
-    form.addEventListener('submit', submitSaveProperty);
-    
+    }    
 }
 
 // Handling save submission
 function submitSaveProperty(event) {
     event.preventDefault(); // Prevent the default form submission
-    save_edit_property(action='save'); // Call the save_property function    
+    save_edit_property(action='save'); // Call the save_edit_property function    
 }
 
-// Saving new property
+// Saving and editing new property
 function save_edit_property(action, propertyId) {
-
-    console.log('Running save_edit_property' + ` ${action} action.`);
 
     const csrftoken = getCookie('csrftoken');
 
     const variables = {
         'save': {
-            'link': '/properties',
+            'link': '/properties/',
             'method': 'POST',
             'success_text': 'saved',
             'error_text': 'New property creation failed',
@@ -94,15 +85,6 @@ function save_edit_property(action, propertyId) {
     const form = document.querySelector('#createPropertyForm');
     const formData = new FormData(form);
 
-    // // Collect form field values using FormData
-    // const formFields = {};
-    // for (const [name, value] of formData.entries()) {
-    //     formFields[name] = value;
-    // }
-
-    // Convert formFields to a JSON string
-    // const jsonData = JSON.stringify(formFields);
-
     // Convert formFields to a JSON string
     const jsonData = JSON.stringify(Object.fromEntries(formData.entries()));
 
@@ -111,15 +93,20 @@ function save_edit_property(action, propertyId) {
         body: action === 'save' ? formData : jsonData,
         headers: {
             'X-CSRFToken': csrftoken,
-            'Content-Type': action === 'save'? 'multipart/form-data' : 'application/json',
+            // 'Content-Type': action === 'save' ? 'multipart/form-data' : 'application/json',
         }
     })
     .then(response => {
         if (response.status === 201) {
+            // Close the createPropertyModal
+            let propertyForm = document.getElementById('createPropertyModal');
+            let propertyFormModal = bootstrap.Modal.getInstance(propertyForm);
+            propertyFormModal.hide();
+
             const successModal = new bootstrap.Modal(document.getElementById('successModal'));
             successModal.show();
             document.querySelector('#successModal .modal-body').textContent = `Property ${variables[action].success_text} successfully`;
-            document.querySelector('#successModal a').style.display = 'block';
+            document.querySelector('#successModal a').style.display = 'none';
             form.reset();
         } else {
             throw new Error(variables[action].error_text);
@@ -128,6 +115,31 @@ function save_edit_property(action, propertyId) {
     .catch(error => {
         console.error('Error:', error)
     });
+}
+
+// Handling edit submission
+function submitEditProperty(event) {
+    event.preventDefault(); // Prevent the default form submission
+    const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
+    save_edit_property(action='edit', propertyId); // Call the edit_property function    
+}
+
+// Function to handle success Modal OK button click. The reference to this function is introduced in layout.html directly
+function okButtonEventHandler() {
+    
+    const successModal = document.getElementById('successModal');
+    const successText = successModal.querySelector('.modal-body').textContent;
+
+    // Hide the modal
+    let successModalInstance = bootstrap.Modal.getInstance(successModal);
+    successModalInstance.hide();
+    
+    if (successText.includes("deleted") || successText.includes("saved")) {
+        load_property_table();
+    } else if (successText.includes("edited")) {
+        const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
+        load_property_details(propertyId);
+    }
 }
 
 // Function to retrieve the CSRF token from cookies
