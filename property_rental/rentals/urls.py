@@ -13,5 +13,5 @@ urlpatterns = [
     # API methods
     path('properties/table-data', views.get_properties, name='get_properties'),
     path('properties/<int:property_id>', views.property_details, name='property_details'),
-    path('properties/new-property-form', views.new_property_form, name='new_property_form'),
+    path('properties/new-form/<str:form_type>', views.new_form, name='new_form'),
 ]

@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 import json
 from rest_framework import serializers
 
-from .forms import CustomUserCreationForm, PropertyForm
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
 from .models import Property, Landlord
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -122,16 +122,22 @@ def properties(request):
         return redirect('rentals:index')
     
 # Create form for adding new property
-def new_property_form(request):
-    # Create an instance of the PropertyForm
-    form = PropertyForm()
+def new_form(request, form_type):
+    
+    # Create an instance of the Form
+    if form_type == 'property':
+        form = PropertyForm()
+    elif form_type == 'tenant':
+        # Passing landlord to have the selection of properties for a tenant
+        landlord = Landlord.objects.get(user=request.user)
+        form = TenantForm(landlord_user=landlord)
+    elif form_type == 'transaction':
+        form = TransactionForm()
+    else:
+        messages.error(request, "Wrong form type requested")
+        return redirect('rentals:index')
 
-    # Render the form template into HTML
-    # form_html = render_to_string('rentals/new_property_form.html', {'property_form': form})
-
-    # Return the HTML as a response
-    # return HttpResponse(form_html)
-    return render(request, 'rentals/new_property_form.html', {'property_form': form})
+    return render(request, 'rentals/new_form.html', {'form': form, 'form_type': form_type})
     
 # Get data to populate table with properties
 @login_required
@@ -180,7 +186,7 @@ def property_details(request, property_id):
                 return JsonResponse(property_data, status=200)
             elif request.method == 'DELETE':
                 property.delete()
-                return JsonResponse({'message': 'Property deleted successfully'}, status=204)
+                return JsonResponse({'message': 'Property deleted successfully'}, status=200)
             elif request.method == 'PUT':
                 try:
                     json_data = json.loads(request.body)
@@ -189,9 +195,8 @@ def property_details(request, property_id):
                     serializer = PropertySerializer(instance=property, data=json_data)
                     if serializer.is_valid():
                         serializer.save()
-                        return JsonResponse({'success': True}, status=201)
+                        return JsonResponse({'success': True}, status=200)
                     else:
-                        print(f"printing serializer.errors: {serializer.errors}")
                         return JsonResponse({'errors': serializer.errors}, status=400)
                 except json.JSONDecodeError:
                     return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)

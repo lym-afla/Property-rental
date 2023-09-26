@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add event listener to the "New Property" button
     const newPropertyButton = document.getElementById('newPropertyButton');
-    newPropertyButton.addEventListener('click', newPropertyClickHandler);
+    newPropertyButton.addEventListener('click', entryClickHandler);
 
 });
 
@@ -40,11 +40,14 @@ function load_property_table() {
             row.className = 'propertyRow';
             row.setAttribute('data-property-id', property.id);
 
+            // Determine the circle class based on property.status
+            const circleClass = property.status === 'rented' ? 'green-circle' : 'red-circle';
+
             row.innerHTML = `
                     <td class="propertyName"><a href="">${property.name}</td>
                     <td class="text-center">${property.location}</td>
                     <td class="text-center">${property.rent_since}</td>
-                    <td class="text-center">${property.status}</td>
+                    <td class="text-center"><i class="fas fa-circle ${circleClass}"></i></td>
                     <!-- Add other cells as needed -->
                 `;
             tbody.appendChild(row);
@@ -119,7 +122,7 @@ function load_property_details(propertyId) {
                     Back to properties
                 </button>
                 <div>
-                    <button type="button" class="btn btn-secondary me-2" data-property-id="${propertyId}" id="editPropertyButton">
+                    <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-property-id="${propertyId}" data-edit-type="property" id="editPropertyButton">
                         Edit
                     </button>
                     <button type="button" class="btn btn-danger" data-property-id="${propertyId}" id="deletePropertyButton" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal">
@@ -137,7 +140,7 @@ function load_property_details(propertyId) {
 
         // Add a click event listener to the button to edit property
         const editButton = document.getElementById('editPropertyButton');
-        editButton.addEventListener('click', editClickHandler);
+        editButton.addEventListener('click', entryClickHandler);
 
         // Add a click event listener to the button to delete property
         const deleteButton = document.getElementById('confirmDeleteButton');
@@ -149,11 +152,13 @@ function load_property_details(propertyId) {
 function editClickHandler(event) {
     event.preventDefault();
 
-    // If the form has already been fetched, show the modal and return
-    if (!propertyFormFetched) {
-        console.log('Fetching form');
+    const action = event.target.getAttribute('data-edit-entry');
 
-        const createPropertyModal = document.getElementById('PropertyModal');
+    // If the form has already been fetched, show the modal and return
+    if (!formFetched[action]) {
+        console.log(`Fetching ${action} form`);
+
+        const createPropertyModal = document.getElementById('PropertyFormModal');
         
         // Fetch the form content
         fetch("/properties/new-property-form")
@@ -167,10 +172,10 @@ function editClickHandler(event) {
             preFillPropertyForm();
             
             // Update the formFetched variable to indicate that the form has been fetched
-            propertyFormFetched = true;
+            formFetched[action] = true;
         })
     } else {
-        console.log('Modal already fetched');
+        console.log(`${action} form already fetched`);
         const modal = new bootstrap.Modal(document.getElementById('createPropertyModal'));
         modal.show();
         preFillPropertyForm();
@@ -192,10 +197,10 @@ function preFillPropertyForm() {
 
     document.querySelector('.modal-footer .btn-primary').textContent = 'Save changes';
 
-    const form = document.querySelector('#createPropertyForm');
-    form.removeEventListener('submit', submitSaveProperty);
-    form.removeEventListener('submit', submitEditProperty);
-    form.addEventListener('submit', submitEditProperty);
+    // const form = document.querySelector('#createPropertyForm');
+    // form.removeEventListener('submit', submitSaveHandler);
+    // form.removeEventListener('submit', submitEditProperty);
+    // form.addEventListener('submit', submitEditProperty);
 }
 
 // Delete click handler
@@ -234,17 +239,20 @@ function delete_property(propertyId) {
         }
     })
     .then(response => {
-        if (response.status === 204) {
-            // Show success modal or message
-            const successModal = new bootstrap.Modal(document.getElementById('successModal'));
-            successModal.show();
-            
-            // Edit success modal message
-            document.querySelector('#successModal .modal-body').textContent = 'Property deleted successfully';
-            document.querySelector('#successModal a').style.display = 'none';
+        if (response.ok) {
+            return response.json();
         } else {
             throw new Error('Property deletion failed');
         }
+    })
+    .then(data => {
+        // Show success modal or message
+        const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+        successModal.show();
+        
+        // Edit success modal message
+        document.querySelector('#successModal .modal-body').textContent = data.message;
+        document.querySelector('#successModal a').style.display = 'none';
     })
     .catch(error => {
         console.error('Error:', error);
