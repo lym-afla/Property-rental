@@ -63,6 +63,13 @@ class TenantForm(forms.ModelForm):
         }
         
 class TransactionForm(forms.ModelForm):
+    property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
+
+    def __init__(self, landlord_user, *args, **kwargs):
+        super(TransactionForm, self).__init__(*args, **kwargs)
+
+        # Customize the queryset for the property field based on the landlord user
+        self.fields['property'].queryset = Property.objects.filter(owned_by=landlord_user)
     class Meta:
         model = Transaction
         fields = ['type']
