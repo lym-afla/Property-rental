@@ -1,0 +1,51 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+    <div class="container mt-4">
+        <h2>Tenants</h2>
+        <button type="button" id="newTenantButton" data-new-type="tenant" class="btn btn-primary mb-3 new-entry-button">Create new tenant</button>
+        
+        {% if messages %}
+            <div class="alert alert-danger">
+                <ul>
+                    {% for message in messages %}
+                    <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        
+        <table id="tenantTable" class="table table-bordered">
+            <thead>
+                <tr>
+                    <th rowspan="2">Tenant</th>
+                    <th class="text-center" rowspan="2">Property</th>
+                    <th class="text-center" rowspan="2">Renting since</th>
+                    <th class="text-center" colspan="2">Revenue</th>
+                    <th class="text-center" rowspan="2">Debt</th>
+                </tr>
+                <tr>
+                    <th class="text-center" >All time</th>
+                    <th class="text-center" >YTD</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="tenantDetailsContainer" class="container-fluid pt-3" style="display: none">
+        <!-- First Row -->
+        <div class="row mb-4">
+        </div>
+        <!-- Second Row -->
+        <div class="row">
+        </div>
+    </div>
+
+{% endblock content %}
+
+{% block script %}
+    <script src="{% static 'rentals/tenants.js' %}"></script>
+{% endblock script %}

@@ -11,7 +11,9 @@ urlpatterns = [
     path('properties/', views.properties, name='properties'),
     
     # API methods
-    path('properties/table-data', views.get_properties, name='get_properties'),
-    path('properties/<int:property_id>', views.property_details, name='property_details'),
-    path('properties/new-property-form', views.new_property_form, name='new_property_form'),
+    path('table-data/<str:data_type>', views.table_data, name='table_data'),
+    path('properties/table-data', views.get_properties, name='get_properties'), # TO BE DELETED
+    path('handling/<str:data_type>/<int:element_id>', views.element_details, name='element_details'),
+    path('properties/<int:property_id>', views.property_details, name='property_details'), # TO BE DELETED
+    path('properties/new-form/<str:form_type>', views.new_form, name='new_form'),
 ]

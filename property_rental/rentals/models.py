@@ -18,18 +18,26 @@ class User(AbstractUser):
             Tenant.objects.get_or_create(user=self)
 
 class Landlord(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
     
     # Add fields specific to the landlord user type
     property_owned = models.IntegerField(blank=True, null=True)
 
 class Tenant(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
     
     # Fields specific to the tenant user type
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30, blank=True, null=True)
+    phone = models.CharField(max_length=15)
+    email = models.EmailField(blank=True, null=True)
     lease_start = models.DateField()
     lease_end = models.DateField(blank=True, null=True)
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     lease_rent = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
     
 class Property(models.Model):
     owned_by = models.ForeignKey(Landlord, on_delete=models.CASCADE, related_name='properties')
@@ -39,7 +47,7 @@ class Property(models.Model):
     num_bedrooms = models.PositiveIntegerField()
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    value_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     
     STATUS_CHOICES = (
         ('rented', 'Rented out'),
@@ -54,7 +62,7 @@ class Transaction(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='transactions')
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
+    type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, default='rent')
     
     def __str__(self):
         return self.property.name + ": " + self.type

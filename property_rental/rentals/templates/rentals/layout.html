@@ -54,9 +54,9 @@
                                     New Entry
                                 </a>
                                 <div class="dropdown-menu dropdown-menu-end" aria-labelledby="newEntryDropdown">
-                                    <a class="dropdown-item" href="#">New Transaction</a>
-                                    <a class="dropdown-item" href="#">New Tenant</a>
-                                    <a class="dropdown-item" id="newPropertyLink" href="">New Property</a>
+                                    <a class="dropdown-item new-entry-button" data-new-type="transaction" href="#">New Transaction</a>
+                                    <a class="dropdown-item new-entry-button" data-new-type="tenant" href="#">New Tenant</a>
+                                    <a class="dropdown-item new-entry-button" data-new-type="property" href="">New Property</a>
                                 </div>
                             </li>
 
@@ -78,8 +78,9 @@
             </div>
         </nav>
 
-        <!-- Create Property Modal -->
-        <div id="PropertyModal"></div>
+        <div id="propertyModalDiv"></div>
+        <div id="tenantModalDiv"></div>
+        <div id="transactionModalDiv"></div>
 
         <!-- Success Modal -->
         <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">

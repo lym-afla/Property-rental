@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 import json
 from rest_framework import serializers
 
-from .forms import CustomUserCreationForm, PropertyForm
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
 from .models import Property, Landlord
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -122,17 +122,24 @@ def properties(request):
         return redirect('rentals:index')
     
 # Create form for adding new property
-def new_property_form(request):
-    # Create an instance of the PropertyForm
-    form = PropertyForm()
-
-    # Render the form template into HTML
-    # form_html = render_to_string('rentals/new_property_form.html', {'property_form': form})
-
-    # Return the HTML as a response
-    # return HttpResponse(form_html)
-    return render(request, 'rentals/new_property_form.html', {'property_form': form})
+def new_form(request, form_type):
     
+    # Create an instance of the Form
+    if form_type == 'property':
+        form = PropertyForm()
+    elif form_type == 'tenant':
+        # Passing landlord to have the selection of properties for a tenant
+        landlord = Landlord.objects.get(user=request.user)
+        form = TenantForm(landlord_user=landlord)
+    elif form_type == 'transaction':
+        form = TransactionForm()
+    else:
+        messages.error(request, "Wrong form type requested")
+        return redirect('rentals:index')
+
+    return render(request, 'rentals/new_form.html', {'form': form, 'form_type': form_type})
+    
+# NEED TO DELETE EVENTUALLY. REPLACED BY MORE GENERIC TABLE_DATA
 # Get data to populate table with properties
 @login_required
 def get_properties(request):
@@ -159,6 +166,35 @@ def get_properties(request):
 
     return JsonResponse(data, safe=False)
 
+# Get data to populate table with selected elements
+@login_required
+def table_data(request, data_type):
+    
+    try:
+        landlord = Landlord.objects.get(user=request.user)
+    except Landlord.DoesNotExist:
+        return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
+    
+    data = []  # List to store elements data
+    
+    match data_type:
+        case 'property':
+            properties = Property.objects.filter(owned_by=landlord)
+            for property in properties:
+                property_data = {
+                    'id': property.id,
+                    'name': property.name,
+                    'location': property.location,
+                    # 'rent_since': property.rent_since,
+                    'status': property.status
+                    # Add cash flow fields as needed
+                }
+                data.append(property_data)
+        case _:
+            return JsonResponse({'error': 'Data type does not exist.'}, status=400)
+
+    return JsonResponse(data, safe=False)
+
 # Get data for a particular property
 @login_required
 def property_details(request, property_id):
@@ -180,7 +216,7 @@ def property_details(request, property_id):
                 return JsonResponse(property_data, status=200)
             elif request.method == 'DELETE':
                 property.delete()
-                return JsonResponse({'message': 'Property deleted successfully'}, status=204)
+                return JsonResponse({'message': 'Property deleted successfully'}, status=200)
             elif request.method == 'PUT':
                 try:
                     json_data = json.loads(request.body)
@@ -189,9 +225,8 @@ def property_details(request, property_id):
                     serializer = PropertySerializer(instance=property, data=json_data)
                     if serializer.is_valid():
                         serializer.save()
-                        return JsonResponse({'success': True}, status=201)
+                        return JsonResponse({'success': True}, status=200)
                     else:
-                        print(f"printing serializer.errors: {serializer.errors}")
                         return JsonResponse({'errors': serializer.errors}, status=400)
                 except json.JSONDecodeError:
                     return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
@@ -201,3 +236,46 @@ def property_details(request, property_id):
             return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
     except Property.DoesNotExist:
         return JsonResponse({'error': 'Property not found'}, status=404)
+    
+# Get data for a particular element
+@login_required
+def element_details(request, data_type, element_id):
+    
+    try:
+        property = Property.objects.get(id=element_id)
+    except Property.DoesNotExist:
+        return JsonResponse({'error': 'Property not found'}, status=404)
+        
+    # Check if the logged-in user is the landlord of the property
+    if request.user.is_landlord and property.owned_by.user == request.user:
+        if request.method == 'GET':
+            property_data = {
+                'name': property.name,
+                'location': property.location,
+                'num_bedrooms': property.num_bedrooms,
+                'area': float(property.area) if property.area else None,
+                'currency': property.value_currency,
+                'property_value': property.property_value,
+            }                
+            return JsonResponse(property_data, status=200)
+        elif request.method == 'DELETE':
+            property.delete()
+            return JsonResponse({'message': 'Property deleted successfully'}, status=200)
+        elif request.method == 'PUT':
+            try:
+                json_data = json.loads(request.body)
+                # Retain the existing 'owned_by' value
+                json_data['owned_by'] = property.owned_by.id                    
+                serializer = PropertySerializer(instance=property, data=json_data)
+                if serializer.is_valid():
+                    serializer.save()
+                    return JsonResponse({'success': True}, status=200)
+                else:
+                    return JsonResponse({'errors': serializer.errors}, status=400)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
+        else:
+            return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
+    else:
+        return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+    

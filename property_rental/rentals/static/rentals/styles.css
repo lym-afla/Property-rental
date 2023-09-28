@@ -64,3 +64,8 @@ html, body {
     border-top: 1px solid transparent;
 }
 
+/* Hide the Payment Schedule card */
+/* #paymentScheduleTable {
+    display: none;
+} */
+
