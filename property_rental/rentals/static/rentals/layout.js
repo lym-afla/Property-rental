@@ -46,6 +46,8 @@ function elementActionClickHandler(event) {
         if (action === 'edit') {
             preFillForm(type);
         }
+
+        defaultPropertyChoice(type);
     }    
 }
 
@@ -61,7 +63,11 @@ function getForm(action, type) {
     .then(formHTML => {
         // Inject the form content into the modal body
         divModal.innerHTML = formHTML;
-       
+
+        if (divModal.querySelector('[value=""]')) {
+            divModal.querySelector('[value=""]').remove();
+        }
+
         // Attach an event listener to the form's submit event
         attachSubmitEventListener(action, type);
        
@@ -73,6 +79,8 @@ function getForm(action, type) {
 
         // Update the formFetched variable to indicate that the form has been fetched
         formFetched[type] = true;
+
+        defaultPropertyChoice(type);
     })
     .catch(error => {
         console.error("Error fetching form:", error);
@@ -221,4 +229,69 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+// Format cards: even height, font size
+function formatCards(type) {
+
+    // Calculate default card height
+    const firstCard = document.querySelector(`#${type}DetailsContainer .col-md-3`);
+    const cardInitialText = firstCard.querySelector('.display-4').textContent;
+    firstCard.querySelector('.display-4').textContent = '1';
+    const cardHeight = firstCard.querySelector('.card').offsetHeight;
+    const midCardDivHeight = firstCard.querySelector(`#${type}DetailsContainer .col-md-3 .mt-2`).offsetHeight;
+    const midCardDivWidth = firstCard.querySelector(`#${type}DetailsContainer .col-md-3 .mt-2`).offsetWidth;
+    firstCard.querySelector('.display-4').textContent = cardInitialText;
+
+    document.querySelectorAll(`#${type}DetailsContainer .mb-4 .card`).forEach(card => {
+        card.style.height = `${cardHeight}px`;
+        adjustFontSize(card.querySelector(".display-4"), midCardDivWidth, midCardDivHeight);
+        card.querySelector('.mt-2').style.height = `${midCardDivHeight}px`;
+    });
+}
+
+
+// Adjusting the font size
+function adjustFontSize(element, width, height) {
+
+    // Calculate the actual text width and height
+    const textWidth = element.getBoundingClientRect().width;
+    const textHeight = element.getBoundingClientRect().height;
+
+    console.log(textWidth, textHeight);
+    console.log(width, height * 1.11);
+
+    // Reduce the font size until it fits within the constraints
+    while (textWidth > width || textHeight > height * 1.11) {
+        const currentSize = parseFloat(window.getComputedStyle(element).fontSize.slice(0, -2));
+        console.log(currentSize);
+        const newSize = currentSize * 0.9; // Decrease the font size by 10% (adjust as needed)
+        
+        element.style.fontSize = newSize + 'px';
+        console.log(`New font size: ${element.style.fontSize}`)
+
+        // Recalculate text width and height with the new font size
+        const newTextWidth = element.getBoundingClientRect().width;
+        const newTextHeight = element.getBoundingClientRect().height;
+
+        console.log(`New text width: ${newTextWidth}, new text height: ${newTextHeight}`);
+        // If further reduction makes the text too small, break the loop
+        if (newTextWidth <= width && newTextHeight <= height * 1.11) {
+            break;
+        }
+    }
+}
+
+// Make default property choice if called from property page
+function defaultPropertyChoice(type) {
+    if (type != 'property') {
+        const checkProperty = document.getElementById('editPropertyButton');
+        if (checkProperty) {
+            const propertyId = checkProperty.getAttribute('data-property-id');
+            console.log(propertyId);
+            console.log(document.getElementById(`${type}ModalDiv`));
+            console.log(document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`));
+            document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`).selected = true;
+        }
+    }
 }

@@ -41,8 +41,12 @@ class TenantForm(forms.ModelForm):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         # Customize the queryset for the property field based on the landlord user
-        self.fields['property'].queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(tenant=None))
-
+        queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(tenant=None))
+        self.fields['property'].queryset = queryset
+        # Set the initial value to the first item in the queryset
+        if queryset.exists():
+            self.fields['property'].initial = queryset.first()
+        
     class Meta:
         model = Tenant
         fields = ['first_name', 'last_name', 'phone', 'email', 'property', 'lease_start', 'currency', 'lease_rent']
@@ -73,6 +77,19 @@ class TransactionForm(forms.ModelForm):
 
         # Customize the queryset for the property field based on the landlord user
         self.fields['property'].queryset = Property.objects.filter(owned_by=landlord_user)
+        
     class Meta:
         model = Transaction
-        fields = ['type']
+        fields = ['property', 'type', 'currency', 'amount', 'comment']
+        widgets = {
+            'type': forms.Select(attrs={'class': 'form-select'}),
+            'currency': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'comment': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+        labels = {
+            'type': 'Select expense category',
+            'currency': '',
+            'amount': 'Transaction value',
+            'comment': 'Comment (optional)',
+        }

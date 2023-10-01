@@ -11,7 +11,7 @@
                     {% for field in form %}
                         {% if 'currency' not in field.name %}
                             <div class="mb-3">
-                                {% if field.name == 'property_value' or field.name == 'lease_rent' %}
+                                {% if field.name == 'property_value' or field.name == 'lease_rent' or field.name == 'amount' %}
                                     <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
                                     <div class="row">
                                         <div class="col-md-4">

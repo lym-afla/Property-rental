@@ -59,8 +59,9 @@ class Property(models.Model):
 class Transaction(models.Model):
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='transactions')
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
     type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, default='rent')
+    comment = models.TextField(max_length=250, blank=True, null=True)
     
     def __str__(self):
         return self.property.name + ": " + self.type

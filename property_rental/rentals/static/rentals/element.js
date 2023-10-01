@@ -204,6 +204,7 @@ function preFillForm(type) {
             let value = document.querySelector('#propertyValueCard .display-4').textContent;
             value = (value === "NA") ? '' : value;
             document.getElementById('id_property_value').value = value;
+            break;
 
     }
 
@@ -231,12 +232,13 @@ function load_element_details(type, elementId) {
         }
     })
     .then(element => {
-
-        // Show the page name
-        document.querySelector('h2').innerHTML = `${Type}: ${element.name}`;
     
         switch(type) {
             case 'property':
+                console.log(type);
+                // Show the page name
+                document.querySelector('h2').innerHTML = `${Type}: ${element.name}`;
+                
                 // Populate the parameters in the dashboard cards
                 document.querySelector('#propertyLocationCard .display-4').textContent = element.location;
                 document.querySelector('#propertyBedroomsCard .display-4').textContent = element.num_bedrooms;
@@ -244,18 +246,31 @@ function load_element_details(type, elementId) {
                     (typeof element.area === 'number' && !isNaN(element.area)) ? element.area.toFixed(0) : 'NA';
                 document.querySelector('#propertyValueCard .display-4').textContent = 
                     (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? element.property_value.toFixed(0) : 'NA';
-
-                // // After populating the cards, set their heights
-                // setLocationCardHeight();
+                break;
 
             case 'tenant':
+                console.log(type);
+                // Show the page name
+                document.querySelector('h2').innerHTML = `${Type}: ${element.first_name} ${element.last_name === null ? "" : element.last_name}`;
+
+                // Populate the parameters in the dashboard cards
+                document.querySelector('#tenantPropertyCard .display-4').textContent = element.property;
+                document.querySelector('#tenantMovedInCard .display-4').textContent = formatDateToDdmmyy(element.renting_since);
+                document.querySelector('#tenantRentCard .display-4').textContent = 
+                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? (element.rent_currency + element.rent_rate.toFixed(0)) : 'NA';
+                // document.querySelector('#propertyValueCard .display-4').tenantRevenueCard = 
+                    // (typeof element.revenue === 'number' && !isNaN(element.revenue)) ? (element.currency + element.revenue.toFixed(0)) : 'NA';
                 break;
+
             case 'transaction':
                 break;
             default:
                 // Handle other cases or show an error message
                 console.error('Unknown element type:', type);
         }
+
+        formatCards(type);
+
     })
     .catch(error => {
         console.log(error);
@@ -267,7 +282,7 @@ function load_element_details(type, elementId) {
         const buttonsHTML = `
             <div class="d-flex justify-content-between mb-3">
                 <button type="button" class="btn btn-primary" id="back-to-${type}-table" data-back-type="${type}">
-                    Back to ${type} table
+                    Back to ${Type} table
                 </button>
                 <div>
                     <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">

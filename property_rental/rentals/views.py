@@ -164,9 +164,10 @@ def new_form(request, form_type):
         # Passing landlord to have the selection of properties for a tenant
         landlord = Landlord.objects.get(user=request.user)
         form = TenantForm(landlord_user=landlord)
-        print(Property.objects.filter(Q(owned_by=landlord) | Q(tenant=None)))
     elif form_type == 'transaction':
-        form = TransactionForm()
+        # Passing landlord to have the selection of properties for a tenant
+        landlord = Landlord.objects.get(user=request.user)
+        form = TransactionForm(landlord_user=landlord)
     else:
         messages.error(request, "Wrong form type requested")
         return redirect('rentals:index')
@@ -242,48 +243,6 @@ def table_data(request, data_type):
             return JsonResponse({'error': 'Data type does not exist.'}, status=400)
 
     return JsonResponse(data, safe=False)
-
-# Get data for a particular property
-# @login_required
-# def property_details(request, property_id):
-    
-#     try:
-#         property = Property.objects.get(id=property_id)
-        
-#         # Check if the logged-in user is the landlord of the property
-#         if request.user.is_landlord and property.owned_by.user == request.user:
-#             if request.method == 'GET':
-#                 property_data = {
-#                     'name': property.name,
-#                     'location': property.location,
-#                     'num_bedrooms': property.num_bedrooms,
-#                     'area': float(property.area) if property.area else None,
-#                     'currency': property.value_currency,
-#                     'property_value': property.property_value,
-#                 }                
-#                 return JsonResponse(property_data, status=200)
-#             elif request.method == 'DELETE':
-#                 property.delete()
-#                 return JsonResponse({'message': 'Property deleted successfully'}, status=200)
-#             elif request.method == 'PUT':
-#                 try:
-#                     json_data = json.loads(request.body)
-#                     # Retain the existing 'owned_by' value
-#                     json_data['owned_by'] = property.owned_by.id                    
-#                     serializer = PropertySerializer(instance=property, data=json_data)
-#                     if serializer.is_valid():
-#                         serializer.save()
-#                         return JsonResponse({'success': True}, status=200)
-#                     else:
-#                         return JsonResponse({'errors': serializer.errors}, status=400)
-#                 except json.JSONDecodeError:
-#                     return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
-#             else:
-#                 return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
-#         else:
-#             return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
-#     except Property.DoesNotExist:
-#         return JsonResponse({'error': 'Property not found'}, status=404)
     
 # Get data for a particular element
 @login_required
@@ -316,7 +275,7 @@ def handle_element(request, data_type, element_id):
                         'location': element.location,
                         'num_bedrooms': element.num_bedrooms,
                         'area': float(element.area) if element.area else None,
-                        'currency': element.currency,
+                        'currency': get_currency_symbol(element.currency),
                         'property_value': element.property_value,
                     }
                 else:
@@ -331,8 +290,9 @@ def handle_element(request, data_type, element_id):
                         'email': element.email,
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
-                        'rent_currency': element.currency,
-                        'rent_rate': element.lease_rent,
+                        'rent_currency': get_currency_symbol(element.currency),
+                        'rent_rate': float(element.lease_rent) if element.lease_rent else None,
+                        'property': element.property.name,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
