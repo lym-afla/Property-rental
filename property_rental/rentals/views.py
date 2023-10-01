@@ -319,23 +319,25 @@ def handle_element(request, data_type, element_id):
                         'currency': element.currency,
                         'property_value': element.property_value,
                     }
-                    return JsonResponse(data, status=200)
                 else:
-                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)                
-    # elif request.method == 'POST':
-    #     match data_type:
-    #         case 'property':
-    #             if request.user.is_landlord:
-    #                 # Form for creating new property
-    #                 form = PropertyForm(request.POST or None)
-    #                 if form.is_valid():
-    #                     property = form.save(commit=False)
-    #                     property.owned_by = Landlord.objects.get(user=request.user)
-    #                     property.save()
-    #                     return JsonResponse({'message': 'Property saved successfully'}, status=200)
-    #         # case 'tenant':
-    #         # case 'transaction':
-        
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
+            case 'tenant':
+                # Check if the logged-in user is the landlord and tenant lives in landlord's property
+                if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    data = {
+                        'first_name': element.first_name,
+                        'last_name': element.last_name,
+                        'phone': element.phone,
+                        'email': element.email,
+                        'renting_since': element.lease_start,
+                        'left_property_at': element.lease_end,
+                        'rent_currency': element.currency,
+                        'rent_rate': element.lease_rent,
+                    }
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
+            # case 'transaction':
+        return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
         element.delete()
         return JsonResponse({'message': f'{data_type} deleted successfully'}, status=200)

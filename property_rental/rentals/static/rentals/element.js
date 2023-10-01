@@ -124,7 +124,7 @@ function tableElementClickHandler(event) {
     const type = event.target.parentElement.classList[0].replace("Name", "");
 
     // Get the property ID from the data attribute
-    const elementId = this.closest('.propertyRow').getAttribute(`data-${type}-id`);
+    const elementId = this.closest(`.${type}Row`).getAttribute(`data-${type}-id`);
 
     load_element_details(type, elementId);
 }
@@ -281,7 +281,7 @@ function load_element_details(type, elementId) {
         `;
 
         // Append the "Back to properties" button to the property details container
-        propertyDetailsContainer.insertAdjacentHTML('beforebegin', buttonsHTML);
+        document.getElementById(`${type}DetailsContainer`).insertAdjacentHTML('beforebegin', buttonsHTML);
         
         // Add a click event listener to the button to go back to [Type] table
         const backButton = document.getElementById(`back-to-${type}-table`);
