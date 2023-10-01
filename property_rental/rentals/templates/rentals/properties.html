@@ -4,7 +4,7 @@
 {% block content %}
     <div class="container mt-4">
         <h2>Properties</h2>
-        <button type="button" id="newPropertyButton" data-new-type="property" class="btn btn-primary mb-3 new-entry-button">Create new property</button>
+        <button type="button" data-new-type="property" class="btn btn-primary mb-3 new-entry-button">Create new property</button>
         
         {% if messages %}
             <div class="alert alert-danger">
@@ -16,7 +16,7 @@
             </div>
         {% endif %}
         
-        <table id="propertiesTable" class="table table-bordered">
+        <table id="propertyTable" class="table table-bordered">
             <thead>
                 <tr>
                     <th rowspan="2">Property</th>
@@ -87,5 +87,5 @@
 {% endblock content %}
 
 {% block script %}
-    <script src="{% static 'rentals/properties.js' %}"></script>
+    <script src="{% static 'rentals/element.js' %}"></script>
 {% endblock script %}

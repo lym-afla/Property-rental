@@ -1,7 +1,0 @@
-# Virtual environment
-carbon-rental
-AW-rental
-
-/property_rental/__*
-/rentals/migrations/
-/rentals/__*

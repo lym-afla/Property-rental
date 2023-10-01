@@ -4,7 +4,7 @@
 {% block content %}
     <div class="container mt-4">
         <h2>Tenants</h2>
-        <button type="button" id="newTenantButton" data-new-type="tenant" class="btn btn-primary mb-3 new-entry-button">Create new tenant</button>
+        <button type="button" data-new-type="tenant" class="btn btn-primary mb-3 new-entry-button">Create new tenant</button>
         
         {% if messages %}
             <div class="alert alert-danger">
@@ -22,6 +22,7 @@
                     <th rowspan="2">Tenant</th>
                     <th class="text-center" rowspan="2">Property</th>
                     <th class="text-center" rowspan="2">Renting since</th>
+                    <th class="text-center" rowspan="2">Rent rate</th>
                     <th class="text-center" colspan="2">Revenue</th>
                     <th class="text-center" rowspan="2">Debt</th>
                 </tr>
@@ -47,5 +48,5 @@
 {% endblock content %}
 
 {% block script %}
-    <script src="{% static 'rentals/tenants.js' %}"></script>
+    <script src="{% static 'rentals/element.js' %}"></script>
 {% endblock script %}

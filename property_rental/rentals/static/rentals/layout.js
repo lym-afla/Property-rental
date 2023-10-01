@@ -1,9 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
 
     // Handle New entry buttons in the navbar
-    const actionButtons = document.querySelectorAll('.new-entry-button');
+    const actionButtons = document.querySelectorAll('.new-entry-button-dropdown');
     actionButtons.forEach(button => {
-        button.addEventListener('click', entryClickHandler);
+        button.addEventListener('click', elementActionClickHandler);
     });
     
 });
@@ -15,12 +15,12 @@ let formFetched = {
     'transaction': false,
 }
 
-function entryClickHandler(event) {
+function elementActionClickHandler(event) {
     event.preventDefault();
 
     // Check if new or existing entry is dealt with
     let action = 'undefined';
-    if (event.target.classList.contains('new-entry-button')) {
+    if (event.target.classList.contains('new-entry-button') || event.target.classList.contains('new-entry-button-dropdown')) {
         action = 'new';
     } else if (event.target.classList.contains('edit-entry-button')) {
         action = 'edit';
@@ -30,55 +30,21 @@ function entryClickHandler(event) {
 
     // Defining the type of entry
     const type = event.target.getAttribute(`data-${action}-type`);
-    console.log(type);
 
     // If the form has already been fetched, show the modal and return
     if (!formFetched[type]) {
         
         getForm(action, type);
         
-        // console.log(`Fetching ${type} form`);
-
-        // const divModal = document.getElementById(`${type}ModalDiv`);
-        
-        // // Fetch the form content
-        // fetch(`/properties/new-form/${type}`)
-        // .then(response => response.text())
-        // .then(formHTML => {
-        //     // Inject the form content into the modal body
-        //     divModal.innerHTML = formHTML;
-            
-        //     const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
-        //     modal.show();
-
-        //     // Attach an event listener to the form's submit event
-        //     const form = document.querySelector('#createPropertyForm');
-        //     form.removeEventListener('submit', submitSaveHandler);
-        //     form.removeEventListener('submit', submitEditProperty);
-        //     form.addEventListener('submit', submitSaveHandler);
-
-        //     // Update the formFetched variable to indicate that the form has been fetched
-        //     formFetched[type] = true;
-        // })
-        // .catch(error => {
-        //     console.error("Error fetching form:", error);
-        // });
     } else {
         console.log(`${type} form already fetched`);
         
-        // const form = document.querySelector('#createPropertyForm');
-        // form.reset();
-        // form.removeEventListener('submit', submitSaveHandler);
-        // form.removeEventListener('submit', submitEditProperty);
-        // form.addEventListener('submit', submitSaveHandler);
-
-        // Attach an event listener to the form's submit event
         attachSubmitEventListener(action, type);
 
         const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
         modal.show();
         if (action === 'edit') {
-            preFillPropertyForm();
+            preFillForm(type);
         }
     }    
 }
@@ -90,7 +56,7 @@ function getForm(action, type) {
     const divModal = document.getElementById(`${type}ModalDiv`);
     
     // Fetch the form content
-    fetch(`/properties/new-form/${type}`)
+    fetch(`/new-form/${type}`)
     .then(response => response.text())
     .then(formHTML => {
         // Inject the form content into the modal body
@@ -102,7 +68,7 @@ function getForm(action, type) {
         const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
         modal.show();
         if (action === 'edit') {
-            preFillPropertyForm();
+            preFillForm(type);
         }
 
         // Update the formFetched variable to indicate that the form has been fetched
@@ -138,7 +104,7 @@ function submitSaveHandler(event) {
     
     const formId = event.target.getAttribute("id");
     const type = formId.replace("Form", "");
-    save_edit_property(action="save", type); // Call the save_edit_property function    
+    handle_type('save', type); // Call the save_edit_property function    
 }
 
 // Handling edit submission
@@ -149,27 +115,28 @@ function submitEditHandler(event) {
     
     const formId = event.target.getAttribute("id");
     const type = formId.replace("Form", "");
-    const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
-    save_edit_property(action='edit', type, propertyId); // Call the edit_property function    
+    const propertyId = document.getElementById('deleteButton').getAttribute(`data-${type}-id`);
+    handle_type('edit', type, propertyId); // Call the edit_property function    
 }
 
-// Saving and editing new property
-function save_edit_property(action, type, propertyId) {
+function handle_type(action, type, elementId) {
+
+    const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     const csrftoken = getCookie('csrftoken');
 
     const variables = {
         'save': {
-            'link': '/properties/',
+            'link': `/handling/${type}`,
             'method': 'POST',
             'success_text': 'created',
-            'error_text': 'New property creation failed',
+            'error_text': `New ${type} save failed`,
         },
         'edit': {
-            'link': `/properties/${propertyId}`,
+            'link': `/handling/${type}/${elementId}`,
             'method': 'PUT',
             'success_text': 'edited',
-            'error_text': 'Property editing failed',
+            'error_text': `${type} editing failed`,
         }
     }
 
@@ -189,15 +156,19 @@ function save_edit_property(action, type, propertyId) {
     })
     .then(response => {
         if (response.ok) {
-            // Close the createPropertyModal
+            // Close the create[Type]]Modal
             let modalReference = document.getElementById(`${type}Modal`);
             let formModal = bootstrap.Modal.getInstance(modalReference);
             formModal.hide();
 
             const successModal = new bootstrap.Modal(document.getElementById('successModal'));
             successModal.show();
-            document.querySelector('#successModal .modal-body').textContent = `Property ${variables[action].success_text} successfully`;
+            
+            document.querySelector('#successModal .modal-body').textContent = `${Type} ${variables[action].success_text} successfully`;
             document.querySelector('#successModal a').style.display = 'none';
+
+            document.getElementById('successModal').setAttribute('data-success-type', type);
+
             form.reset();
         } else {
             throw new Error(variables[action].error_text);
@@ -211,18 +182,28 @@ function save_edit_property(action, type, propertyId) {
 // Function to handle success Modal OK button click. The reference to this function is introduced in layout.html directly
 function okButtonEventHandler() {
     
-    const successModal = document.getElementById('successModal');
-    const successText = successModal.querySelector('.modal-body').textContent;
+    const successDiv = document.getElementById('successModal');
+    const successText = successDiv.querySelector('.modal-body').textContent;
+    let type = successDiv.getAttribute("data-success-type");
 
     // Hide the modal
-    let successModalInstance = bootstrap.Modal.getInstance(successModal);
+    let successModalInstance = bootstrap.Modal.getInstance(successDiv);
     successModalInstance.hide();
     
     if (successText.includes("deleted") || successText.includes("created")) {
-        load_property_table();
+        if (window.location.pathname.includes("properties")) {
+            load_table(type);
+        } else {
+            if (type === 'property') {
+                type = 'properties';
+            } else {
+                type = type + 's';
+            }
+            window.location.href = `/${type}`;
+        }
     } else if (successText.includes("edited")) {
-        const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
-        load_property_details(propertyId);
+        const elementId = document.getElementById('deleteButton').getAttribute(`data-${type}-id`);
+        load_element_details(type, elementId);
     }
 }
 

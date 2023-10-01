@@ -8,14 +8,26 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.template.loader import render_to_string
 import json
 from rest_framework import serializers
+from django.db.models import Q
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
-from .models import Property, Landlord
+from .models import Property, Landlord, Tenant, Transaction
+from .workings import get_currency_symbol
 
 # Using built-in serializers as the manual did not recognize currencies properly
 class PropertySerializer(serializers.ModelSerializer):
     class Meta:
         model = Property
+        fields = '__all__'
+        
+class TenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = '__all__'
+        
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
         fields = '__all__'
         
 def index(request):
@@ -104,19 +116,40 @@ def properties(request):
     
     if request.user.is_landlord:
         
-        # Form for creating new property
-        form = PropertyForm(request.POST or None)
+        # # Form for creating new property
+        # form = PropertyForm(request.POST or None)
         
-        if request.method == 'POST' and form.is_valid():
-            property = form.save(commit=False)
-            property.owned_by = Landlord.objects.get(user=request.user)
-            property.save()
+        # if request.method == 'POST' and form.is_valid():
+        #     property = form.save(commit=False)
+        #     property.owned_by = Landlord.objects.get(user=request.user)
+        #     property.save()
             
-            return JsonResponse({'success': True}, status=201)
-        else:
-            print(form.errors)
+        #     return JsonResponse({'success': True}, status=201)
+        # else:
+        #     print(form.errors)
             
-        return render(request, 'rentals/properties.html', {'property_form': form})
+        return render(request, 'rentals/properties.html')#, {'property_form': form})
+    else:
+        messages.error(request, "You are not authorized to access this page.")
+        return redirect('rentals:index')
+    
+# Render tenants page
+@login_required
+def tenants(request):
+    
+    if request.user.is_landlord:
+        print(request.user)
+        return render(request, 'rentals/tenants.html')
+    else:
+        messages.error(request, "You are not authorized to access this page.")
+        return redirect('rentals:index')
+
+# Render transactions page
+@login_required
+def transactions(request):
+    
+    if request.user.is_landlord:
+        return render(request, 'rentals/transactions.html')
     else:
         messages.error(request, "You are not authorized to access this page.")
         return redirect('rentals:index')
@@ -131,6 +164,7 @@ def new_form(request, form_type):
         # Passing landlord to have the selection of properties for a tenant
         landlord = Landlord.objects.get(user=request.user)
         form = TenantForm(landlord_user=landlord)
+        print(Property.objects.filter(Q(owned_by=landlord) | Q(tenant=None)))
     elif form_type == 'transaction':
         form = TransactionForm()
     else:
@@ -141,30 +175,30 @@ def new_form(request, form_type):
     
 # NEED TO DELETE EVENTUALLY. REPLACED BY MORE GENERIC TABLE_DATA
 # Get data to populate table with properties
-@login_required
-def get_properties(request):
+# @login_required
+# def get_properties(request):
     
-    try:
-        landlord = Landlord.objects.get(user=request.user)
-    except Landlord.DoesNotExist:
-        return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
+#     try:
+#         landlord = Landlord.objects.get(user=request.user)
+#     except Landlord.DoesNotExist:
+#         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
     
-    properties = Property.objects.filter(owned_by=landlord)
+#     properties = Property.objects.filter(owned_by=landlord)
     
-    data = []  # List to store property data
+#     data = []  # List to store property data
     
-    for property in properties:
-        property_data = {
-            'id': property.id,
-            'name': property.name,
-            'location': property.location,
-            # 'rent_since': property.rent_since,
-            'status': property.status
-            # Add cash flow fields as needed
-        }
-        data.append(property_data)
+#     for property in properties:
+#         property_data = {
+#             'id': property.id,
+#             'name': property.name,
+#             'location': property.location,
+#             # 'rent_since': property.rent_since,
+#             'status': property.status
+#             # Add cash flow fields as needed
+#         }
+#         data.append(property_data)
 
-    return JsonResponse(data, safe=False)
+#     return JsonResponse(data, safe=False)
 
 # Get data to populate table with selected elements
 @login_required
@@ -190,92 +224,183 @@ def table_data(request, data_type):
                     # Add cash flow fields as needed
                 }
                 data.append(property_data)
+        case 'tenant':
+            properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
+            tenants = Tenant.objects.filter(property__in=properties_owned_by_landlord)
+            for tenant in tenants:
+                tenant_data = {
+                    'id': tenant.id,
+                    'first_name': tenant.first_name,
+                    'property': tenant.property.name,
+                    'lease_start': tenant.lease_start,
+                    'lease_end': tenant.lease_end,
+                    'currency': get_currency_symbol(tenant.currency),
+                    'lease_rent': tenant.lease_rent,
+                }
+                data.append(tenant_data)
         case _:
             return JsonResponse({'error': 'Data type does not exist.'}, status=400)
 
     return JsonResponse(data, safe=False)
 
 # Get data for a particular property
-@login_required
-def property_details(request, property_id):
+# @login_required
+# def property_details(request, property_id):
     
-    try:
-        property = Property.objects.get(id=property_id)
+#     try:
+#         property = Property.objects.get(id=property_id)
         
-        # Check if the logged-in user is the landlord of the property
-        if request.user.is_landlord and property.owned_by.user == request.user:
-            if request.method == 'GET':
-                property_data = {
-                    'name': property.name,
-                    'location': property.location,
-                    'num_bedrooms': property.num_bedrooms,
-                    'area': float(property.area) if property.area else None,
-                    'currency': property.value_currency,
-                    'property_value': property.property_value,
-                }                
-                return JsonResponse(property_data, status=200)
-            elif request.method == 'DELETE':
-                property.delete()
-                return JsonResponse({'message': 'Property deleted successfully'}, status=200)
-            elif request.method == 'PUT':
-                try:
-                    json_data = json.loads(request.body)
-                    # Retain the existing 'owned_by' value
-                    json_data['owned_by'] = property.owned_by.id                    
-                    serializer = PropertySerializer(instance=property, data=json_data)
-                    if serializer.is_valid():
-                        serializer.save()
-                        return JsonResponse({'success': True}, status=200)
-                    else:
-                        return JsonResponse({'errors': serializer.errors}, status=400)
-                except json.JSONDecodeError:
-                    return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
-            else:
-                return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
-        else:
-            return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
-    except Property.DoesNotExist:
-        return JsonResponse({'error': 'Property not found'}, status=404)
+#         # Check if the logged-in user is the landlord of the property
+#         if request.user.is_landlord and property.owned_by.user == request.user:
+#             if request.method == 'GET':
+#                 property_data = {
+#                     'name': property.name,
+#                     'location': property.location,
+#                     'num_bedrooms': property.num_bedrooms,
+#                     'area': float(property.area) if property.area else None,
+#                     'currency': property.value_currency,
+#                     'property_value': property.property_value,
+#                 }                
+#                 return JsonResponse(property_data, status=200)
+#             elif request.method == 'DELETE':
+#                 property.delete()
+#                 return JsonResponse({'message': 'Property deleted successfully'}, status=200)
+#             elif request.method == 'PUT':
+#                 try:
+#                     json_data = json.loads(request.body)
+#                     # Retain the existing 'owned_by' value
+#                     json_data['owned_by'] = property.owned_by.id                    
+#                     serializer = PropertySerializer(instance=property, data=json_data)
+#                     if serializer.is_valid():
+#                         serializer.save()
+#                         return JsonResponse({'success': True}, status=200)
+#                     else:
+#                         return JsonResponse({'errors': serializer.errors}, status=400)
+#                 except json.JSONDecodeError:
+#                     return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
+#             else:
+#                 return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
+#         else:
+#             return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+#     except Property.DoesNotExist:
+#         return JsonResponse({'error': 'Property not found'}, status=404)
     
 # Get data for a particular element
 @login_required
-def element_details(request, data_type, element_id):
+def handle_element(request, data_type, element_id):
     
-    try:
-        property = Property.objects.get(id=element_id)
-    except Property.DoesNotExist:
-        return JsonResponse({'error': 'Property not found'}, status=404)
-        
-    # Check if the logged-in user is the landlord of the property
-    if request.user.is_landlord and property.owned_by.user == request.user:
-        if request.method == 'GET':
-            property_data = {
-                'name': property.name,
-                'location': property.location,
-                'num_bedrooms': property.num_bedrooms,
-                'area': float(property.area) if property.area else None,
-                'currency': property.value_currency,
-                'property_value': property.property_value,
-            }                
-            return JsonResponse(property_data, status=200)
-        elif request.method == 'DELETE':
-            property.delete()
-            return JsonResponse({'message': 'Property deleted successfully'}, status=200)
-        elif request.method == 'PUT':
+    match data_type:
+        case 'property':
             try:
-                json_data = json.loads(request.body)
-                # Retain the existing 'owned_by' value
-                json_data['owned_by'] = property.owned_by.id                    
-                serializer = PropertySerializer(instance=property, data=json_data)
-                if serializer.is_valid():
-                    serializer.save()
-                    return JsonResponse({'success': True}, status=200)
+                element = Property.objects.get(id=element_id)
+            except Property.DoesNotExist:
+                return JsonResponse({'error': 'Property not found'}, status=404)
+        case 'tenant':
+            try:
+                element = Tenant.objects.get(id=element_id)
+            except Tenant.DoesNotExist:
+                return JsonResponse({'error': 'Tenant not found'}, status=404)
+        case 'transaction':
+            try:
+                element = Transaction.objects.get(id=element_id)
+            except Transaction.DoesNotExist:
+                return JsonResponse({'error': 'Transaction not found'}, status=404)
+        
+    if request.method == 'GET':
+        match data_type:
+            case 'property':
+                # Check if the logged-in user is the landlord of the property
+                if request.user.is_landlord and element.owned_by.user == request.user:
+                    data = {
+                        'name': element.name,
+                        'location': element.location,
+                        'num_bedrooms': element.num_bedrooms,
+                        'area': float(element.area) if element.area else None,
+                        'currency': element.currency,
+                        'property_value': element.property_value,
+                    }
+                    return JsonResponse(data, status=200)
                 else:
-                    return JsonResponse({'errors': serializer.errors}, status=400)
-            except json.JSONDecodeError:
-                return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
-        else:
-            return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)                
+    # elif request.method == 'POST':
+    #     match data_type:
+    #         case 'property':
+    #             if request.user.is_landlord:
+    #                 # Form for creating new property
+    #                 form = PropertyForm(request.POST or None)
+    #                 if form.is_valid():
+    #                     property = form.save(commit=False)
+    #                     property.owned_by = Landlord.objects.get(user=request.user)
+    #                     property.save()
+    #                     return JsonResponse({'message': 'Property saved successfully'}, status=200)
+    #         # case 'tenant':
+    #         # case 'transaction':
+        
+    elif request.method == 'DELETE':
+        element.delete()
+        return JsonResponse({'message': f'{data_type} deleted successfully'}, status=200)
+    elif request.method == 'PUT':
+        try:
+            json_data = json.loads(request.body)
+            match data_type:
+                case 'property':
+                    # Retain the existing 'owned_by' value
+                    json_data['owned_by'] = element.owned_by.id                    
+                    serializer = PropertySerializer(instance=element, data=json_data)
+                case 'tenant':
+                    serializer = TenantSerializer(instance=element, data=json_data)
+                case 'transaction':
+                    serializer = TransactionSerializer(instance=element, data=json_data)
+            if serializer.is_valid():
+                serializer.save()
+                return JsonResponse({'success': True}, status=200)
+            else:
+                return JsonResponse({'errors': serializer.errors}, status=400)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
     else:
-        return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+        return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE', 'POST'])  # Return a 405 Method Not Allowed response for other methods
     
+# Saave particular element
+@login_required
+def create_element(request, data_type):
+    
+    if request.method == 'POST':
+        match data_type:
+            case 'property':
+                if request.user.is_landlord:
+                    # Form for creating new property
+                    form = PropertyForm(request.POST or None)
+                    if form.is_valid():
+                        property = form.save(commit=False)
+                        property.owned_by = Landlord.objects.get(user=request.user)
+                        property.save()
+                        return JsonResponse({'message': 'Property created successfully'}, status=200)
+                    else:
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+            case 'tenant':
+                if request.user.is_landlord:
+                    form = TenantForm(Landlord.objects.get(user=request.user), request.POST)
+                    if form.is_valid():
+                        tenant = form.save(commit=False)
+                        # Retrieve the property ID from the form data
+                        property_id = request.POST.get('property')
+                        
+                        try:
+                            # Attempt to retrieve the corresponding property
+                            property = Property.objects.get(id=property_id)
+                        except Property.DoesNotExist:
+                            return JsonResponse({'error': 'Invalid property ID'}, status=400)
+                        
+                        # Set the 'property' field to the retrieved property instance
+                        tenant.save()
+                        
+                        property.tenant = tenant
+                        property.status = 'rented'
+                        property.save()
+                        return JsonResponse({'message': 'Tenant created successfully'}, status=200)
+            # case 'transaction':
+    else:
+        return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods

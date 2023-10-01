@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 });
 
+// Recreated in element.js - TO BE DELETED
 function load_property_table() {
     
     // Show the property table and hide other views
@@ -64,6 +65,7 @@ function load_property_table() {
     });
 }
 
+// Recreated in element.js - TO BE DELETED
 function propertyClickHandler(event) {
                 
     event.preventDefault();
@@ -118,7 +120,7 @@ function load_property_details(propertyId) {
         // Create the "Back to properties", "Edit" and "Delete" buttons HTML
         const buttonsHTML = `
             <div class="d-flex justify-content-between mb-3">
-                <button type="button" id="backToProperty" class="btn btn-primary">
+                <button type="button" id="backToProperty" class="btn btn-primary" data-back-type="property">
                     Back to properties
                 </button>
                 <div>
@@ -141,7 +143,7 @@ function load_property_details(propertyId) {
 
         // Add a click event listener to the button to edit property
         const editButton = document.getElementById('editPropertyButton');
-        editButton.addEventListener('click', entryClickHandler);
+        editButton.addEventListener('click', editClickHandler);
 
         // Add a click event listener to the button to delete property
         const deleteButton = document.getElementById('confirmDeleteButton');
@@ -212,6 +214,7 @@ function deleteClickHandler(event) {
     delete_property(propertyId);
     
 }
+
 
 function backToPropertiesClickHandler(event) {
     event.preventDefault();

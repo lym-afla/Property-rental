@@ -1,4 +1,4 @@
-from typing import Any
+# from typing import Any
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -19,9 +19,6 @@ class User(AbstractUser):
 
 class Landlord(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
-    
-    # Add fields specific to the landlord user type
-    property_owned = models.IntegerField(blank=True, null=True)
 
 class Tenant(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
@@ -41,9 +38,10 @@ class Tenant(models.Model):
     
 class Property(models.Model):
     owned_by = models.ForeignKey(Landlord, on_delete=models.CASCADE, related_name='properties')
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='property', blank=True, null=True)
+    tenant = models.OneToOneField(Tenant, on_delete=models.SET_NULL, related_name='property', blank=True, null=True)
     name = models.CharField(max_length=50)
-    location = models.CharField(max_length=125)
+    location = models.CharField(max_length=50)
+    address = models.CharField(max_length=150, null=True, blank=True)
     num_bedrooms = models.PositiveIntegerField()
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

@@ -35,6 +35,9 @@
                                 <li class="nav-item">
                                     <a class="nav-link" href="{% url 'rentals:properties' %}">Properties</a>
                                 </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="{% url 'rentals:tenants' %}">Tenants</a>
+                                </li>
                             {% endif %}
                         {% else %}
                             <li class="nav-item">
@@ -54,9 +57,10 @@
                                     New Entry
                                 </a>
                                 <div class="dropdown-menu dropdown-menu-end" aria-labelledby="newEntryDropdown">
-                                    <a class="dropdown-item new-entry-button" data-new-type="transaction" href="#">New Transaction</a>
-                                    <a class="dropdown-item new-entry-button" data-new-type="tenant" href="#">New Tenant</a>
-                                    <a class="dropdown-item new-entry-button" data-new-type="property" href="">New Property</a>
+                                    <a class="dropdown-item new-entry-button-dropdown" data-new-type="transaction" href="#">New Transaction</a>
+                                    <a class="dropdown-item new-entry-button-dropdown" data-new-type="tenant" href="#">New Tenant</a>
+                                    <div class="dropdown-divider"></div>
+                                    <a class="dropdown-item new-entry-button-dropdown" data-new-type="property" href="">New Property</a>
                                 </div>
                             </li>
 
@@ -83,7 +87,7 @@
         <div id="transactionModalDiv"></div>
 
         <!-- Success Modal -->
-        <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+        <div class="modal fade" id="successModal" data-success-type="" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -113,7 +117,7 @@
                         Are you sure you want to delete this property?
                     </div>
                     <div class="modal-footer justify-content-between">
-                        <a href="{% url 'rentals:properties' %}" class="btn btn-danger flex-fill col-md-5" id="confirmDeleteButton" data-bs-dismiss="modal">Delete</a>
+                        <button type="button" class="btn btn-danger flex-fill col-md-5" id="confirmDeleteButton">Delete</button>
                         <button type="button" class="btn btn-secondary flex-fill col-md-5" data-bs-dismiss="modal">Cancel</button>
                     </div>
                 </div>
@@ -127,7 +131,7 @@
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="{% static 'rentals/new_entry.js' %}"></script>
+        <script src="{% static 'rentals/layout.js' %}"></script>
 
         {% block script %}{% endblock script %}
 

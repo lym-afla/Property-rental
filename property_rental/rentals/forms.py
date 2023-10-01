@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms.widgets import DateInput
+from django.db.models import Q
 
 from .models import User, Property, Tenant, Transaction
 
@@ -15,16 +16,18 @@ class CustomUserCreationForm(UserCreationForm):
 class PropertyForm(forms.ModelForm):
     class Meta:
         model = Property
-        fields = ['name', 'location', 'num_bedrooms', 'area', 'currency', 'property_value']
+        fields = ['name', 'location', 'address', 'num_bedrooms', 'area', 'currency', 'property_value']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'location': forms.TextInput(attrs={'class': 'form-control'}),
+            'address': forms.TextInput(attrs={'class': 'form-control'}),
             'num_bedrooms': forms.NumberInput(attrs={'class': 'form-control'}),
             'area': forms.NumberInput(attrs={'class': 'form-control'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
             'property_value': forms.NumberInput(attrs={'class': 'form-control'}),
         }
         labels = {
+            'address': 'Address (optional)',
             'num_bedrooms': 'Number of bedrooms',
             'currency': '',
             'property_value': 'Value (optional)',
@@ -38,7 +41,7 @@ class TenantForm(forms.ModelForm):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         # Customize the queryset for the property field based on the landlord user
-        self.fields['property'].queryset = Property.objects.filter(owned_by=landlord_user)
+        self.fields['property'].queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(tenant=None))
 
     class Meta:
         model = Tenant
