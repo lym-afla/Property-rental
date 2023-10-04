@@ -30,18 +30,18 @@ class PropertyForm(forms.ModelForm):
             'address': 'Address (optional)',
             'num_bedrooms': 'Number of bedrooms',
             'currency': '',
-            'property_value': 'Value (optional)',
+            'property_value': 'Value (in thousands, optional)',
             'area': 'Area (optional)',
         }
         
 class TenantForm(forms.ModelForm):
-    property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
+    # property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
 
     def __init__(self, landlord_user, *args, **kwargs):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         # Customize the queryset for the property field based on the landlord user
-        queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(tenant=None))
+        queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(current_tenant=None))
         self.fields['property'].queryset = queryset
         # Set the initial value to the first item in the queryset
         if queryset.exists():
@@ -49,13 +49,15 @@ class TenantForm(forms.ModelForm):
         
     class Meta:
         model = Tenant
-        fields = ['first_name', 'last_name', 'phone', 'email', 'property', 'lease_start', 'currency', 'lease_rent']
+        fields = ['first_name', 'last_name', 'phone', 'email', 'property', 'lease_start', 'payday', 'currency', 'lease_rent']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'property': forms.Select(attrs={'class': 'form-select'}),
             'lease_start': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'payday': forms.NumberInput(attrs={'class': 'form-control'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
             'lease_rent': forms.NumberInput(attrs={'class': 'form-control'}),
         }
@@ -64,7 +66,9 @@ class TenantForm(forms.ModelForm):
             'last_name': 'Last name (optional)',
             'phone': 'Phone',
             'email': 'Email (optional)',
+            'property': 'Select property',
             'lease_start': 'Lease start date',
+            'payday': 'Payday (same as Lease start date if not defined)',
             'currency': '',
             'lease_rent': 'Monthly rent',
         }
@@ -80,16 +84,18 @@ class TransactionForm(forms.ModelForm):
         
     class Meta:
         model = Transaction
-        fields = ['property', 'type', 'currency', 'amount', 'comment']
+        fields = ['property', 'category', 'date', 'currency', 'amount', 'comment']
         widgets = {
-            'type': forms.Select(attrs={'class': 'form-select'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
             'amount': forms.NumberInput(attrs={'class': 'form-control'}),
-            'comment': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'comment': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
         }
         labels = {
-            'type': 'Select expense category',
+            'category': 'Select category',
             'currency': '',
             'amount': 'Transaction value',
             'comment': 'Comment (optional)',
+            'date': 'Transaction date',
         }

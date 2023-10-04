@@ -258,23 +258,17 @@ function adjustFontSize(element, width, height) {
     const textWidth = element.getBoundingClientRect().width;
     const textHeight = element.getBoundingClientRect().height;
 
-    console.log(textWidth, textHeight);
-    console.log(width, height * 1.11);
-
     // Reduce the font size until it fits within the constraints
     while (textWidth > width || textHeight > height * 1.11) {
         const currentSize = parseFloat(window.getComputedStyle(element).fontSize.slice(0, -2));
-        console.log(currentSize);
         const newSize = currentSize * 0.9; // Decrease the font size by 10% (adjust as needed)
         
         element.style.fontSize = newSize + 'px';
-        console.log(`New font size: ${element.style.fontSize}`)
 
         // Recalculate text width and height with the new font size
         const newTextWidth = element.getBoundingClientRect().width;
         const newTextHeight = element.getBoundingClientRect().height;
 
-        console.log(`New text width: ${newTextWidth}, new text height: ${newTextHeight}`);
         // If further reduction makes the text too small, break the loop
         if (newTextWidth <= width && newTextHeight <= height * 1.11) {
             break;
@@ -288,9 +282,6 @@ function defaultPropertyChoice(type) {
         const checkProperty = document.getElementById('editPropertyButton');
         if (checkProperty) {
             const propertyId = checkProperty.getAttribute('data-property-id');
-            console.log(propertyId);
-            console.log(document.getElementById(`${type}ModalDiv`));
-            console.log(document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`));
             document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`).selected = true;
         }
     }

@@ -73,10 +73,12 @@ function fetchTableData(type) {
 
             tbody.appendChild(row);
 
-            // Need to remove event listeners if already created to prevent duplication
-            const rowName = row.querySelector(`.${type}Name`);
-            rowName.removeEventListener('click', tableElementClickHandler);
-            rowName.addEventListener('click', tableElementClickHandler);
+            // Need to remove event listeners if already created to prevent duplication. Does not relate to transactions as there is no detailed page for transactions
+            if (type != 'transaction') {
+                const rowName = row.querySelector(`.${type}Name`);
+                rowName.removeEventListener('click', tableElementClickHandler);
+                rowName.addEventListener('click', tableElementClickHandler);
+            }
 
         });
     })
@@ -94,22 +96,38 @@ function fillRow(type, element) {
             const circleClass = element.status === 'rented' ? 'green-circle' : 'red-circle';
 
             return `
-                <td class="propertyName"><a href="">${element.name}</td>
+                <td class="propertyName"><a href="">${element.name}</a></td>
                 <td class="text-center">${element.location}</td>
-                <td class="text-center">${element.rent_since}</td>
+                <td class="text-center">${formatDateToDdmmyy(element.rent_since)}</td>
                 <td class="text-center"><i class="fas fa-circle ${circleClass}"></i></td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.income_all_time)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.expense_all_time)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_all_time)}</td>
+                <td></td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.income_ytd)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.expense_ytd)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
                 <!-- Other cells as needed -->
             `
         case 'tenant':
             return `
-                <td class="tenantName"><a href="">${element.first_name}</td>
+                <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
                 <td class="text-center">${formatDateToDdmmyy(element.lease_start)}</td>
-                <td class="text-center">${element.currency}${element.lease_rent}</i></td>
+                <td class="text-center">${element.currency}${element.lease_rent.toFixed(0)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
                 <!-- Other cells as needed -->
             `
         case 'transaction':
-            break;
+            return `
+                <td>${formatDateToDdmmyy(element.transaction_date)}</td>
+                <td>${element.property}</td>
+                <td class="transactionName">${element.category}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.transaction_amount)}</td>
+                <td>${element.comment}</td>
+                <!-- Other cells as needed -->
+            `
         default:
             // Handle other cases or show an error message
             console.error('Unknown element type:', type);
@@ -201,8 +219,10 @@ function preFillForm(type) {
             let area = document.querySelector('#propertyAreaCard .display-4').textContent;
             area = (area === "NA") ? '' : area;
             document.getElementById('id_area').value = area;
+            console.log(area);
             let value = document.querySelector('#propertyValueCard .display-4').textContent;
-            value = (value === "NA") ? '' : value;
+            value = (value === "NA") ? '' : value.match(/(\d+)/)[0];
+            console.log(value);
             document.getElementById('id_property_value').value = value;
             break;
 
@@ -245,7 +265,7 @@ function load_element_details(type, elementId) {
                 document.querySelector('#propertyAreaCard .display-4').textContent = 
                     (typeof element.area === 'number' && !isNaN(element.area)) ? element.area.toFixed(0) : 'NA';
                 document.querySelector('#propertyValueCard .display-4').textContent = 
-                    (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? element.property_value.toFixed(0) : 'NA';
+                    (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? element.currency + element.property_value.toFixed(0) + "k" : 'NA';
                 break;
 
             case 'tenant':
@@ -315,6 +335,11 @@ function load_element_details(type, elementId) {
 
 // Format date string to dd-mmm-yy
 function formatDateToDdmmyy(dateString) {
+    
+    if (dateString === null) {
+        return '–'
+    }
+
     const options = { year: '2-digit', month: 'short', day: 'numeric' };
     const date = new Date(dateString);
 
@@ -324,3 +349,13 @@ function formatDateToDdmmyy(dateString) {
     const parts = formattedDate.split(' ');
     return parts[0] + '-' + parts[1] + '-' + parts[2];
 }
+
+// Function to format numbers with parentheses for negatives
+    function formatNumberWithParentheses(currency, number) {
+        if (number < 0) {
+            return `(${currency}${Math.abs(number.toFixed(0))})`;
+        } else if (number === 0) {
+            return '–';
+        }
+        return `${currency}${number.toFixed(0)}`;
+    }

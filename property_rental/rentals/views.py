@@ -1,18 +1,21 @@
-from django.shortcuts import render, redirect, HttpResponse
+from django.shortcuts import render, redirect
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseNotAllowed
-from django.template.loader import render_to_string
 import json
 from rest_framework import serializers
-from django.db.models import Q
+from datetime import date
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
 from .models import Property, Landlord, Tenant, Transaction
-from .workings import get_currency_symbol
+from .workings import get_currency_symbol, get_category_name
+from .constants import INCOME_CATEGORIES
+
+# Define the effective 'current' date for the application
+effective_current_date = date.today()
 
 # Using built-in serializers as the manual did not recognize currencies properly
 class PropertySerializer(serializers.ModelSerializer):
@@ -115,19 +118,6 @@ def logout_view(request):
 def properties(request):
     
     if request.user.is_landlord:
-        
-        # # Form for creating new property
-        # form = PropertyForm(request.POST or None)
-        
-        # if request.method == 'POST' and form.is_valid():
-        #     property = form.save(commit=False)
-        #     property.owned_by = Landlord.objects.get(user=request.user)
-        #     property.save()
-            
-        #     return JsonResponse({'success': True}, status=201)
-        # else:
-        #     print(form.errors)
-            
         return render(request, 'rentals/properties.html')#, {'property_form': form})
     else:
         messages.error(request, "You are not authorized to access this page.")
@@ -173,33 +163,6 @@ def new_form(request, form_type):
         return redirect('rentals:index')
 
     return render(request, 'rentals/new_form.html', {'form': form, 'form_type': form_type})
-    
-# NEED TO DELETE EVENTUALLY. REPLACED BY MORE GENERIC TABLE_DATA
-# Get data to populate table with properties
-# @login_required
-# def get_properties(request):
-    
-#     try:
-#         landlord = Landlord.objects.get(user=request.user)
-#     except Landlord.DoesNotExist:
-#         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
-    
-#     properties = Property.objects.filter(owned_by=landlord)
-    
-#     data = []  # List to store property data
-    
-#     for property in properties:
-#         property_data = {
-#             'id': property.id,
-#             'name': property.name,
-#             'location': property.location,
-#             # 'rent_since': property.rent_since,
-#             'status': property.status
-#             # Add cash flow fields as needed
-#         }
-#         data.append(property_data)
-
-#     return JsonResponse(data, safe=False)
 
 # Get data to populate table with selected elements
 @login_required
@@ -207,6 +170,7 @@ def table_data(request, data_type):
     
     try:
         landlord = Landlord.objects.get(user=request.user)
+        properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
     except Landlord.DoesNotExist:
         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
     
@@ -214,21 +178,42 @@ def table_data(request, data_type):
     
     match data_type:
         case 'property':
-            properties = Property.objects.filter(owned_by=landlord)
-            for property in properties:
+            for property in properties_owned_by_landlord:
+                
+                property_tenant = Tenant.objects.filter(property=property).order_by('lease_start').first()
+                rent_since = property_tenant.lease_start if property_tenant else None
+                
+                
+                income_all_time = Transaction.financials(properties=[property], transaction_type='income')
+                expense_all_time = Transaction.financials(properties=[property], transaction_type='expense')
+                
+                current_year = date.today().year
+                income_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
+                expense_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='expense')
+                
                 property_data = {
                     'id': property.id,
                     'name': property.name,
                     'location': property.location,
-                    # 'rent_since': property.rent_since,
-                    'status': property.status
-                    # Add cash flow fields as needed
+                    'rent_since': rent_since,
+                    'status': property.status,
+                    'income_all_time': float(income_all_time),
+                    'expense_all_time': float(expense_all_time),
+                    'net_income_all_time': float(income_all_time - expense_all_time),
+                    'income_ytd': float(income_YTD),
+                    'expense_ytd': float(expense_YTD),
+                    'net_income_ytd': float(income_YTD - expense_YTD),
+                    'currency': get_currency_symbol(property.currency),
                 }
                 data.append(property_data)
         case 'tenant':
-            properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
             tenants = Tenant.objects.filter(property__in=properties_owned_by_landlord)
             for tenant in tenants:
+                
+                revenue_all_time = tenant.rent_total()
+                current_year = date.today().year
+                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31))
+                
                 tenant_data = {
                     'id': tenant.id,
                     'first_name': tenant.first_name,
@@ -236,9 +221,26 @@ def table_data(request, data_type):
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
                     'currency': get_currency_symbol(tenant.currency),
-                    'lease_rent': tenant.lease_rent,
+                    'lease_rent': float(tenant.lease_rent),
+                    'revenue_all_time': float(revenue_all_time),
+                    'revenue_ytd': float(revenue_YTD),
+                    # 'debt':
                 }
                 data.append(tenant_data)
+        case 'transaction':
+            transactions = Transaction.objects.filter(property__in=properties_owned_by_landlord)
+            for transaction in transactions:
+                transaction_data = {
+                    'id': transaction.id,
+                    'transaction_date': transaction.date,
+                    'property': transaction.property.name,
+                    'category': get_category_name(transaction.category),
+                    'currency': get_currency_symbol(transaction.currency),
+                    'transaction_amount': float(transaction.amount) if transaction.amount else None,
+                    'comment': transaction.comment
+                }
+                print(transaction_data)
+                data.append(transaction_data)
         case _:
             return JsonResponse({'error': 'Data type does not exist.'}, status=400)
 
@@ -276,7 +278,7 @@ def handle_element(request, data_type, element_id):
                         'num_bedrooms': element.num_bedrooms,
                         'area': float(element.area) if element.area else None,
                         'currency': get_currency_symbol(element.currency),
-                        'property_value': element.property_value,
+                        'property_value': float(element.property_value) if element.property_value else None,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
@@ -356,13 +358,38 @@ def create_element(request, data_type):
                         except Property.DoesNotExist:
                             return JsonResponse({'error': 'Invalid property ID'}, status=400)
                         
-                        # Set the 'property' field to the retrieved property instance
                         tenant.save()
                         
                         property.tenant = tenant
                         property.status = 'rented'
                         property.save()
                         return JsonResponse({'message': 'Tenant created successfully'}, status=200)
-            # case 'transaction':
+                    else:
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+            case 'transaction':
+                if request.user.is_landlord:
+                    form = TransactionForm(Landlord.objects.get(user=request.user), request.POST)
+                    if form.is_valid():
+                        transaction = form.save(commit=False)
+                        # Retrieve the property ID from the form data
+                        property_id = request.POST.get('property')
+                        transaction.amount = abs(transaction.amount) if transaction.category in INCOME_CATEGORIES else -abs(transaction.amount)
+                        
+                        try:
+                            # Attempt to retrieve the corresponding property
+                            property = Property.objects.get(id=property_id)
+                        except Property.DoesNotExist:
+                            return JsonResponse({'error': 'Invalid property ID'}, status=400)
+                        
+                        transaction.property = property
+                        transaction.save()
+                        
+                        return JsonResponse({'message': 'Tenant created successfully'}, status=200)
+                    else:
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
     else:
         return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods

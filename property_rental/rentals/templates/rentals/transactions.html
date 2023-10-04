@@ -1,0 +1,42 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+
+    <div class="container mt-4">
+        <h2>Transactions</h2>
+        <button type="button" data-new-type="transaction" class="btn btn-primary mb-3 new-entry-button">Create new Transaction</button>
+        
+        {% if messages %}
+            <div class="alert alert-danger">
+                <ul>
+                    {% for message in messages %}
+                    <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        
+        <table id="transactionTable" class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Property</th>
+                    <th>Type</th>
+                    <th class="text-center">Amount</th>
+                    <th>Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+
+        <div id="transactionDetailsContainer" class="container-fluid pt-3">
+        </div>
+        
+    </div>
+{% endblock content %}
+
+{% block script %}
+    <script src="{% static 'rentals/element.js' %}"></script>
+{% endblock script %}
