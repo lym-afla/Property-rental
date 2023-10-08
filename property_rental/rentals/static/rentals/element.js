@@ -36,8 +36,8 @@ function load_table(type) {
     const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     // Show the [type] table and hide other views
-    document.getElementById(`${type}Table`).style.display = 'block';
-    document.querySelector('.new-entry-button').style.display = 'block';
+    document.getElementById(`${type}Table`).style.display = '';
+    document.querySelector('.new-entry-button').style.display = '';
     document.getElementById(`${type}DetailsContainer`).style.display = 'none';
     
     // Delete event listeners from the buttons on detailed [Type] page
@@ -81,6 +81,10 @@ function fetchTableData(type) {
             }
 
         });
+
+        if (type === 'transaction') {
+            addTransactionListeners();
+        }
     })
     .catch(error => {
         console.error('Error fetching property data', error);
@@ -93,7 +97,7 @@ function fillRow(type, element) {
     switch(type) {
         case 'property':
             // Determine the circle class based on property.status
-            const circleClass = element.status === 'rented' ? 'green-circle' : 'red-circle';
+            const circleClass = element.status === 'Rented out' ? 'green-circle' : 'red-circle';
 
             return `
                 <td class="propertyName"><a href="">${element.name}</a></td>
@@ -107,23 +111,26 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.income_ytd)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.expense_ytd)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
-                <!-- Other cells as needed -->
             `
         case 'tenant':
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
                 <td class="text-center">${formatDateToDdmmyy(element.lease_start)}</td>
-                <td class="text-center">${element.currency}${element.lease_rent.toFixed(0)}</td>
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.lease_rent)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
-                <!-- Other cells as needed -->
+                <td class="text-center">${formatNumberWithParentheses(element.currency, element.debt)}</td>
             `
         case 'transaction':
+            const period = element.period ? `(${element.period})` : "";
             return `
+                <td>
+                    <input class="form-check-input transaction-radio" type="radio" name="radioTransaction" value="">
+                </td>
                 <td>${formatDateToDdmmyy(element.transaction_date)}</td>
                 <td>${element.property}</td>
-                <td class="transactionName">${element.category}</td>
+                <td class="transactionName">${element.category} ${period}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.transaction_amount)}</td>
                 <td>${element.comment}</td>
                 <!-- Other cells as needed -->
@@ -239,7 +246,7 @@ function load_element_details(type, elementId) {
     // Show the [type] element and hide other views
     document.getElementById(`${type}Table`).style.display = 'none';
     document.querySelector('.new-entry-button').style.display = 'none';
-    document.getElementById(`${type}DetailsContainer`).style.display = 'block';
+    document.getElementById(`${type}DetailsContainer`).style.display = '';
 
     fetch(`/handling/${type}/${elementId}`)
     .then(response => {
@@ -265,7 +272,14 @@ function load_element_details(type, elementId) {
                 document.querySelector('#propertyAreaCard .display-4').textContent = 
                     (typeof element.area === 'number' && !isNaN(element.area)) ? element.area.toFixed(0) : 'NA';
                 document.querySelector('#propertyValueCard .display-4').textContent = 
-                    (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? element.currency + element.property_value.toFixed(0) + "k" : 'NA';
+                    (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? formatNumberWithParentheses(element.currency, element.property_value) + "k" : 'NA';
+                
+                // Populate P&L table
+                populatePropertyProfitAndLossTable(element);
+
+                // Populate Payments schedule table
+                createPropertyPaymentsTable(element.months, element.rows);
+                
                 break;
 
             case 'tenant':
@@ -277,9 +291,9 @@ function load_element_details(type, elementId) {
                 document.querySelector('#tenantPropertyCard .display-4').textContent = element.property;
                 document.querySelector('#tenantMovedInCard .display-4').textContent = formatDateToDdmmyy(element.renting_since);
                 document.querySelector('#tenantRentCard .display-4').textContent = 
-                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? (element.rent_currency + element.rent_rate.toFixed(0)) : 'NA';
-                // document.querySelector('#propertyValueCard .display-4').tenantRevenueCard = 
-                    // (typeof element.revenue === 'number' && !isNaN(element.revenue)) ? (element.currency + element.revenue.toFixed(0)) : 'NA';
+                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? formatNumberWithParentheses(element.rent_currency, element.rent_rate) : 'NA';
+                document.querySelector('#tenantRevenueCard .display-4').textContent = 
+                    (typeof element.all_time_rent === 'number' && !isNaN(element.all_time_rent)) ? formatNumberWithParentheses(element.rent_currency, element.all_time_rent) : 'NA';
                 break;
 
             case 'transaction':
@@ -333,6 +347,109 @@ function load_element_details(type, elementId) {
     
 }
 
+// Function to populate the Property P&L table
+function populatePropertyProfitAndLossTable(element) {
+    const tableBody = document.querySelector('.pnl-table tbody');
+    
+    // Clear existing table rows
+    tableBody.innerHTML = '';
+    
+    // Add rows for Rent, expenses, Total Expenses, and Net Income
+    tableBody.appendChild(createTableRow('Rent', element.rent.ytd, element.rent.all_time, element.currency));
+    tableBody.appendChild(createTableRow('Total Income', element.rent.ytd, element.rent.all_time, element.currency, isBold=true));
+    
+    for (const category in element.expenses) {
+        if (element.expenses.hasOwnProperty(category)) {
+            const data = element.expenses[category];
+            tableBody.appendChild(createTableRow(category, data.ytd, data.all_time, element.currency));
+        }
+    }
+
+    // Initialize total expenses
+    let totalYTDExpenses = 0;
+    let totalAllTimeExpenses = 0;
+
+    // Iterate through the expenses data and sum up the values
+    for (const category in element.expenses) {
+        totalYTDExpenses += element.expenses[category]['ytd'];
+        totalAllTimeExpenses += element.expenses[category]['all_time'];
+    }
+    
+    tableBody.appendChild(createTableRow('Total Expenses', totalYTDExpenses, totalAllTimeExpenses, element.currency, isBold=true));
+    tableBody.appendChild(createTableRow('Net Income', element.rent.ytd + totalYTDExpenses, element.rent.all_time + totalAllTimeExpenses, element.currency, isBold=true));
+}
+
+// Function to create a table row for a category
+function createTableRow(category, YTD, allTime, currency, isBold = false) {
+    const row = document.createElement('tr');
+    
+    if (isBold) {
+        row.classList.add('fw-semibold');
+    }
+
+    const categoryCell = document.createElement('td');
+    categoryCell.textContent = category;
+    
+    const YTDCell = document.createElement('td');
+    YTDCell.className = "text-center";
+    YTDCell.textContent = formatNumberWithParentheses(currency, YTD);
+    
+    const allTimeCell = document.createElement('td');
+    allTimeCell.className = "text-center";
+    allTimeCell.textContent = formatNumberWithParentheses(currency, allTime);
+    
+    row.appendChild(categoryCell);
+    row.appendChild(YTDCell);
+    row.appendChild(allTimeCell);
+    
+    return row;
+}
+
+function createPropertyPaymentsTable(months, rows) {
+    const table = document.getElementById('paymentScheduleTable');
+    const thead = table.querySelector('thead');
+    const headerRow = thead.querySelector('tr');
+    headerRow.innerHTML = "<th></th>";
+
+    // Loop through the months and create header cells
+    months.forEach(month => {
+        const monthHeaderCell = document.createElement('th');
+        monthHeaderCell.className = 'text-center';
+        monthHeaderCell.textContent = month;
+        headerRow.appendChild(monthHeaderCell);
+    });
+
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = table.querySelector('tbody');
+    tbody.innerHTML = "";
+
+    // Loop through the rows and create rows and cells
+    for (const key in rows) {
+        if (rows.hasOwnProperty(key)) {
+            const colours = rows[key];
+            const rowElement = document.createElement('tr');
+
+            // Create the row name cell
+            const nameCell = document.createElement('th');
+            nameCell.scope = 'row';
+            nameCell.className = 'row-name';
+            nameCell.textContent = key;
+            rowElement.appendChild(nameCell);
+
+            // Loop through the cells and create cells with appropriate classes
+            colours.forEach(color => {
+                const cellElement = document.createElement('td');
+                cellElement.className = `text-center ${color}-circle`;
+                rowElement.appendChild(cellElement);
+            });
+
+            tbody.appendChild(rowElement);
+        }
+    }
+}
+
 // Format date string to dd-mmm-yy
 function formatDateToDdmmyy(dateString) {
     
@@ -351,11 +468,31 @@ function formatDateToDdmmyy(dateString) {
 }
 
 // Function to format numbers with parentheses for negatives
-    function formatNumberWithParentheses(currency, number) {
-        if (number < 0) {
-            return `(${currency}${Math.abs(number.toFixed(0))})`;
-        } else if (number === 0) {
-            return '–';
-        }
-        return `${currency}${number.toFixed(0)}`;
-    }
+function formatNumberWithParentheses(currency, number) {
+    if (number < 0) {
+        return `(${currency}${Math.abs(number.toFixed(0)).toLocaleString()})`;
+    } else if (number === 0) {
+        return '–';
+    };
+    return `${currency}${number.toLocaleString()}`;
+}
+
+// Add listeners to radio buttons on transaction table
+function addTransactionListeners() {
+    // Select the radio buttons and buttons
+    const radioButtons = document.querySelectorAll('.transaction-radio');
+    const editButton = document.getElementById('editTransactionButton');
+    const deleteButton = document.getElementById('deleteButton');
+    
+    // Add a change event listener to the radio buttons
+    radioButtons.forEach((radio) => {
+        radio.addEventListener('change', () => {
+            // Check if any radio button is selected
+            const anyRadioButtonSelected = Array.from(radioButtons).some((radio) => radio.checked);
+            
+            // Enable or disable the buttons accordingly
+            editButton.disabled = !anyRadioButtonSelected;
+            deleteButton.disabled = !anyRadioButtonSelected;
+        });
+    });
+}

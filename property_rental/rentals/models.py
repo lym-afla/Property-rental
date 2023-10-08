@@ -4,8 +4,10 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import date
 from django.db.models import Q
+from dateutil.relativedelta import relativedelta
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
+from .utils import effective_current_date
 
 # Amending default AbstractUser to differentiate between Landlord and Tenant
 class User(AbstractUser):
@@ -34,17 +36,23 @@ class Property(models.Model):
     property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     
-    STATUS_CHOICES = (
-        ('rented', 'Rented out'),
-        ('not_rented', 'Idle'),
-    )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_rented')
+    # STATUS_CHOICES = (
+    #     ('rented', 'Rented out'),
+    #     ('not_rented', 'Idle'),
+    # )
+    # status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_rented')
 
     def __str__(self):
         return self.name
     
-    def current_tenant(self):
-        return self.tenants.filter(lease_end__isnull=True).first()
+    def current_tenant(self, date):
+        return self.tenants.filter(Q(lease_end__isnull=True) | Q(lease_end__gte=date)).first()
+    
+    def status(self, date):
+        if self.tenants.filter(Q(lease_end__isnull=True) | Q(lease_end__gte=date)).exists():
+            return 'Rented out'
+        else:
+            return 'Idle'
     
 class Tenant(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
@@ -57,12 +65,14 @@ class Tenant(models.Model):
     email = models.EmailField(blank=True, null=True)
     lease_start = models.DateField()
     payday = models.PositiveIntegerField(
-        default=1,
-        validators=[MinValueValidator(1), MaxValueValidator(27)]
+        # default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(27)],
+        null=True,
+        blank=True
     )
     lease_end = models.DateField(blank=True, null=True)
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
-    lease_rent = models.DecimalField(max_digits=10, decimal_places=2)
+    # currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
+    # lease_rent = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -81,66 +91,49 @@ class Tenant(models.Model):
         # Get all rent transactions for those properties
         transactions = Transaction.objects.filter(property=property, category='rent')
 
-        if start_date and end_date:
-            if self.lease_start:
-                start_date = max(start_date, self.lease_start)
-            if self.lease_end:
-                end_date = min(end_date, self.lease_end)
+        if start_date is None:
+            start_date = self.lease_start  # Default to self.lease_start if start_date is not provided
+        else:
+            start_date = max(start_date, self.lease_start)
+        
+        # if start_date and end_date:
+        #     if self.lease_start:
+        #         start_date = max(start_date, self.lease_start)
+        end_date = end_date if end_date is not None else effective_current_date
+        if self.lease_end:
+            end_date = min(end_date, self.lease_end)
 
-            transactions = transactions.filter(date__range=(start_date, end_date))
+        transactions = transactions.filter(date__range=(start_date, end_date))
 
         total_rent = transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
         return total_rent
     
-    def debt(self):
-        # Calculate today's date
-        today = date.today()
+    # Calculate tenant's debt for specified date
+    def debt(self, as_of_date=None):
+        total_rent_due = 0
+        
+        # Calculate start date
+        start_date = self.lease_start
 
-        # # Check if the lease has ended
-        # if self.lease_end and today > self.lease_end:
-        #     return 0  # Tenant has moved out, no debt
+        # Calculate the month's due date based on payday
+        check_date = date.today() if as_of_date is None else as_of_date
+        latest_month_due = check_date - relativedelta(months=1) if self.payday > check_date.day else check_date
+        if self.lease_end is not None:
+            latest_month_due = min(latest_month_due, self.lease_end)
 
-        # Calculate the current month's due date based on payday
-        latest_month_due = date(today.year, today.month, self.payday)
-        latest_month_due.month = latest_month_due.month - 1 if self.payday > today.day else latest_month_due.month
+        while start_date.month <= latest_month_due.month:
+            monthly_rate = self.rent_history.filter(date_rent_set__lte=start_date).order_by('-date_rent_set').first().rent or 0
+            total_rent_due += monthly_rate
+            start_date += relativedelta(months=1)
 
-        # # Calculate the number of days until the due date
-        # days_until_due = (current_month_due - today).days
-
-        # if days_until_due >= 0:
-        #     # The rent is not yet due for this month
-        #     return 0
-        # else:
-        #     # Calculate the start of the current month
-        #     current_month_start = today.replace(day=1)
-
-
-
-        # Calculate the number of months since lease start
-        months_since_start = (
-            (latest_month_due.year - self.lease_start.year) * 12
-            + latest_month_due.month - self.lease_start.month
-        )
-
-        # Calculate the total rent due
-        total_rent_due = months_since_start * self.lease_rent
-
-        # Filter transactions based on the lease_end if it exists
-        lease_end_filter = (
-            Q(transaction_date__gte=self.lease_start)
-            & (Q(transaction_date__lte=self.lease_end) | Q(lease_end__isnull=True))
-        )
-
-        # Deduct the transactions with 'rent' category
-        rent_transactions = self.property.transactions.filter(lease_end_filter, category='rent')
-
-        for transaction in rent_transactions:
-            total_rent_due -= transaction.amount
+        total_rent_due -= self.rent_total(self.lease_start, latest_month_due)
 
         return total_rent_due
     
-    def lease_rent(self, date):
-        rent_history = self.rent_history.filter(date_rent_set__lte=date).order_by('-date_rent_set')
+    # Extract lease rent for the specific date
+    def lease_rent(self, as_of_date=None):
+        as_of_date = as_of_date if as_of_date is not None else date.today()
+        rent_history = self.rent_history.filter(date_rent_set__lte=as_of_date).order_by('-date_rent_set')
         if rent_history.exists():
             return rent_history.first().rent
         else:
@@ -149,12 +142,14 @@ class Tenant(models.Model):
 class Lease_rent(models.Model):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='rent_history')
     date_rent_set = models.DateField(null=False, blank=False)
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     rent = models.DecimalField(max_digits=10, decimal_places=2)
     
 class Transaction(models.Model):
     date = models.DateField(default=timezone.now)
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='transactions')
     category = models.CharField(max_length=20, choices=TRANSACTION_CATEGORIES, default='rent')
+    period = models.CharField(max_length=20, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     
@@ -192,7 +187,7 @@ class Transaction(models.Model):
         return total_amount
     
     def __str__(self):
-        return self.property.name + ": " + self.type
+        return self.property.name + ": " + self.category
 
     def save(self, *args, **kwargs):
         # Automatically set the 'type' field based on the 'category' field
@@ -200,6 +195,8 @@ class Transaction(models.Model):
             self.type = 'income'
         else:
             self.type = 'expense'
+            
+        self.comment = '–' if not self.comment else self.comment
         
         super(Transaction, self).save(*args, **kwargs)
         

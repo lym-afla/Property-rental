@@ -3,7 +3,9 @@ from django.contrib.auth.forms import UserCreationForm
 from django.forms.widgets import DateInput
 from django.db.models import Q
 
-from .models import User, Property, Tenant, Transaction
+from .models import User, Property, Tenant, Transaction, Lease_rent
+from .constants import CURRENCY_CHOICES
+from .utils import effective_current_date
 
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -35,13 +37,17 @@ class PropertyForm(forms.ModelForm):
         }
         
 class TenantForm(forms.ModelForm):
-    # property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
+    lease_rent = forms.DecimalField(widget=forms.NumberInput(attrs={'class': 'form-control'}), label='Monthly rate')
+    currency = forms.ChoiceField(choices=CURRENCY_CHOICES, widget=forms.Select(attrs={'class': 'form-select'}), label='Currency')
 
     def __init__(self, landlord_user, *args, **kwargs):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         # Customize the queryset for the property field based on the landlord user
-        queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(current_tenant=None))
+        queryset = Property.objects.filter(
+            Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+            owned_by=landlord_user,
+        )
         self.fields['property'].queryset = queryset
         # Set the initial value to the first item in the queryset
         if queryset.exists():
@@ -58,8 +64,6 @@ class TenantForm(forms.ModelForm):
             'property': forms.Select(attrs={'class': 'form-select'}),
             'lease_start': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'payday': forms.NumberInput(attrs={'class': 'form-control'}),
-            'currency': forms.Select(attrs={'class': 'form-select'}),
-            'lease_rent': forms.NumberInput(attrs={'class': 'form-control'}),
         }
         labels = {
             'first_name': 'First name',
@@ -69,8 +73,6 @@ class TenantForm(forms.ModelForm):
             'property': 'Select property',
             'lease_start': 'Lease start date',
             'payday': 'Payday (same as Lease start date if not defined)',
-            'currency': '',
-            'lease_rent': 'Monthly rent',
         }
         
 class TransactionForm(forms.ModelForm):
@@ -84,13 +86,14 @@ class TransactionForm(forms.ModelForm):
         
     class Meta:
         model = Transaction
-        fields = ['property', 'category', 'date', 'currency', 'amount', 'comment']
+        fields = ['property', 'date', 'category', 'period', 'currency', 'amount', 'comment']
         widgets = {
             'category': forms.Select(attrs={'class': 'form-select'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
             'amount': forms.NumberInput(attrs={'class': 'form-control'}),
             'date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'comment': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'period': DateInput(attrs={'class': 'form-control', 'type': 'month'}),
         }
         labels = {
             'category': 'Select category',
@@ -98,4 +101,7 @@ class TransactionForm(forms.ModelForm):
             'amount': 'Transaction value',
             'comment': 'Comment (optional)',
             'date': 'Transaction date',
+            'period': 'The month and year for this transaction',
         }
+
+        

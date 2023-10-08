@@ -13,11 +13,11 @@
         </tr>
     </thead>
     <tbody>
-        {% for row in rows %}
+        {% for category, statuses in rows.items %}
             <tr>
-                <th scope="row" class="row-name">{{ row.name }}</th>
-                {% for cell in row.cells %}
-                    <td class="text-center {% if cell.color == 'red' %}red-circle{% else %}green-circle{% endif %}"></td>
+                <th scope="row" class="row-name">{{ category }}</th>
+                {% for status in statuses %}
+                    <td class="text-center {% if status == 'red' %}red-circle{% else %}green-circle{% endif %}"></td>
                 {% endfor %}
             </tr>
         {% endfor %}
