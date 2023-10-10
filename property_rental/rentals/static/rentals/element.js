@@ -43,10 +43,18 @@ function load_table(type) {
     // Delete event listeners from the buttons on detailed [Type] page
     const detailElementCheck = document.getElementById(`back-to-${type}-table`);
     if (detailElementCheck) {
-        document.getElementById('confirmDeleteButton').removeEventListener('click', deleteElementHandler);
+        // document.getElementById('confirmDeleteButton').removeEventListener('click', deleteElementHandler);
         document.getElementById(`back-to-${type}-table`).removeEventListener('click', backToTableClickHandler);
         document.getElementById(`edit${Type}Button`).removeEventListener('click', elementActionClickHandler);
         detailElementCheck.parentElement.remove();
+    } else if (type === 'transaction') {
+        // Remove event listeners for other types
+        // document.getElementById('confirmDeleteButton').removeEventListener('click', deleteElementHandler);
+        // document.getElementById(`edit${Type}Button`).removeEventListener('click', elementActionClickHandler);
+
+        // Assign transaction related event listeners for editing and deleting elements
+        // document.getElementById('confirmDeleteButton').addEventListener('click', deleteElementHandler);
+        document.getElementById(`edit${Type}Button`).addEventListener('click', elementActionClickHandler);
     }
     
     // Show the page name
@@ -126,7 +134,7 @@ function fillRow(type, element) {
             const period = element.period ? `(${element.period})` : "";
             return `
                 <td>
-                    <input class="form-check-input transaction-radio" type="radio" name="radioTransaction" value="">
+                    <input class="form-check-input transaction-radio" type="radio" name="radioTransaction" value="${element.id}">
                 </td>
                 <td>${formatDateToDdmmyy(element.transaction_date)}</td>
                 <td>${element.property}</td>
@@ -172,9 +180,23 @@ function deleteElementHandler(event) {
     const deleteButton = document.getElementById(`deleteButton`);
     const type = deleteButton.getAttribute("data-delete-type");
     
+    let elementId;
+
     // Get element ID from delete button
-    const elementId = deleteButton.getAttribute(`data-${type}-id`);
-    
+    if (type === "transaction") {
+        const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
+
+        if (selectedRadio) {
+            elementId = selectedRadio.value;
+            console.log(`Selected radio button value: ${elementId}`);
+        } else {
+            throw new Error("Couldn't retrieve radio button value");
+        }
+   
+    } else { 
+        elementId = deleteButton.getAttribute(`data-${type}-id`);
+    }
+
     const csrftoken = getCookie('csrftoken');
 
     fetch(`/handling/${type}/${elementId}`, {
@@ -216,24 +238,53 @@ function deleteElementHandler(event) {
 }
 
 // Pre-fill data for editing form
-function preFillForm(type) {
+function preFillForm(type, elementId) {
     
-    switch (type) {
-        case 'property':
-            document.getElementById('id_name').value = document.querySelector('h2').innerHTML.replace('Property: ', '');
-            document.getElementById('id_location').value = document.querySelector('#propertyLocationCard .display-4').textContent;
-            document.getElementById('id_num_bedrooms').value = document.querySelector('#propertyBedroomsCard .display-4').textContent;
-            let area = document.querySelector('#propertyAreaCard .display-4').textContent;
-            area = (area === "NA") ? '' : area;
-            document.getElementById('id_area').value = area;
-            console.log(area);
-            let value = document.querySelector('#propertyValueCard .display-4').textContent;
-            value = (value === "NA") ? '' : value.match(/(\d+)/)[0];
-            console.log(value);
-            document.getElementById('id_property_value').value = value;
-            break;
+    fetch(`/handling/${type}/${elementId}`)
+    .then(response => response.json())
+    .then(data => {
+                
+        switch (type) {
+            case 'property':
+                document.getElementById('id_name').value = data.name;
+                document.getElementById('id_location').value = data.location;
+                document.getElementById('id_address').value = data.address;
+                document.getElementById('id_num_bedrooms').value = data.num_bedrooms;
+                document.getElementById('id_area').value = data.area;
+                chooseSelectedOption('currency', data.currency);
+                document.getElementById('id_property_value').value = data.property_value;
+                break;
+            case 'tenant':
+                document.getElementById('id_first_name').value = data.first_name;
+                document.getElementById('id_last_name').value = data.last_name;
+                document.getElementById('id_phone').value = data.phone;
+                document.getElementById('id_email').value = data.email;
+                
+                // Add current tenant's property to the selection of properties
+                const propertySelect = document.getElementById('id_property'); // Find the 'property' select element in your form by its ID
+                const option = document.createElement('option'); // Create a new option element
+                option.value = data.id; // Set the value to the property ID
+                option.text = data.property;
+                propertySelect.appendChild(option); // Append the option to the select element
+                option.selected = true;
 
-    }
+                document.getElementById('id_lease_start').value = data.renting_since;
+                document.getElementById('id_payday').value = data.payday;
+                chooseSelectedOption('currency', data.rent_currency);
+                document.getElementById('id_lease_rent').value = data.rent_rate;
+                break;
+            case 'transaction':
+                chooseSelectedOption('property', data.property);
+                document.getElementById('id_date').value = data.transaction_date;
+                chooseSelectedOption('category', data.category);
+                document.getElementById('id_period').value = data.period;
+                chooseSelectedOption('currency', data.currency);
+                document.getElementById('id_amount').value = data.amount;
+                document.getElementById('id_comment').value = data.comment;
+                break;
+        }
+    })
+    .catch(error => console.log(error));
 
     document.querySelector('.modal-footer .btn-primary').textContent = 'Save changes';
 
@@ -340,9 +391,9 @@ function load_element_details(type, elementId) {
         const editButton = document.getElementById(`edit${Type}Button`);
         editButton.addEventListener('click', elementActionClickHandler);
 
-        // Add a click event listener to the button to delete property
-        const deleteButton = document.getElementById('confirmDeleteButton');
-        deleteButton.addEventListener('click', deleteElementHandler);
+        // // Add a click event listener to the button to delete property
+        // const deleteButton = document.getElementById('confirmDeleteButton');
+        // deleteButton.addEventListener('click', deleteElementHandler);
     }
     
 }
@@ -495,4 +546,20 @@ function addTransactionListeners() {
             deleteButton.disabled = !anyRadioButtonSelected;
         });
     });
+}
+
+// Make the default selection of the respective currency option
+function chooseSelectedOption(option, choice) {
+    const selectedElement = document.getElementById(`id_${option}`);
+    // Loop through each option in the select element
+    for (let i = 0; i < selectedElement.options.length; i++) {
+        const optionElement = selectedElement.options[i];
+        // Check if the option's value matches the value to match
+        const checkText = (option === 'category') ? optionElement.value : optionElement.textContent;
+        if (checkText === choice) {
+        // Set the selected attribute to make this option selected
+        optionElement.selected = true;
+        break; // Exit the loop once a match is found
+        }
+    }
 }

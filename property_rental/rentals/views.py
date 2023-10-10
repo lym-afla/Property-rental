@@ -28,6 +28,9 @@ class TenantSerializer(serializers.ModelSerializer):
         fields = '__all__'
         
 class TransactionSerializer(serializers.ModelSerializer):
+    # Make 'type' read-only
+    type = serializers.ReadOnlyField()
+    
     class Meta:
         model = Transaction
         fields = '__all__'
@@ -342,6 +345,7 @@ def handle_element(request, data_type, element_id):
                         'expenses': expenses,
                         'months': months,
                         'rows': rows,
+                        'address': element.address,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
@@ -349,6 +353,7 @@ def handle_element(request, data_type, element_id):
                 # Check if the logged-in user is the landlord and tenant lives in landlord's property
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
                     data = {
+                        'id': element.id,
                         'first_name': element.first_name,
                         'last_name': element.last_name,
                         'phone': element.phone,
@@ -359,10 +364,21 @@ def handle_element(request, data_type, element_id):
                         'rent_rate': float(element.lease_rent(effective_current_date)) if element.lease_rent(effective_current_date) else None,
                         'property': element.property.name,
                         'all_time_rent': float(element.rent_total(end_date=effective_current_date)),
+                        'payday': element.payday,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
-            # case 'transaction':
+            case 'transaction':
+                if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    data = {
+                        'property': element.property.name,
+                        'transaction_date': element.date,
+                        'category': element.category,
+                        'period': element.period,
+                        'currency': element.currency,
+                        'amount': abs(element.amount),
+                        'comment': element.comment,
+                    }
         return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
         element.delete()
@@ -379,10 +395,12 @@ def handle_element(request, data_type, element_id):
                     serializer = TenantSerializer(instance=element, data=json_data)
                 case 'transaction':
                     serializer = TransactionSerializer(instance=element, data=json_data)
+                    print(serializer)
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({'success': True}, status=200)
             else:
+                print(serializer.errors)
                 return JsonResponse({'errors': serializer.errors}, status=400)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
@@ -461,3 +479,15 @@ def create_element(request, data_type):
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
     else:
         return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods
+    
+# Extract property choices for Tenant form
+def property_choices(request):
+    landlord = Landlord.objects.get(user=request.user)
+    properties = Property.objects.filter(
+            Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+            owned_by=landlord,
+        )
+    
+    data = [[property.id, property.name] for property in properties]
+    
+    return JsonResponse(data, safe=False)

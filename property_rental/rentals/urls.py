@@ -19,4 +19,5 @@ urlpatterns = [
     path('handling/<str:data_type>', views.create_element, name='create_element'),
     # path('properties/<int:property_id>', views.property_details, name='property_details'), # TO BE DELETED
     path('new-form/<str:form_type>', views.new_form, name='new_form'),
+    path('tenants/property-choices', views.property_choices, name='property_choices')
 ]
