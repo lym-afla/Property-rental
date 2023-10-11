@@ -3,5 +3,4 @@ property_rental/AW-rental
 
 property_rental/property_rental/__pycache__/
 property_rental/rentals/__pycache__/
-property_rental/rentals/migrations/
 property_rental/rentals/migrations/__pycache__/
