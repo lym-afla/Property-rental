@@ -3,7 +3,9 @@ from django.contrib.auth.forms import UserCreationForm
 from django.forms.widgets import DateInput
 from django.db.models import Q
 
-from .models import User, Property, Tenant, Transaction
+from .models import User, Property, Tenant, Transaction, Lease_rent
+from .constants import CURRENCY_CHOICES
+from .utils import effective_current_date
 
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -30,39 +32,47 @@ class PropertyForm(forms.ModelForm):
             'address': 'Address (optional)',
             'num_bedrooms': 'Number of bedrooms',
             'currency': '',
-            'property_value': 'Value (optional)',
+            'property_value': 'Value (in thousands, optional)',
             'area': 'Area (optional)',
         }
         
 class TenantForm(forms.ModelForm):
-    property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
+    lease_rent = forms.DecimalField(widget=forms.NumberInput(attrs={'class': 'form-control'}), label='Monthly rate')
+    currency = forms.ChoiceField(choices=CURRENCY_CHOICES, widget=forms.Select(attrs={'class': 'form-select'}), label='Currency')
 
     def __init__(self, landlord_user, *args, **kwargs):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         # Customize the queryset for the property field based on the landlord user
-        self.fields['property'].queryset = Property.objects.filter(Q(owned_by=landlord_user) & Q(tenant=None))
-
+        queryset = Property.objects.filter(
+            Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+            owned_by=landlord_user,
+        )
+        self.fields['property'].queryset = queryset
+        # Set the initial value to the first item in the queryset
+        if queryset.exists():
+            self.fields['property'].initial = queryset.first()
+        
     class Meta:
         model = Tenant
-        fields = ['first_name', 'last_name', 'phone', 'email', 'property', 'lease_start', 'currency', 'lease_rent']
+        fields = ['first_name', 'last_name', 'phone', 'email', 'property', 'lease_start', 'payday', 'currency', 'lease_rent']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'property': forms.Select(attrs={'class': 'form-select'}),
             'lease_start': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'currency': forms.Select(attrs={'class': 'form-select'}),
-            'lease_rent': forms.NumberInput(attrs={'class': 'form-control'}),
+            'payday': forms.NumberInput(attrs={'class': 'form-control'}),
         }
         labels = {
             'first_name': 'First name',
             'last_name': 'Last name (optional)',
             'phone': 'Phone',
             'email': 'Email (optional)',
+            'property': 'Select property',
             'lease_start': 'Lease start date',
-            'currency': '',
-            'lease_rent': 'Monthly rent',
+            'payday': 'Payday (same as Lease start date if not defined)',
         }
         
 class TransactionForm(forms.ModelForm):
@@ -73,6 +83,25 @@ class TransactionForm(forms.ModelForm):
 
         # Customize the queryset for the property field based on the landlord user
         self.fields['property'].queryset = Property.objects.filter(owned_by=landlord_user)
+        
     class Meta:
         model = Transaction
-        fields = ['type']
+        fields = ['property', 'date', 'category', 'period', 'currency', 'amount', 'comment']
+        widgets = {
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'currency': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'comment': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'period': DateInput(attrs={'class': 'form-control', 'type': 'month'}),
+        }
+        labels = {
+            'category': 'Select category',
+            'currency': '',
+            'amount': 'Transaction value',
+            'comment': 'Comment (optional)',
+            'date': 'Transaction date',
+            'period': 'The month and year for this transaction',
+        }
+
+        

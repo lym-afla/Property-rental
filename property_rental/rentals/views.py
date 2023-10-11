@@ -1,18 +1,20 @@
-from django.shortcuts import render, redirect, HttpResponse
+from django.shortcuts import render, redirect
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseNotAllowed
-from django.template.loader import render_to_string
 import json
 from rest_framework import serializers
-from django.db.models import Q
+from datetime import date
+from django.shortcuts import get_object_or_404
+from django.db.models import Sum, Q
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
-from .models import Property, Landlord, Tenant, Transaction
-from .workings import get_currency_symbol
+from .models import Property, Landlord, Tenant, Transaction, Lease_rent
+from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period
+from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
 class PropertySerializer(serializers.ModelSerializer):
@@ -26,6 +28,9 @@ class TenantSerializer(serializers.ModelSerializer):
         fields = '__all__'
         
 class TransactionSerializer(serializers.ModelSerializer):
+    # Make 'type' read-only
+    type = serializers.ReadOnlyField()
+    
     class Meta:
         model = Transaction
         fields = '__all__'
@@ -34,22 +39,23 @@ def index(request):
     
     if request.user.is_authenticated:
         months = ['J', 'F', 'M', 'A', 'M']
-        rows = [
-            {'name': 'Rent', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'red'}, {'color': 'red'}]},
-            {'name': 'Tax', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'red'}]},
-            {'name': 'Capex', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'green'}]},
-            {'name': 'Management', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'red'}, {'color': 'red'}, {'color': 'red'}]},
-            {'name': 'Electricity', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'red'}, {'color': 'red'}]},
-            {'name': 'Utilities', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'red'}, {'color': 'red'}]},
-            {'name': 'Internet', 'cells': [{'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'green'}, {'color': 'green'}]},
-        ]
+        
+        rows = {
+            'Rent': ['green', 'green', 'green', 'red', 'red'],
+            'Tax': ['green', 'green', 'green', 'green', 'green'],
+            'Capex': ['green', 'green', 'green', 'green', 'green'],
+            'Management': ['green', 'green', 'green', 'green', 'green'],
+            'Electricity': ['green', 'green', 'green', 'green', 'green'],
+            'Utilities': ['green', 'green', 'green', 'green', 'green'],
+            'Internet': ['green', 'green', 'green', 'green', 'green'],
+            }
         
         dashboard_card_props = [
         {
-            'logoLink': settings.STATIC_URL + 'rentals/img/hourglass.svg',
+            'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
             'number': 'X',
-            'number_text': ' months',
-            'text': 'Tenant in the property',
+            'number_text': '',
+            'text': 'Properties',
         },
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
@@ -115,19 +121,6 @@ def logout_view(request):
 def properties(request):
     
     if request.user.is_landlord:
-        
-        # # Form for creating new property
-        # form = PropertyForm(request.POST or None)
-        
-        # if request.method == 'POST' and form.is_valid():
-        #     property = form.save(commit=False)
-        #     property.owned_by = Landlord.objects.get(user=request.user)
-        #     property.save()
-            
-        #     return JsonResponse({'success': True}, status=201)
-        # else:
-        #     print(form.errors)
-            
         return render(request, 'rentals/properties.html')#, {'property_form': form})
     else:
         messages.error(request, "You are not authorized to access this page.")
@@ -164,41 +157,15 @@ def new_form(request, form_type):
         # Passing landlord to have the selection of properties for a tenant
         landlord = Landlord.objects.get(user=request.user)
         form = TenantForm(landlord_user=landlord)
-        print(Property.objects.filter(Q(owned_by=landlord) | Q(tenant=None)))
     elif form_type == 'transaction':
-        form = TransactionForm()
+        # Passing landlord to have the selection of properties for a tenant
+        landlord = Landlord.objects.get(user=request.user)
+        form = TransactionForm(landlord_user=landlord)
     else:
         messages.error(request, "Wrong form type requested")
         return redirect('rentals:index')
 
     return render(request, 'rentals/new_form.html', {'form': form, 'form_type': form_type})
-    
-# NEED TO DELETE EVENTUALLY. REPLACED BY MORE GENERIC TABLE_DATA
-# Get data to populate table with properties
-# @login_required
-# def get_properties(request):
-    
-#     try:
-#         landlord = Landlord.objects.get(user=request.user)
-#     except Landlord.DoesNotExist:
-#         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
-    
-#     properties = Property.objects.filter(owned_by=landlord)
-    
-#     data = []  # List to store property data
-    
-#     for property in properties:
-#         property_data = {
-#             'id': property.id,
-#             'name': property.name,
-#             'location': property.location,
-#             # 'rent_since': property.rent_since,
-#             'status': property.status
-#             # Add cash flow fields as needed
-#         }
-#         data.append(property_data)
-
-#     return JsonResponse(data, safe=False)
 
 # Get data to populate table with selected elements
 @login_required
@@ -206,6 +173,7 @@ def table_data(request, data_type):
     
     try:
         landlord = Landlord.objects.get(user=request.user)
+        properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
     except Landlord.DoesNotExist:
         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
     
@@ -213,77 +181,73 @@ def table_data(request, data_type):
     
     match data_type:
         case 'property':
-            properties = Property.objects.filter(owned_by=landlord)
-            for property in properties:
+            for property in properties_owned_by_landlord:
+                
+                property_tenant = Tenant.objects.filter(property=property).order_by('lease_start').first()
+                rent_since = property_tenant.lease_start if property_tenant else None
+                
+                
+                income_all_time = Transaction.financials(properties=[property], transaction_type='income')
+                expense_all_time = Transaction.financials(properties=[property], transaction_type='expense')
+                
+                current_year = date.today().year
+                income_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
+                expense_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='expense')
+                
                 property_data = {
                     'id': property.id,
                     'name': property.name,
                     'location': property.location,
-                    # 'rent_since': property.rent_since,
-                    'status': property.status
-                    # Add cash flow fields as needed
+                    'rent_since': rent_since,
+                    'status': property.status(effective_current_date),
+                    'income_all_time': float(income_all_time),
+                    'expense_all_time': float(expense_all_time),
+                    'net_income_all_time': float(income_all_time + expense_all_time),
+                    'income_ytd': float(income_YTD),
+                    'expense_ytd': float(expense_YTD),
+                    'net_income_ytd': float(income_YTD + expense_YTD),
+                    'currency': get_currency_symbol(property.currency),
                 }
                 data.append(property_data)
         case 'tenant':
-            properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
             tenants = Tenant.objects.filter(property__in=properties_owned_by_landlord)
             for tenant in tenants:
+                
+                revenue_all_time = tenant.rent_total()
+                current_year = date.today().year
+                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31))
+                
                 tenant_data = {
                     'id': tenant.id,
                     'first_name': tenant.first_name,
                     'property': tenant.property.name,
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
-                    'currency': get_currency_symbol(tenant.currency),
-                    'lease_rent': tenant.lease_rent,
+                    'currency': get_currency_symbol(tenant.property.currency),
+                    'lease_rent': float(tenant.lease_rent(effective_current_date)),
+                    'revenue_all_time': float(revenue_all_time),
+                    'revenue_ytd': float(revenue_YTD),
+                    'debt': float(tenant.debt(effective_current_date)),
                 }
                 data.append(tenant_data)
+        case 'transaction':
+            transactions = Transaction.objects.filter(property__in=properties_owned_by_landlord).order_by('-date')
+            for transaction in transactions:
+                transaction_data = {
+                    'id': transaction.id,
+                    'transaction_date': transaction.date,
+                    'property': transaction.property.name,
+                    'category': get_category_name(transaction.category),
+                    'currency': get_currency_symbol(transaction.currency),
+                    'transaction_amount': float(transaction.amount) if transaction.amount else None,
+                    'comment': transaction.comment,
+                    'period': convert_period(transaction.period),
+                }
+                data.append(transaction_data)
         case _:
             return JsonResponse({'error': 'Data type does not exist.'}, status=400)
 
     return JsonResponse(data, safe=False)
-
-# Get data for a particular property
-# @login_required
-# def property_details(request, property_id):
-    
-#     try:
-#         property = Property.objects.get(id=property_id)
-        
-#         # Check if the logged-in user is the landlord of the property
-#         if request.user.is_landlord and property.owned_by.user == request.user:
-#             if request.method == 'GET':
-#                 property_data = {
-#                     'name': property.name,
-#                     'location': property.location,
-#                     'num_bedrooms': property.num_bedrooms,
-#                     'area': float(property.area) if property.area else None,
-#                     'currency': property.value_currency,
-#                     'property_value': property.property_value,
-#                 }                
-#                 return JsonResponse(property_data, status=200)
-#             elif request.method == 'DELETE':
-#                 property.delete()
-#                 return JsonResponse({'message': 'Property deleted successfully'}, status=200)
-#             elif request.method == 'PUT':
-#                 try:
-#                     json_data = json.loads(request.body)
-#                     # Retain the existing 'owned_by' value
-#                     json_data['owned_by'] = property.owned_by.id                    
-#                     serializer = PropertySerializer(instance=property, data=json_data)
-#                     if serializer.is_valid():
-#                         serializer.save()
-#                         return JsonResponse({'success': True}, status=200)
-#                     else:
-#                         return JsonResponse({'errors': serializer.errors}, status=400)
-#                 except json.JSONDecodeError:
-#                     return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
-#             else:
-#                 return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
-#         else:
-#             return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
-#     except Property.DoesNotExist:
-#         return JsonResponse({'error': 'Property not found'}, status=404)
     
 # Get data for a particular element
 @login_required
@@ -311,13 +275,77 @@ def handle_element(request, data_type, element_id):
             case 'property':
                 # Check if the logged-in user is the landlord of the property
                 if request.user.is_landlord and element.owned_by.user == request.user:
+                    
+                    # Calculate the start date of the current year
+                    current_year_start =effective_current_date.replace(month=1, day=1)
+                                        
+                    # Filter transactions for the specified date range
+                    filtered_transactions = element.transactions.filter(
+                        Q(date__lte=effective_current_date) &
+                        Q(type='expense')
+                    )
+                    # Get a list of unique categories from the filtered transactions
+                    unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
+                    # Initialize the expenses dictionary with unique categories
+                    expenses = {get_category_name(category): {'ytd': 0, 'all_time': 0} for category in unique_categories}
+                    
+                    for category in unique_categories:
+                        category_name = get_category_name(category)
+                        expenses[category_name]['ytd'] = float(element.transactions.filter(category=category, date__range=(current_year_start, effective_current_date)).aggregate(Sum('amount'))['amount__sum'] or 0)
+                        expenses[category_name]['all_time'] = float(element.transactions.filter(category=category, date__lte=effective_current_date).aggregate(Sum('amount'))['amount__sum'] or 0)
+                    
+                    # Get data for Payments schedule
+                    # Create a list of month abbreviations for the six previous months
+                    number_of_months = 5
+                    months = []
+                    unique_categories.insert(0, 'rent')
+                    rows = {get_category_name(category): [] for category in unique_categories}
+                    for i in range(number_of_months):
+                        # Calculate the month number for the previous month
+                        prev_month = (effective_current_date.month - i - 1) % 12
+                        
+                        # Map the month number to its abbreviation
+                        month_abbreviations = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+                        month_abbrev = month_abbreviations[prev_month - 1]
+                        
+                        # Add the abbreviation to the list
+                        months.append(month_abbrev)
+                        
+                        # Calculate the year and month for the month to check
+                        year_to_check = effective_current_date.year
+                        month_to_check = prev_month + 1
+                        
+                        # Adjust the year if the month is less than 1 (January)
+                        if month_to_check < 1:
+                            month_to_check += 12
+                            year_to_check -= 1
+                            
+                        for category in unique_categories:
+                            # Check if a transaction exists for the given category, year, and month
+                            transaction_exists = element.transactions.filter(
+                                category=category,
+                                period=f"{year_to_check}-{month_to_check:02}",
+                            ).exists()
+                            rows[get_category_name(category)].insert(0, 'green' if transaction_exists else 'red')
+
+                    # Reverse the list to get the months in chronological order
+                    months.reverse()
+
                     data = {
                         'name': element.name,
                         'location': element.location,
                         'num_bedrooms': element.num_bedrooms,
                         'area': float(element.area) if element.area else None,
-                        'currency': element.currency,
-                        'property_value': element.property_value,
+                        'currency': get_currency_symbol(element.currency),
+                        'property_value': float(element.property_value) if element.property_value else None,
+                        'rent': {
+                            'ytd': float(element.transactions.filter(category='rent', date__range=(current_year_start, effective_current_date)).aggregate(Sum('amount'))['amount__sum'] or 0),
+                            'all_time': float(element.transactions.filter(category='rent', date__lte=effective_current_date).aggregate(Sum('amount'))['amount__sum'] or 0),
+                        },
+                        'expenses': expenses,
+                        'months': months,
+                        'rows': rows,
+                        'address': element.address,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
@@ -325,18 +353,32 @@ def handle_element(request, data_type, element_id):
                 # Check if the logged-in user is the landlord and tenant lives in landlord's property
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
                     data = {
+                        'id': element.id,
                         'first_name': element.first_name,
                         'last_name': element.last_name,
                         'phone': element.phone,
                         'email': element.email,
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
-                        'rent_currency': element.currency,
-                        'rent_rate': element.lease_rent,
+                        'rent_currency': get_currency_symbol(element.property.currency),
+                        'rent_rate': float(element.lease_rent(effective_current_date)) if element.lease_rent(effective_current_date) else None,
+                        'property': element.property.name,
+                        'all_time_rent': float(element.rent_total(end_date=effective_current_date)),
+                        'payday': element.payday,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
-            # case 'transaction':
+            case 'transaction':
+                if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    data = {
+                        'property': element.property.name,
+                        'transaction_date': element.date,
+                        'category': element.category,
+                        'period': element.period,
+                        'currency': element.currency,
+                        'amount': abs(element.amount),
+                        'comment': element.comment,
+                    }
         return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
         element.delete()
@@ -353,15 +395,17 @@ def handle_element(request, data_type, element_id):
                     serializer = TenantSerializer(instance=element, data=json_data)
                 case 'transaction':
                     serializer = TransactionSerializer(instance=element, data=json_data)
+                    print(serializer)
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({'success': True}, status=200)
             else:
+                print(serializer.errors)
                 return JsonResponse({'errors': serializer.errors}, status=400)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON data in request body'}, status=400)
     else:
-        return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE', 'POST'])  # Return a 405 Method Not Allowed response for other methods
+        return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])  # Return a 405 Method Not Allowed response for other methods
     
 # Saave particular element
 @login_required
@@ -390,19 +434,60 @@ def create_element(request, data_type):
                         # Retrieve the property ID from the form data
                         property_id = request.POST.get('property')
                         
-                        try:
-                            # Attempt to retrieve the corresponding property
-                            property = Property.objects.get(id=property_id)
-                        except Property.DoesNotExist:
-                            return JsonResponse({'error': 'Invalid property ID'}, status=400)
-                        
-                        # Set the 'property' field to the retrieved property instance
+                        property = get_object_or_404(Property, id=property_id)
+
+                        tenant.property = property
                         tenant.save()
                         
-                        property.tenant = tenant
-                        property.status = 'rented'
-                        property.save()
+                        lease_rent = form.cleaned_data.get('lease_rent')
+                        currency = form.cleaned_data.get('currency')
+                        date = form.cleaned_data.get('lease_start')
+                        
+                        lease_rent = Lease_rent(
+                            tenant = tenant,
+                            date_rent_set = date,
+                            currency = currency,
+                            rent = lease_rent,
+                        )
+                        
+                        lease_rent.save()
                         return JsonResponse({'message': 'Tenant created successfully'}, status=200)
-            # case 'transaction':
+                    else:
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+            case 'transaction':
+                if request.user.is_landlord:
+                    form = TransactionForm(Landlord.objects.get(user=request.user), request.POST)
+                    print(form.errors)
+                    if form.is_valid():
+                        transaction = form.save(commit=False)
+                        # Retrieve the property ID from the form data
+                        property_id = request.POST.get('property')
+                        transaction.amount = abs(transaction.amount) if transaction.category in INCOME_CATEGORIES else -abs(transaction.amount)
+                        
+                        property = get_object_or_404(Property, id=property_id)
+                        
+                        transaction.property = property
+                        transaction.save()
+                        
+                        return JsonResponse({'message': 'Tenant created successfully'}, status=200)
+                    else:
+                        print(form.errors)
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
     else:
         return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods
+    
+# Extract property choices for Tenant form
+def property_choices(request):
+    landlord = Landlord.objects.get(user=request.user)
+    properties = Property.objects.filter(
+            Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+            owned_by=landlord,
+        )
+    
+    data = [[property.id, property.name] for property in properties]
+    
+    return JsonResponse(data, safe=False)

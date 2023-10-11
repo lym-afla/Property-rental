@@ -5,7 +5,7 @@ CURRENCY_CHOICES = (
     ('RUB', '₽'),
 )
 
-TRANSACTION_TYPES = (
+TRANSACTION_CATEGORIES = (
     ('rent', 'Rent'),
     ('tax', 'Tax'),
     ('capex', 'Capex'),
@@ -15,5 +15,8 @@ TRANSACTION_TYPES = (
     ('internet', 'Internet'),
     ('other', 'Other'),
 )
-    
+
+INCOME_CATEGORIES = (
+    'rent',
+)
     

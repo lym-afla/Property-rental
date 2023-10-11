@@ -4,7 +4,7 @@
 {% block content %}
     <div class="container mt-4">
         <h2>Tenants</h2>
-        <button type="button" data-new-type="tenant" class="btn btn-primary mb-3 new-entry-button">Create new tenant</button>
+        <button type="button" data-new-type="tenant" class="btn btn-primary mb-3 new-entry-button">Create new Tenant</button>
         
         {% if messages %}
             <div class="alert alert-danger">
@@ -35,9 +35,21 @@
             </tbody>
         </table>
 
-        <div id="tenantDetailsContainer" class="container-fluid pt-3" style="display: none">
+        <div id="tenantDetailsContainer" class="container-fluid pt-3">
             <!-- First Row -->
             <div class="row mb-4">
+                <div class="col-md-3" id="tenantPropertyCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/house-door.svg" number="" number_text="" text="Property" %}
+                </div>
+                <div class="col-md-3" id="tenantMovedInCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/calendar3.svg" number="" number_text="" text="Moved in" %}
+                </div>
+                <div class="col-md-3" id="tenantRentCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/cash-coin.svg" number="" number_text="" text="Monthly rent" %}
+                </div>
+                <div class="col-md-3" id="tenantRevenueCard">
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/cash-coin.svg" number=card.number number_text="" text="All-time rent" %}
+                </div>
             </div>
             <!-- Second Row -->
             <div class="row">
