@@ -7,7 +7,7 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponseNotAllowed
 import json
 from rest_framework import serializers
-from datetime import date
+from datetime import date, datetime
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 
@@ -34,6 +34,20 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = '__all__'
+        
+    # Assign correct sign to 'amount' based on the transaction category
+    def to_internal_value(self, data):
+        # Call the parent class method to get the initial internal value
+        internal_value = super(TransactionSerializer, self).to_internal_value(data)
+
+        # Determine the sign based on the category
+        if 'category' in data:
+            if data['category'] in INCOME_CATEGORIES:
+                internal_value['amount'] = abs(internal_value['amount'])
+            else:
+                internal_value['amount'] = -abs(internal_value['amount'])
+
+        return internal_value
         
 def index(request):
     
@@ -81,12 +95,13 @@ def index(request):
             'months': months,
             'rows': rows,
             'dashboard_card_props': dashboard_card_props,
+            'app_date': effective_current_date.strftime("%Y-%m-%d"),
         })
     else:
         return redirect('rentals:login')
     
 # Register new user
-def register(request):
+def register(request):  
     
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
@@ -177,7 +192,7 @@ def table_data(request, data_type):
     except Landlord.DoesNotExist:
         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
     
-    data = []  # List to store elements data
+    data = [effective_current_date.strftime("%Y-%m-%d")]  # List to store elements data
     
     match data_type:
         case 'property':
@@ -187,8 +202,8 @@ def table_data(request, data_type):
                 rent_since = property_tenant.lease_start if property_tenant else None
                 
                 
-                income_all_time = Transaction.financials(properties=[property], transaction_type='income')
-                expense_all_time = Transaction.financials(properties=[property], transaction_type='expense')
+                income_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='income')
+                expense_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='expense')
                 
                 current_year = date.today().year
                 income_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
@@ -217,6 +232,8 @@ def table_data(request, data_type):
                 current_year = date.today().year
                 revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31))
                 
+                lease_rent = tenant.lease_rent(effective_current_date)
+                
                 tenant_data = {
                     'id': tenant.id,
                     'first_name': tenant.first_name,
@@ -224,14 +241,14 @@ def table_data(request, data_type):
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
                     'currency': get_currency_symbol(tenant.property.currency),
-                    'lease_rent': float(tenant.lease_rent(effective_current_date)),
+                    'lease_rent': lease_rent if type(lease_rent) == str else float(tenant.lease_rent(effective_current_date)),
                     'revenue_all_time': float(revenue_all_time),
                     'revenue_ytd': float(revenue_YTD),
                     'debt': float(tenant.debt(effective_current_date)),
                 }
                 data.append(tenant_data)
         case 'transaction':
-            transactions = Transaction.objects.filter(property__in=properties_owned_by_landlord).order_by('-date')
+            transactions = Transaction.objects.filter(property__in=properties_owned_by_landlord, date__lte=effective_current_date).order_by('-date')
             for transaction in transactions:
                 transaction_data = {
                     'id': transaction.id,
@@ -346,12 +363,16 @@ def handle_element(request, data_type, element_id):
                         'months': months,
                         'rows': rows,
                         'address': element.address,
+                        'app_date': effective_current_date,
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
             case 'tenant':
                 # Check if the logged-in user is the landlord and tenant lives in landlord's property
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    
+                    lease_rent = element.lease_rent(effective_current_date)
+                    
                     data = {
                         'id': element.id,
                         'first_name': element.first_name,
@@ -361,10 +382,11 @@ def handle_element(request, data_type, element_id):
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
                         'rent_currency': get_currency_symbol(element.property.currency),
-                        'rent_rate': float(element.lease_rent(effective_current_date)) if element.lease_rent(effective_current_date) else None,
+                        'rent_rate': lease_rent if type(lease_rent) == str else float(element.lease_rent(effective_current_date)),
                         'property': element.property.name,
                         'all_time_rent': float(element.rent_total(end_date=effective_current_date)),
                         'payday': element.payday,
+                        'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
@@ -375,9 +397,10 @@ def handle_element(request, data_type, element_id):
                         'transaction_date': element.date,
                         'category': element.category,
                         'period': element.period,
-                        'currency': element.currency,
+                        'currency': get_currency_symbol(element.currency),
                         'amount': abs(element.amount),
                         'comment': element.comment,
+                        'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
         return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
@@ -491,3 +514,20 @@ def property_choices(request):
     data = [[property.id, property.name] for property in properties]
     
     return JsonResponse(data, safe=False)
+
+# Handling effective date update
+def update_date(request):
+    if request.method == 'POST':
+        
+        data = json.loads(request.body)
+        selectedDate = data.get('selectedDate')
+        # Convert the selectedDate to a datetime variable
+        formatted_date = datetime.strptime(selectedDate, "%Y-%m-%d").date()
+        
+        global effective_current_date
+        effective_current_date = formatted_date
+        
+        print(f'New variable: {effective_current_date}')
+
+        # You may want to send a response with a success message
+        return JsonResponse({'message': 'Date updated successfully'})

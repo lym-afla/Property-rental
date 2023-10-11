@@ -13,10 +13,12 @@ TRANSACTION_CATEGORIES = (
     ('electricity', 'Electricity'),
     ('utilities', 'Utilities'),
     ('internet', 'Internet'),
-    ('other', 'Other'),
+    ('other_income', 'Other Income'),
+    ('other_expenses', 'Other Expenses')
 )
 
 INCOME_CATEGORIES = (
     'rent',
+    'other_income'
 )
     

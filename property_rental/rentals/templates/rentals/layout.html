@@ -54,6 +54,8 @@
                     <ul class="navbar-nav ms-auto"> <!-- Right-aligned items -->
                         {% if user.is_authenticated %}
                             <!-- New Entry Dropdown Menu -->
+                            <input type="date" id="datePicker" name="selectedDate" class="nav-item nav-link" value="{{ app_date }}">
+                            <button id="updateDate" class="nav-item">Update</button>
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" id="newEntryDropdown" role="button"
                                     data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

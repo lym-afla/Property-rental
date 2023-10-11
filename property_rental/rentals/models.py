@@ -162,25 +162,25 @@ class Transaction(models.Model):
     comment = models.TextField(max_length=250, blank=True, null=True)
     
     @classmethod
-    def financials(cls, properties=None, start_date=None, end_date=None, transaction_type='income'):
+    def financials(cls, end_date, properties=None, start_date=None, transaction_type='income'):
         """
         Calculate the sum of transactions for a specific period and type.
 
         Args:
             properties (database instances): Iterable selection of properties to check cash flows for.
             start_date: Defines the start date for the obsevation period. All-time if not defined.
-            end_date: Defines the end date for the obsevation period. All-time if not defined
+            end_date: Defines the end date for the obsevation period.
             transaction_type (str): 'income' or 'expense'.
 
         Returns:
             Decimal: The total sum of transactions.
         """
-        queryset = cls.objects.filter(type=transaction_type)
+        queryset = cls.objects.filter(type=transaction_type, date__lte=end_date)
         
         if properties:
             queryset = queryset.filter(property__in=properties)
         
-        if start_date and end_date:
+        if start_date:
             queryset = queryset.filter(date__range=(start_date, end_date))
         
         total_amount = queryset.aggregate(models.Sum('amount'))['amount__sum'] or 0
@@ -191,7 +191,7 @@ class Transaction(models.Model):
 
     def save(self, *args, **kwargs):
         # Automatically set the 'type' field based on the 'category' field
-        if self.category in INCOME_CATEGORIES:  # Replace with your category values
+        if self.category in INCOME_CATEGORIES:  
             self.type = 'income'
         else:
             self.type = 'expense'

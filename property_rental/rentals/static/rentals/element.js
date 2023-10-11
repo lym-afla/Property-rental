@@ -71,8 +71,19 @@ function fetchTableData(type) {
         const tbody = document.querySelector(`#${type}Table tbody`);
         tbody.innerHTML = '';  // Clear the table body
 
+        document.getElementById('datePicker').value = data[0];
+        console.log(data[0]);
+
+        // Need to skip the first element as effective date is passed
+        let isFirstElement = true;
+
         data.forEach(element => {
 
+            if (isFirstElement) {
+                isFirstElement = false; // Skip the first element
+                return; // Skip processing this element
+            }
+            
             const row = document.createElement('tr');
             row.className = `${type}Row`;
             row.setAttribute(`data-${type}-id`, element.id);
@@ -171,71 +182,71 @@ function backToTableClickHandler(event) {
     load_table(type);
 }
 
-// Delete click handler
-function deleteElementHandler(event) {
+// // Delete click handler
+// function deleteElementHandler(event) {
 
-    event.preventDefault();
+//     event.preventDefault();
 
-    // Extract what type of element is being dealt with
-    const deleteButton = document.getElementById(`deleteButton`);
-    const type = deleteButton.getAttribute("data-delete-type");
+//     // Extract what type of element is being dealt with
+//     const deleteButton = document.getElementById(`deleteButton`);
+//     const type = deleteButton.getAttribute("data-delete-type");
     
-    let elementId;
+//     let elementId;
 
-    // Get element ID from delete button
-    if (type === "transaction") {
-        const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
+//     // Get element ID from delete button
+//     if (type === "transaction") {
+//         const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
 
-        if (selectedRadio) {
-            elementId = selectedRadio.value;
-            console.log(`Selected radio button value: ${elementId}`);
-        } else {
-            throw new Error("Couldn't retrieve radio button value");
-        }
+//         if (selectedRadio) {
+//             elementId = selectedRadio.value;
+//             console.log(`Selected radio button value: ${elementId}`);
+//         } else {
+//             throw new Error("Couldn't retrieve radio button value");
+//         }
    
-    } else { 
-        elementId = deleteButton.getAttribute(`data-${type}-id`);
-    }
+//     } else { 
+//         elementId = deleteButton.getAttribute(`data-${type}-id`);
+//     }
 
-    const csrftoken = getCookie('csrftoken');
+//     const csrftoken = getCookie('csrftoken');
 
-    fetch(`/handling/${type}/${elementId}`, {
-        method: 'DELETE',
-        headers: {
-            'X-CSRFToken': csrftoken
-        }
-    })
-    .then(response => {
-        if (response.ok) {
-            return response.json();
-        } else {
-            throw new Error(`${type} deletion failed`);
-        }
-    })
-    .then(data => {
-        // Close the Delete Confirmation Modal
-        let modalReference = document.getElementById("deleteConfirmationModal");
-        let confirmationModal = bootstrap.Modal.getInstance(modalReference);
-        confirmationModal.hide();
+//     fetch(`/handling/${type}/${elementId}`, {
+//         method: 'DELETE',
+//         headers: {
+//             'X-CSRFToken': csrftoken
+//         }
+//     })
+//     .then(response => {
+//         if (response.ok) {
+//             return response.json();
+//         } else {
+//             throw new Error(`${type} deletion failed`);
+//         }
+//     })
+//     .then(data => {
+//         // Close the Delete Confirmation Modal
+//         let modalReference = document.getElementById("deleteConfirmationModal");
+//         let confirmationModal = bootstrap.Modal.getInstance(modalReference);
+//         confirmationModal.hide();
         
-        const successDiv = document.getElementById('successModal');
+//         const successDiv = document.getElementById('successModal');
 
-        // Show success modal or message
-        const successModal = new bootstrap.Modal(successDiv);
-        successModal.show();
+//         // Show success modal or message
+//         const successModal = new bootstrap.Modal(successDiv);
+//         successModal.show();
         
-        // Pass the type to success div
-        successDiv.setAttribute(`data-success-type`, type);
+//         // Pass the type to success div
+//         successDiv.setAttribute(`data-success-type`, type);
 
-        // Edit success modal message
-        const successMessage = data.message.charAt(0).toUpperCase() + data.message.slice(1)
-        document.querySelector('#successModal .modal-body').textContent = successMessage;
-        document.querySelector('#successModal a').style.display = 'none';
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });    
-}
+//         // Edit success modal message
+//         const successMessage = data.message.charAt(0).toUpperCase() + data.message.slice(1)
+//         document.querySelector('#successModal .modal-body').textContent = successMessage;
+//         document.querySelector('#successModal a').style.display = 'none';
+//     })
+//     .catch(error => {
+//         console.error('Error:', error);
+//     });    
+// }
 
 // Pre-fill data for editing form
 function preFillForm(type, elementId) {
@@ -310,6 +321,9 @@ function load_element_details(type, elementId) {
         }
     })
     .then(element => {
+
+        document.getElementById('datePicker').value = element.app_date;
+        console.log(element.app_date);
     
         switch(type) {
             case 'property':

@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add a click event listener to the confirmation button to delete element
     const deleteButton = document.getElementById('confirmDeleteButton');
     deleteButton.addEventListener('click', deleteElementHandler);
+
+    updateEffectiveDate();
 });
 
 // Define a variable to track whether the form has been fetched
@@ -113,7 +115,7 @@ function getForm(action, type) {
                 }
             } else {
                 const Type = type.charAt(0).toUpperCase() + type.slice(1);
-                const elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
+                elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
             }
 
             preFillForm(type, elementId);
@@ -382,4 +384,101 @@ function resetPropertyChoices() {
         })
     })
     .catch(err => console.error('Error', err));
+}
+
+// Delete click handler
+function deleteElementHandler(event) {
+
+    event.preventDefault();
+
+    // Extract what type of element is being dealt with
+    const deleteButton = document.getElementById(`deleteButton`);
+    const type = deleteButton.getAttribute("data-delete-type");
+    
+    let elementId;
+
+    // Get element ID from delete button
+    if (type === "transaction") {
+        const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
+
+        if (selectedRadio) {
+            elementId = selectedRadio.value;
+            console.log(`Selected radio button value: ${elementId}`);
+        } else {
+            throw new Error("Couldn't retrieve radio button value");
+        }
+   
+    } else { 
+        elementId = deleteButton.getAttribute(`data-${type}-id`);
+    }
+
+    const csrftoken = getCookie('csrftoken');
+
+    fetch(`/handling/${type}/${elementId}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': csrftoken
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();
+        } else {
+            throw new Error(`${type} deletion failed`);
+        }
+    })
+    .then(data => {
+        // Close the Delete Confirmation Modal
+        let modalReference = document.getElementById("deleteConfirmationModal");
+        let confirmationModal = bootstrap.Modal.getInstance(modalReference);
+        confirmationModal.hide();
+        
+        const successDiv = document.getElementById('successModal');
+
+        // Show success modal or message
+        const successModal = new bootstrap.Modal(successDiv);
+        successModal.show();
+        
+        // Pass the type to success div
+        successDiv.setAttribute(`data-success-type`, type);
+
+        // Edit success modal message
+        const successMessage = data.message.charAt(0).toUpperCase() + data.message.slice(1)
+        document.querySelector('#successModal .modal-body').textContent = successMessage;
+        document.querySelector('#successModal a').style.display = 'none';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });    
+}
+
+// Update effective date
+function updateEffectiveDate() {
+    // Get the elements
+    const datePicker = document.getElementById('datePicker');
+    const updateButton = document.getElementById('updateDate');
+
+    // Add an event listener to the "Update" button
+    updateButton.addEventListener('click', () => {
+        const selectedDate = datePicker.value;
+
+        const csrftoken = getCookie('csrftoken');
+        
+        // Send the selected date to the server using a fetch request
+        fetch('/update-date', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({selectedDate}),
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.href = window.location.pathname;
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+
 }
