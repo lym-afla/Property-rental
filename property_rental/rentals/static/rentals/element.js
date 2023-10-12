@@ -132,11 +132,12 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
             `
         case 'tenant':
+            const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "-" : formatNumberWithParentheses(element.currency, element.lease_rent);
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
                 <td class="text-center">${formatDateToDdmmyy(element.lease_start)}</td>
-                <td class="text-center">${formatNumberWithParentheses(element.currency, element.lease_rent)}</td>
+                <td class="text-center">${currentRent}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.debt)}</td>

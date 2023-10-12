@@ -84,7 +84,7 @@ class Tenant(models.Model):
         super().save(*args, **kwargs)
     
     # Calculating total rent for the tenant between specified dates or all time if either date is not specified
-    def rent_total(self, start_date=None, end_date=None):
+    def rent_total(self, end_date, start_date=None):
         # Get all properties associated with this tenant
         property = self.property
         
@@ -99,7 +99,7 @@ class Tenant(models.Model):
         # if start_date and end_date:
         #     if self.lease_start:
         #         start_date = max(start_date, self.lease_start)
-        end_date = end_date if end_date is not None else effective_current_date
+        # end_date = end_date if end_date is not None else effective_current_date
         if self.lease_end:
             end_date = min(end_date, self.lease_end)
 
@@ -121,12 +121,12 @@ class Tenant(models.Model):
         if self.lease_end is not None:
             latest_month_due = min(latest_month_due, self.lease_end)
 
-        while start_date.month <= latest_month_due.month:
+        while start_date <= latest_month_due:
             monthly_rate = self.rent_history.filter(date_rent_set__lte=start_date).order_by('-date_rent_set').first().rent or 0
             total_rent_due += monthly_rate
             start_date += relativedelta(months=1)
 
-        total_rent_due -= self.rent_total(self.lease_start, latest_month_due)
+        total_rent_due -= self.rent_total(end_date=latest_month_due, start_date=self.lease_start)
 
         return total_rent_due
     

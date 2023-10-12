@@ -205,7 +205,7 @@ def table_data(request, data_type):
                 income_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='income')
                 expense_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='expense')
                 
-                current_year = date.today().year
+                current_year = effective_current_date.year
                 income_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
                 expense_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='expense')
                 
@@ -228,8 +228,8 @@ def table_data(request, data_type):
             tenants = Tenant.objects.filter(property__in=properties_owned_by_landlord)
             for tenant in tenants:
                 
-                revenue_all_time = tenant.rent_total()
-                current_year = date.today().year
+                revenue_all_time = tenant.rent_total(effective_current_date)
+                current_year = effective_current_date.year
                 revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31))
                 
                 lease_rent = tenant.lease_rent(effective_current_date)
