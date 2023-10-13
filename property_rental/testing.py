@@ -17,13 +17,15 @@ def get_currency_exchange_rate(base_currency, target_currency, date, max_attempt
         data = yf.Ticker(currency_pair)
         try:
             exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
+            print(f"Error: {yf.shared._ERRORS[currency_pair]}")
         except:
             attempt += 1
             continue
 
         if not exchange_rate_data.empty and not exchange_rate_data["Close"].isnull().all():
             # Get the exchange rate for the specified date
-            exchange_rate = exchange_rate_data["Close"].iloc[0]
+            print(f"Data: {exchange_rate_data}")
+            exchange_rate = round(exchange_rate_data["Close"].iloc[0], 4)
             actual_date = exchange_rate_data.index[0].date()  # Extract the actual date
 
             return {
