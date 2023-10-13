@@ -52,34 +52,29 @@ class TransactionSerializer(serializers.ModelSerializer):
 def index(request):
     
     if request.user.is_authenticated:
-        months = ['J', 'F', 'M', 'A', 'M']
         
-        rows = {
-            'Rent': ['green', 'green', 'green', 'red', 'red'],
-            'Tax': ['green', 'green', 'green', 'green', 'green'],
-            'Capex': ['green', 'green', 'green', 'green', 'green'],
-            'Management': ['green', 'green', 'green', 'green', 'green'],
-            'Electricity': ['green', 'green', 'green', 'green', 'green'],
-            'Utilities': ['green', 'green', 'green', 'green', 'green'],
-            'Internet': ['green', 'green', 'green', 'green', 'green'],
-            }
+        landlord = Landlord.objects.get(user=request.user)
+        properties = landlord.properties.filter(Q(sold__isnull=True) | Q(sold__gte=effective_current_date)).all()
+        current_year = effective_current_date.year
+        revenue_ytd = Transaction.financials(end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='income')
+        expense_ytd = Transaction.financials(end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='expense') 
         
         dashboard_card_props = [
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
-            'number': 'X',
+            'number': properties.count(),
             'number_text': '',
             'text': 'Properties',
         },
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': '$10,000',
+            'number': revenue_ytd,
             'number_text': '',
             'text': 'Revenue YTD',
         },
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': '$3,000',
+            'number': revenue_ytd - expense_ytd,
             'number_text': '',
             'text': 'Income YTD',
         },
@@ -92,8 +87,6 @@ def index(request):
         ]
         
         return render(request, 'rentals/index.html', {
-            'months': months,
-            'rows': rows,
             'dashboard_card_props': dashboard_card_props,
             'app_date': effective_current_date.strftime("%Y-%m-%d"),
         })

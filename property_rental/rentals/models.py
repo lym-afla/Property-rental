@@ -35,12 +35,7 @@ class Property(models.Model):
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
-    
-    # STATUS_CHOICES = (
-    #     ('rented', 'Rented out'),
-    #     ('not_rented', 'Idle'),
-    # )
-    # status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_rented')
+    sold = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -200,3 +195,13 @@ class Transaction(models.Model):
         
         super(Transaction, self).save(*args, **kwargs)
         
+# Table with FX data
+class FX(models.Model):
+    __tablename__ = 'FX'
+    
+    date = models.DateField()
+    USDEUR = models.DecimalField(max_digits=10, decimal_places=4)
+    USDGBP = models.DecimalField(max_digits=10, decimal_places=4)
+    CHFGBP = models.DecimalField(max_digits=10, decimal_places=4)
+    RUBUSD = models.DecimalField(max_digits=10, decimal_places=4)
+    PLNUSD = models.DecimalField(max_digits=10, decimal_places=4)
