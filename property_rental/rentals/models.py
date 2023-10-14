@@ -7,7 +7,7 @@ from django.db.models import Q
 from dateutil.relativedelta import relativedelta
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
-from .utils import effective_current_date
+from .utils import effective_current_date, get_currency_exchange_rate
 
 # Amending default AbstractUser to differentiate between Landlord and Tenant
 class User(AbstractUser):
@@ -200,8 +200,37 @@ class FX(models.Model):
     __tablename__ = 'FX'
     
     date = models.DateField()
-    USDEUR = models.DecimalField(max_digits=10, decimal_places=4)
-    USDGBP = models.DecimalField(max_digits=10, decimal_places=4)
-    CHFGBP = models.DecimalField(max_digits=10, decimal_places=4)
-    RUBUSD = models.DecimalField(max_digits=10, decimal_places=4)
-    PLNUSD = models.DecimalField(max_digits=10, decimal_places=4)
+    USDEUR = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    USDGBP = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    RUBUSD = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    
+    @classmethod
+    def update_fx_rates(cls):
+        # Get FX model variables, except 'date'
+        fx_variables = [field for field in cls._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
+        print(fx_variables)
+
+        # Extract source and target currencies
+        currency_pairs = [(field.name[:3], field.name[3:]) for field in fx_variables]
+        print(currency_pairs)
+
+        # Scan Transaction instances in the database to collect dates
+        transaction_dates = Transaction.objects.values_list('date', flat=True)
+
+        for date in transaction_dates:
+            print(f"Updating FX for {date} (toal: {len(transaction_dates)})")
+            for source, target in currency_pairs:
+                print(f"Updating {source}/{target} for {date}")
+                # Check if an FX rate exists for the date and currency pair
+                existing_rate = cls.objects.filter(date=date).values(f'{source}{target}').first()
+                print(existing_rate)
+
+                if existing_rate is None:
+                    # Get the FX rate for the date
+                    rate_data = get_currency_exchange_rate(source, target, date)
+
+                    if rate_data['exchange_rate'] != 0:
+                        # Update or create an FX instance with the new rate
+                        fx_instance, created = FX.objects.get_or_create(date=rate_data['actual_date'])
+                        setattr(fx_instance, f'{source}{target}', rate_data['exchange_rate'])
+                        fx_instance.save()
