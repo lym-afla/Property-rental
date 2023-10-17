@@ -140,7 +140,7 @@ function fillRow(type, element) {
                 <td class="text-center">${currentRent}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
-                <td class="text-center">${formatNumberWithParentheses(element.currency, element.debt)}</td>
+                <td class="text-center text-danger">${formatNumberWithParentheses(element.currency, element.debt)}</td>
             `
         case 'transaction':
             const period = element.period ? `(${element.period})` : "";
@@ -360,6 +360,48 @@ function load_element_details(type, elementId) {
                     (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? formatNumberWithParentheses(element.rent_currency, element.rent_rate) : 'NA';
                 document.querySelector('#tenantRevenueCard .display-4').textContent = 
                     (typeof element.all_time_rent === 'number' && !isNaN(element.all_time_rent)) ? formatNumberWithParentheses(element.rent_currency, element.all_time_rent) : 'NA';
+                
+                // Show actual chart settings
+                const chartFrequencySettings = document.querySelectorAll('.chart-frequency');               
+                for (let i = 0; i < chartFrequencySettings.length; i++) {
+                    if (chartFrequencySettings[i].value === element.chart_settings["frequency"]) {
+                        chartFrequencySettings[i].checked = true;
+                        break;
+                    }                
+                }
+                chooseSelectedOption('chartTimeline', element.chart_settings['timeline']);
+                document.getElementById("chartDateTo").value = element.chart_settings['To'];
+                const toDate = new Date(document.getElementById('chartDateTo').value);
+                const chartTimeline = document.getElementById("id_chartTimeline");
+                // changeTimeline(chartTimeline);
+                // console.log(element.chart_data)
+                let fromDate;
+                switch (chartTimeline.value) {
+                    case 'YTD':
+                        fromDate = new Date(new Date().getFullYear(), 0, 1);
+                        break;
+                    case '3m':
+                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 3, toDate.getDate());
+                        break;
+                    case '6m':
+                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 6, toDate.getDate());
+                        break;
+                    case '12m':
+                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 12, toDate.getDate());
+                        break;
+                    case '3Y':
+                        fromDate = new Date(toDate.getFullYear() - 3, toDate.getMonth(), toDate.getDate());
+                        break;
+                    case '5Y':
+                        fromDate = new Date(toDate.getFullYear() - 5, toDate.getMonth(), toDate.getDate());
+                        break;
+                    case 'All':
+                        fromDate = new Date('2000-01-01');
+                        break;
+                };
+                document.getElementById('chartDateFrom').value = convertDate(fromDate);
+                chartInitialization(type, element.chart_data);
+
                 break;
 
             case 'transaction':
@@ -376,8 +418,8 @@ function load_element_details(type, elementId) {
         console.log(error);
     });
 
-    const propertyDetailsButtons = document.getElementById(`back-to-${type}-table`);
-    if (!propertyDetailsButtons) {
+    const elementDetailsButtons = document.getElementById(`back-to-${type}-table`);
+    if (!elementDetailsButtons) {
         // Create the "Back to Table", "Edit" and "Delete" buttons HTML
         const buttonsHTML = `
             <div class="d-flex justify-content-between mb-3">
@@ -570,7 +612,7 @@ function chooseSelectedOption(option, choice) {
     for (let i = 0; i < selectedElement.options.length; i++) {
         const optionElement = selectedElement.options[i];
         // Check if the option's value matches the value to match
-        const checkText = (option === 'category') ? optionElement.value : optionElement.textContent;
+        const checkText = (option === 'category' || option === 'chartTimeline') ? optionElement.value : optionElement.textContent;
         if (checkText === choice) {
         // Set the selected attribute to make this option selected
         optionElement.selected = true;

@@ -1,5 +1,5 @@
 CURRENCY_CHOICES = (
-    ('USD', 'US$'),
+    ('USD', '$'),
     ('EUR', '€'),
     ('GBP', '£'),
     ('RUB', '₽'),
@@ -21,4 +21,3 @@ INCOME_CATEGORIES = (
     'rent',
     'other_income'
 )
-    

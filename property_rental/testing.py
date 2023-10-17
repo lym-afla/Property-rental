@@ -1,18 +1,18 @@
 import yfinance as yf
 import datetime
-import requests
+# import requests
 
-from rentals.utils import get_currency_exchange_rate, update_fx_rates
-from rentals.models import FX
+from rentals.utils import download_FX_rate
+# from rentals.models import FX
 
-# # Example usage
-# date = datetime.datetime(2023, 5, 16)  # Replace with your desired date
-# usd_to_eur = get_currency_exchange_rate("USD", "EUR", date)
+# Example usage
+date = datetime.datetime(2023, 5, 16)  # Replace with your desired date
+usd_to_eur = download_FX_rate("USD", "GBP", date)
 
-# if usd_to_eur is not None:
-#     print(f"USD to EUR exchange rate on {usd_to_eur['actual_date']}: {usd_to_eur['exchange_rate']}")
-# else:
-#     print(f"No exchange rate data found for {date}")
+if usd_to_eur is not None:
+    print(f"USD to EUR exchange rate on {usd_to_eur['actual_date']}: {usd_to_eur['exchange_rate']}")
+else:
+    print(f"No exchange rate data found for {date}")
 
-FX.update_fx_rates()
-print(FX.objects.all())
+# FX.update_fx_rates()
+# print(FX.objects.all())

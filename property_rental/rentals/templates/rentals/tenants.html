@@ -53,6 +53,19 @@
             </div>
             <!-- Second Row -->
             <div class="row">
+                <div class="col-md-12">
+                    <!-- Cash Flow Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            Cash Flow Chart
+                        </div>
+                        <div class="card-body">
+                            {% include "rentals/snippets/timeline-chart.html" with form_type="tenant" %}
+                            <!-- Content of the Cash Flow Chart goes here -->
+                            {% comment %} Third block will be bar chart with cash flow. The time width of the chart may be changed, as well as frequency of the data.  {% endcomment %}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -61,5 +74,9 @@
 {% endblock content %}
 
 {% block script %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.1.0"></script>
+
     <script src="{% static 'rentals/element.js' %}"></script>
+    <script src="{% static 'rentals/chart.js' %}"></script>
 {% endblock script %}

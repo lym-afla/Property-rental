@@ -21,4 +21,5 @@ urlpatterns = [
     path('new-form/<str:form_type>', views.new_form, name='new_form'),
     path('tenants/property-choices', views.property_choices, name='property_choices'),
     path('update-date', views.update_date, name='update_date'),
+    path('get_chart_data', views.chart_data_request, name='chart_data_request'),
 ]

@@ -10,10 +10,11 @@ from rest_framework import serializers
 from datetime import date, datetime
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
+from dateutil.relativedelta import relativedelta
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
-from .models import Property, Landlord, Tenant, Transaction, Lease_rent
-from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period
+from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
+from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, chart_settings, chart_dates, chart_labels
 from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -56,9 +57,9 @@ def index(request):
         landlord = Landlord.objects.get(user=request.user)
         properties = landlord.properties.filter(Q(sold__isnull=True) | Q(sold__gte=effective_current_date)).all()
         current_year = effective_current_date.year
-        revenue_ytd = Transaction.financials(end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='income')
-        expense_ytd = Transaction.financials(end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='expense') 
-        
+        revenue_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='income')
+        expense_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='expense') 
+                
         dashboard_card_props = [
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
@@ -68,13 +69,13 @@ def index(request):
         },
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': revenue_ytd,
+            'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd:,.0f}'),
             'number_text': '',
             'text': 'Revenue YTD',
         },
         {
             'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': revenue_ytd - expense_ytd,
+            'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd + expense_ytd:,.0f}'),
             'number_text': '',
             'text': 'Income YTD',
         },
@@ -139,7 +140,6 @@ def properties(request):
 def tenants(request):
     
     if request.user.is_landlord:
-        print(request.user)
         return render(request, 'rentals/tenants.html')
     else:
         messages.error(request, "You are not authorized to access this page.")
@@ -287,7 +287,7 @@ def handle_element(request, data_type, element_id):
                 if request.user.is_landlord and element.owned_by.user == request.user:
                     
                     # Calculate the start date of the current year
-                    current_year_start =effective_current_date.replace(month=1, day=1)
+                    current_year_start = effective_current_date.replace(month=1, day=1)
                                         
                     # Filter transactions for the specified date range
                     filtered_transactions = element.transactions.filter(
@@ -365,7 +365,7 @@ def handle_element(request, data_type, element_id):
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
                     
                     lease_rent = element.lease_rent(effective_current_date)
-                    
+                                        
                     data = {
                         'id': element.id,
                         'first_name': element.first_name,
@@ -381,6 +381,11 @@ def handle_element(request, data_type, element_id):
                         'payday': element.payday,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
+                    
+                    # Default chart settings
+                    data['chart_settings'] = chart_settings
+                    from_date = chart_settings['To'] - relativedelta(months=6) #chart_settings['timeline']
+                    data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'])                   
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
             case 'transaction':
@@ -411,7 +416,6 @@ def handle_element(request, data_type, element_id):
                     serializer = TenantSerializer(instance=element, data=json_data)
                 case 'transaction':
                     serializer = TransactionSerializer(instance=element, data=json_data)
-                    print(serializer)
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({'success': True}, status=200)
@@ -487,6 +491,9 @@ def create_element(request, data_type):
                         transaction.property = property
                         transaction.save()
                         
+                        # When adding new transaction update FX rates from Yahoo
+                        FX.updage_FX_rate()
+                        
                         return JsonResponse({'message': 'Tenant created successfully'}, status=200)
                     else:
                         print(form.errors)
@@ -520,7 +527,54 @@ def update_date(request):
         global effective_current_date
         effective_current_date = formatted_date
         
-        print(f'New variable: {effective_current_date}')
-
         # You may want to send a response with a success message
         return JsonResponse({'message': 'Date updated successfully'})
+    
+def chart_data_request(request):
+    if request.method == 'GET':
+        type = request.GET.get('type')
+        id = request.GET.get('id')
+        frequency = request.GET.get('frequency')
+        from_date = request.GET.get('from')
+        to_date = request.GET.get('to')
+        
+        chart_data = get_chart_data(type, id, frequency, from_date, to_date)
+
+        return JsonResponse(chart_data)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+def get_chart_data(type, element_id, frequency, from_date, to_date):
+
+    # Create an empty data dictionary
+    chart_data = {
+        'labels': [],
+        'data': [],
+    }
+    
+    if type == 'tenant':
+        # Query the Tenant model
+        model = Tenant
+    elif type == 'property':
+        # Query the Property model
+        model = Property        
+    dates = chart_dates(from_date, to_date, frequency)
+    chart_data['labels']= chart_labels(dates, frequency)
+    
+    tenant = Tenant.objects.get(id=element_id)
+    chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
+    
+    # Iterate through the date range and compile data
+    for d in dates:
+        if type == 'tenant':
+            time_delta = {
+                'M': 1,
+                'Q': 3,
+                'Y': 12
+            }
+            start_date = d - relativedelta(months = time_delta[frequency])
+            total_rent = tenant.rent_total(end_date=d, start_date=start_date)
+            chart_data['data'].append(total_rent)
+        
+    print(chart_data)
+    return chart_data

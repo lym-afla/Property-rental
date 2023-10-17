@@ -1,12 +1,22 @@
 from datetime import date, timedelta
 import requests
 import yfinance as yf
+from dateutil.relativedelta import relativedelta
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES
-# from .models import FX, Transaction
 
 # Define the effective 'current' date for the application
 effective_current_date = date.today()
+
+# Define the currency of representation for aggregated data
+currency_basis = 'USD'
+
+chart_settings = {
+    'frequency': 'M',
+    'timeline': '6m',
+    # 'From': date(effective_current_date.year, 1, 1),
+    'To': effective_current_date
+    }
 
 def get_currency_symbol(currency_code):
     for code, symbol in CURRENCY_CHOICES:
@@ -42,128 +52,6 @@ def convert_period(string_date):
     else:
         return ''
     
-# # Get quote 
-# def quote_at_date(model, date, source='price', target='', asset_id=''):
-#     filter_kwargs = {
-#         f'{source}{target}__isnull': False,
-#         'date': date
-#     }
-
-#     if asset_id:
-#         filter_kwargs['asset_id'] = asset_id
-
-#     queryset = model.objects.filter(**filter_kwargs)
-
-#     if queryset.exists():
-#         # Returns quote for a given date if it exists
-#         result = queryset.values('date', f'{source}{target}', 'currency').first()
-
-#         return {
-#             'date': result['date'],
-#             'quote': result[f'{source}{target}'],
-#             'currency': result['currency']
-#         }
-#     else:
-#         # Find the nearest earliest date where a quote exists in the table
-#         filter_kwargs = {
-#             f'{source}{target}__isnull': False,
-#             'date__lt': date
-#         }
-
-#         if asset_id:
-#             filter_kwargs['asset_id'] = asset_id
-
-#         earliest_entry = model.objects.filter(**filter_kwargs).order_by('-date').first()
-
-#         if earliest_entry:
-#             return {
-#                 'date': earliest_entry.date,
-#                 'quote': getattr(earliest_entry, f'{source}{target}'),
-#                 'currency': earliest_entry.currency
-#             }
-#         else:
-#             # Handle the case when no earlier date is found
-#             nearest_date = model.objects.filter(
-#                 # f'{source}{target}__isnull': False,
-#                 date__gt=date
-#             )
-
-#             if asset_id:
-#                 nearest_date = nearest_date.filter(asset_id=asset_id)
-
-#             nearest_date = nearest_date.order_by('date').first()
-
-#             if nearest_date:
-#                 print(f'Error: {source + target} quote does not exist at dates earlier than {date}. The nearest is {nearest_date.date.strftime("%Y-%m-%d")}')
-#                 return {
-#                     'date': date,
-#                     'quote': 0,
-#                     'currency': 'None'
-#                 }
-#             else:
-#                 # Handle the case when no nearest date is found
-#                 print(f'Error: {source + target} quote does not exist for any date.')
-#                 return {
-#                     'date': date,
-#                     'quote': 0,
-#                     'currency': 'None'
-#                 }
-
-# # Get FX quote
-# def FX_rate(source_currency, target_currency, date):
-#     fx_rate = 1
-#     dates_async = False
-#     dates_list = []
-
-#     if source_currency == target_currency:
-#         return {
-#             'FX': fx_rate,
-#             'conversions': 0,
-#             'dates_async': dates_async,
-#             'FX dates used': dates_list
-#         }
-
-#     # Get all existing pairs
-#     pairs_list = [field.name for field in FX._meta.get_fields() if field.name != 'date']
-    
-#     # Create undirected graph with currencies, import networkx library working with graphs
-#     import networkx as nx
-#     G = nx.Graph()
-#     for entry in pairs_list:
-#         G.add_nodes_from([entry[0:3], entry[3:6]])
-#         G.add_edge(entry[0:3], entry[3:6])
-    
-#     # Finding shortest path for cross-currency conversion using "Bellman-Ford" algorithm
-#     cross_currency = nx.shortest_path(G, source_currency, target_currency, method='bellman-ford')
-
-#     for i in range(1, len(cross_currency)):
-#         i_source = cross_currency[i - 1]
-#         i_target = cross_currency[i]
-        
-#         for element in pairs_list:
-#             if i_source in element and i_target in element:
-#                 if element.find(i_source) == 0:
-#                     fx_call = quote_at_date(FX, date, i_source, i_target)
-#                     fx_rate *= fx_call['quote']
-#                     dates_list.append(fx_call['date'])
-#                     dates_async = (dates_list[0] != fx_call['date']) or dates_async
-#                 else:
-#                     fx_call = quote_at_date(FX, date, i_target, i_source)
-#                     fx_rate /= fx_call['quote']
-#                     dates_list.append(fx_call['date'])
-#                     dates_async = (dates_list[0] != fx_call['date']) or dates_async
-#                 break
-    
-#     # Use inverse in order to multiply when using, not divide
-#     fx_rate = round(1 / fx_rate, 4)
-            
-#     return {
-#         'FX': fx_rate,
-#         'conversions': len(cross_currency) - 1,
-#         'dates_async': dates_async,
-#         'dates': dates_list
-#     }
-    
 def is_yahoo_finance_available():
     url = "https://finance.yahoo.com"  # Replace with the Yahoo Finance API endpoint if needed
     try:
@@ -174,13 +62,13 @@ def is_yahoo_finance_available():
         pass
     return False
 
-def get_currency_exchange_rate(base_currency, target_currency, date, max_attempts=5):
+def download_FX_rate(base_currency, target_currency, date, max_attempts=5):
     
     if not is_yahoo_finance_available():
         raise ConnectionError("Yahoo Finance is not available")
-    
-    # Define the currency pair (e.g., "USDEUR=X" for USD to EUR)
-    currency_pair = f"{base_currency}{target_currency}=X"
+
+    # Define the currency pair
+    currency_pair = f"{target_currency}{base_currency}=X"
 
     # Initialize a counter for the number of attempts
     attempt = 0
@@ -195,15 +83,13 @@ def get_currency_exchange_rate(base_currency, target_currency, date, max_attempt
         exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
         try:
             exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
-            # print(f"Error: {yf.shared._ERRORS[currency_pair]}")
         except:
             attempt += 1
             continue
 
         if not exchange_rate_data.empty and not exchange_rate_data["Close"].isnull().all():
             # Get the exchange rate for the specified date
-            print(f"Data: {exchange_rate_data}")
-            exchange_rate = round(exchange_rate_data["Close"].iloc[0], 4)
+            exchange_rate = round(exchange_rate_data["Close"].iloc[0], 6)
             actual_date = exchange_rate_data.index[0].date()  # Extract the actual date
 
             return {
@@ -217,28 +103,77 @@ def get_currency_exchange_rate(base_currency, target_currency, date, max_attempt
     # If no data is found after max_attempts, return None or an appropriate error message
     return None
 
-# def update_fx_rates():
-#     # Get FX model variables, except 'date'
-#     fx_variables = [field for field in FX._meta.get_fields() if field.name != 'date']
+# Collect chart dates 
+def chart_dates(start_date, end_date, freq):
+    
+    import pandas as pd
+    
+    # Create matching table for pandas
+    frequency = {
+        'D': 'B',
+        'W': 'W',
+        'M': 'M',
+        'Q': 'Q',
+        'Y': 'Y'
+    }
+    
+    #  # If the frequency is yearly, adjust the end_date to the end of the current year
+    # if freq == 'Y':
+    #     end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+    #     end_date = end_date.replace(month=12, day=31)
+    #     start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+    #     # Keep one year if start and end within one calendar year
+    #     if end_date.year - start_date.year != 0:
+    #         start_date = datetime.date(start_date.year + 1, 1, 1)
+            
+    # if freq == 'M':
+    #     # end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+    #     end_date = end_date.replace(day=28)
+    
+    # Convert the start_date and end_date strings to date objects
+    print(end_date)
+    if type(start_date) == str:
+        start_date = date.fromisoformat(start_date)
+    if type(end_date) == str:
+        end_date = date.fromisoformat(end_date)
 
-#     # Extract source and target currencies
-#     currency_pairs = [(field.name[:3], field.name[3:]) for field in fx_variables]
+    # If the frequency is yearly, adjust the end_date to the end of the current year
+    if freq == 'Y':
+        end_date = end_date.replace(month=12, day=31)
+        start_date = start_date.replace(month=1, day=1)
+        # Keep one year if start and end within one calendar year
+        if end_date.year - start_date.year != 0:
+            start_date = date(start_date.year + 1, 1, 1)
 
-#     # Scan Transaction instances in the database to collect dates
-#     transaction_dates = Transaction.objects.values_list('date', flat=True)
+    if freq == 'M':
+        # Adjust the end_date to the end of the month
+        end_date = end_date + relativedelta(months = 1)
 
-#     for date in transaction_dates:
-#         print(f"Updating FX for {date} (toal: {len(transaction_dates)})")
-#         for source, target in currency_pairs:
-#             # Check if an FX rate exists for the date and currency pair
-#             existing_rate = FX.objects.filter(date=date).values(f'{source}{target}').first()
+    print(pd.date_range(start_date, end_date, freq=frequency[freq]).date)
 
-#             if existing_rate is None:
-#                 # Get the FX rate for the date
-#                 rate_data = get_currency_exchange_rate(source, target, date)
-
-#                 if rate_data['quote'] != 0:
-#                     # Update or create an FX instance with the new rate
-#                     fx_instance, created = FX.objects.get_or_create(date=rate_data['date'])
-#                     setattr(fx_instance, f'{source}{target}', rate_data['quote'])
-#                     fx_instance.save()
+    # Get list of dates from pandas
+    return pd.date_range(start_date, end_date, freq=frequency[freq]).date
+    
+# Create labels according to dates
+def chart_labels(dates, frequency):
+    
+    if frequency == 'D':
+        return [i.strftime("%d-%b-%y") for i in dates]
+    if frequency == 'W':
+        return [i.strftime("%d-%b-%y") for i in dates]
+    if frequency == 'M':
+        return [i.strftime("%b-%y") for i in dates]
+    if frequency == 'Q':
+        labels = []
+        for i in dates:
+            if i.month == 3:
+                labels.append('Q1 ' + i.strftime("%y"))
+            if i.month == 6:
+                labels.append('Q2 ' + i.strftime("%y"))
+            if i.month == 9:
+                labels.append('Q3 ' + i.strftime("%y"))
+            if i.month == 12:
+                labels.append('Q4 ' + i.strftime("%y"))
+        return labels
+    if frequency == 'Y':
+        return [i.strftime("%Y") for i in dates]

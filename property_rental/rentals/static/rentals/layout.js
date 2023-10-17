@@ -248,7 +248,7 @@ function handle_type(action, type, elementId) {
     });
 }
 
-// Function to handle success Modal OK button click. The reference to this function is introduced in layout.html directly
+// Function to handle success Modal OK button click. The reference to this function is in layout.html directly
 function okButtonEventHandler() {
     
     const successDiv = document.getElementById('successModal');

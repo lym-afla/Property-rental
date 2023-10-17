@@ -3,11 +3,12 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import date
-from django.db.models import Q
+from django.db.models import Q, F
 from dateutil.relativedelta import relativedelta
+import networkx as nx
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
-from .utils import effective_current_date, get_currency_exchange_rate
+from .utils import effective_current_date, download_FX_rate
 
 # Amending default AbstractUser to differentiate between Landlord and Tenant
 class User(AbstractUser):
@@ -123,7 +124,7 @@ class Tenant(models.Model):
 
         total_rent_due -= self.rent_total(end_date=latest_month_due, start_date=self.lease_start)
 
-        return total_rent_due
+        return -total_rent_due
     
     # Extract lease rent for the specific date
     def lease_rent(self, as_of_date=None):
@@ -157,7 +158,7 @@ class Transaction(models.Model):
     comment = models.TextField(max_length=250, blank=True, null=True)
     
     @classmethod
-    def financials(cls, end_date, properties=None, start_date=None, transaction_type='income'):
+    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type='income'):
         """
         Calculate the sum of transactions for a specific period and type.
 
@@ -170,15 +171,41 @@ class Transaction(models.Model):
         Returns:
             Decimal: The total sum of transactions.
         """
+        
+        FX_conversion_required = True
+        
         queryset = cls.objects.filter(type=transaction_type, date__lte=end_date)
         
         if properties:
             queryset = queryset.filter(property__in=properties)
+            print(f"Properties: {properties}")
+        
+        if properties is not None and len(properties) == 1:
+            print(f'FX conversion not required')
+            target_currency = properties[0].currency
+            FX_conversion_required = False
+        else:
+            if target_currency is None:
+                raise ValueError('Target currency is not defined')
         
         if start_date:
             queryset = queryset.filter(date__range=(start_date, end_date))
         
-        total_amount = queryset.aggregate(models.Sum('amount'))['amount__sum'] or 0
+        transactions = queryset.values('date', 'currency', 'amount').all()
+        print(f"Transactoins: {transactions}")
+        
+        total_amount = 0
+        for transaction in transactions:
+            
+            print(FX_conversion_required)
+            if FX_conversion_required:
+                print(f"Currency: {transaction['currency']}. Target currency: {target_currency}")
+                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
+                print(fx_rate)
+                print(f"FX rate for {transaction['amount']}: {fx_rate}")
+            else:
+                fx_rate = 1
+            total_amount += transaction['amount'] * fx_rate
         return total_amount
     
     def __str__(self):
@@ -200,37 +227,103 @@ class FX(models.Model):
     __tablename__ = 'FX'
     
     date = models.DateField()
-    USDEUR = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    USDGBP = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    RUBUSD = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    EURUSD = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
+    GBPUSD = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
+    USDRUB = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
     
     @classmethod
     def update_fx_rates(cls):
         # Get FX model variables, except 'date'
         fx_variables = [field for field in cls._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
-        print(fx_variables)
 
         # Extract source and target currencies
         currency_pairs = [(field.name[:3], field.name[3:]) for field in fx_variables]
-        print(currency_pairs)
 
         # Scan Transaction instances in the database to collect dates
         transaction_dates = Transaction.objects.values_list('date', flat=True)
 
+        print(f"Checking FX rates for {len(transaction_dates)} dates")
+        count = 0
         for date in transaction_dates:
-            print(f"Updating FX for {date} (toal: {len(transaction_dates)})")
+            count += 1
+            print(f'{count} of {len(transaction_dates)}')    
             for source, target in currency_pairs:
-                print(f"Updating {source}/{target} for {date}")
                 # Check if an FX rate exists for the date and currency pair
                 existing_rate = cls.objects.filter(date=date).values(f'{source}{target}').first()
-                print(existing_rate)
 
-                if existing_rate is None:
+                if existing_rate is None or existing_rate[f'{source}{target}'] is None:
                     # Get the FX rate for the date
-                    rate_data = get_currency_exchange_rate(source, target, date)
+                    rate_data = download_FX_rate(source, target, date)
 
-                    if rate_data['exchange_rate'] != 0:
+                    if rate_data is not None:
                         # Update or create an FX instance with the new rate
-                        fx_instance, created = FX.objects.get_or_create(date=rate_data['actual_date'])
+                        fx_instance, created = cls.objects.get_or_create(date=rate_data['actual_date'])
                         setattr(fx_instance, f'{source}{target}', rate_data['exchange_rate'])
                         fx_instance.save()
+                        print(f'{source}{target} for {rate_data["actual_date"]} is updated')
+                    else:
+                        raise Exception(f'{source}{target} for {rate_data["actual_date"]} is NOT updated. Yahoo Finance is not responding correctly')
+                else:
+                    print(f'{source}{target} for {date} already exists')
+                    
+    # Get FX quote for date
+    @classmethod
+    def get_rate(cls, source, target, date):
+        fx_rate = 1
+        dates_async = False
+        dates_list = []
+
+        if source == target:
+            return {
+                'FX': fx_rate,
+                'conversions': 0,
+                'dates_async': dates_async,
+                'FX dates used': dates_list
+            }
+
+        # Get all existing pairs
+        pairs_list = [field.name for field in FX._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
+        
+        # Create undirected graph with currencies, import networkx library working with graphs
+        G = nx.Graph()
+        for entry in pairs_list:
+            G.add_nodes_from([entry[:3], entry[3:]])
+            G.add_edge(entry[:3], entry[3:])
+        
+        # Finding shortest path for cross-currency conversion using "Bellman-Ford" algorithm
+        cross_currency = nx.shortest_path(G, source, target, method='bellman-ford')
+
+        for i in range(1, len(cross_currency)):
+            i_source = cross_currency[i - 1]
+            i_target = cross_currency[i]
+            
+            for element in pairs_list:
+                if i_source in element and i_target in element:
+                    if element.find(i_source) == 0:
+                        try:
+                            fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first()
+                        except:
+                            raise ValueError
+                        fx_rate *= fx_call['quote']
+                        # dates_list.append(fx_call['date'])
+                        # dates_async = (dates_list[0] != fx_call['date']) or dates_async
+                    else:
+                        try:
+                            fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_target}{i_source}')).order_by("-date").first()
+                        except:
+                            raise ValueError
+                        fx_rate /= fx_call['quote']
+                    dates_list.append(fx_call['date'])
+                    dates_async = (dates_list[0] != fx_call['date']) or dates_async
+                    break
+        
+        # Thea target is to multiply when using, not divide
+        fx_rate = round(1 / fx_rate, 6)
+                
+        return {
+            'FX': fx_rate,
+            'conversions': len(cross_currency) - 1,
+            'dates_async': dates_async,
+            'dates': dates_list
+        }
+                
