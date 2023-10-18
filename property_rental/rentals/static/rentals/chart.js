@@ -175,6 +175,17 @@ async function updateChart(chart, element) {
     chart.data.datasets[0].data = chartData.data;
     chart.update();
 
+    // Reapply the formatter for data labels
+    // chart.data.datasets[0].datalabels.formatter = (value, context) => {
+    //     // Format the value with commas as thousand separators
+    //     return value.toLocaleString() + ' Q';
+    //     // return "test";
+    // };
+
+    // console.log("Redrawing the chart");
+    // // Redraw the chart to reflect the updated formatter
+    // chart.draw();
+
 }
 
 // Show actual chart settings
