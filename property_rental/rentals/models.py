@@ -162,7 +162,7 @@ class Transaction(models.Model):
     comment = models.TextField(max_length=250, blank=True, null=True)
     
     @classmethod
-    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type='income'):
+    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type=None, category=None):
         """
         Calculate the sum of transactions for a specific period and type.
 
@@ -178,7 +178,7 @@ class Transaction(models.Model):
         
         FX_conversion_required = True
         
-        queryset = cls.objects.filter(type=transaction_type, date__lte=end_date)
+        queryset = cls.objects.filter(date__lte=end_date)
         
         if properties:
             queryset = queryset.filter(property__in=properties)
@@ -192,6 +192,12 @@ class Transaction(models.Model):
         
         if start_date:
             queryset = queryset.filter(date__range=(start_date, end_date))
+            
+        if transaction_type:
+            queryset = queryset.filter(type=transaction_type)
+            
+        if category:
+            queryset = queryset.filter(category=category)
         
         transactions = queryset.values('date', 'currency', 'amount').all()
         

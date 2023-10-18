@@ -100,15 +100,13 @@ def index(request):
         if type(chart_settings['To']) != str: 
             chart_settings['To'] = chart_settings['To'].strftime("%Y-%m-%d")
         
-        chart_data = get_chart_data(type='tenant',
-                                    element_id=2,
+        chart_data = get_chart_data(type='homePage',
+                                    element_id=None,
                                     frequency=global_chart_settings['frequency'],
                                     from_date=from_date,
                                     to_date=global_chart_settings['To'],
-                                    properties=None
+                                    properties=properties
                                     )  
-        
-        print(f"Chart settings: {chart_settings}")
         
         return render(request, 'rentals/index.html', {
             'dashboard_card_props': dashboard_card_props,
@@ -369,7 +367,6 @@ def handle_element(request, data_type, element_id):
 
                     # Reverse the list to get the months in chronological order
                     months_for_payment_schedule.reverse()
-                    print(f"Payment schedule data: {months_for_payment_schedule}, {rows_for_payment_schedule}")
 
                     data = {
                         'name': element.name,
@@ -543,6 +540,7 @@ def property_choices(request):
     landlord = Landlord.objects.get(user=request.user)
     properties = Property.objects.filter(
             Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+            Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
             owned_by=landlord,
         )
     
@@ -578,7 +576,10 @@ def chart_data_request(request):
         to_date = request.GET.get('to')
         
         if type == 'homePage':
-            properties = Property.objects.filter(owned_by=Landlord.objects.get(id=request.user.id))
+            landlord = Landlord.objects.get(user=request.user)
+            properties = Property.objects.filter(
+                Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
+                owned_by=landlord).all()        
         else:
             properties = None
         
@@ -593,7 +594,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
     # Create an empty data dictionary
     chart_data = {
         'labels': [],
-        'data': [],
+        'datasets': [],
     }
     
     # Get the correct starting date for "All time" category
@@ -611,28 +612,43 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
     #     # Query the Property model
     #     model = Property        
     
-    print(f"Type: {type}")
-    # Iterate through the date range and compile data
-    for d in dates:
-
-        time_delta = {
-                'M': 1,
-                'Q': 3,
-                'Y': 12
-            }
-        start_date = d - relativedelta(months = time_delta[frequency])
-
-        if type == 'tenant':
-            tenant = Tenant.objects.get(id=element_id)            
-            total_rent = tenant.rent_total(end_date=d, start_date=start_date)
-            chart_data['data'].append(total_rent)
-            
-        if type == 'homePage' and properties:
-            transactions = Transaction.financials(end_date = d, target_currency=currency_basis, properties=properties, start_date=start_date, transaction_type='expense')
-            print(transactions)
-            chart_data['data'].append(transactions)
-            
-    chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency) if (type == 'tenant') else currency_basis
+    time_delta = {
+        'M': 1,
+        'Q': 3,
+        'Y': 12
+        }
     
-    print(f"Get chart data function. Data: {chart_data}")
+    if type == 'homePage' and properties:
+        # Filter transactions for the specified date range
+        filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))
+        # Get a list of unique categories from the filtered transactions
+        unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
+        
+        # Define currency
+        chart_data['currency'] = get_currency_symbol(currency_basis)
+        
+        for category in unique_categories:
+            single_dataset_data = {'label': category, 'data': []}  # Initialize for each category
+            
+            for d in dates:
+                start_date = d - relativedelta(months = time_delta[frequency])
+                transactions = Transaction.financials(end_date = d, target_currency=currency_basis, properties=properties, start_date=start_date, category=category)
+                single_dataset_data['data'].append(round(transactions, 0))
+            
+            chart_data['datasets'].append(single_dataset_data)
+
+    if type == 'tenant':
+        
+        tenant = Tenant.objects.get(id=element_id)
+        chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
+        
+        single_dataset_data = {'data': []}
+        
+        for d in dates:
+            start_date = d - relativedelta(months = time_delta[frequency])                        
+            total_rent = tenant.rent_total(end_date=d, start_date=start_date)
+            single_dataset_data['data'].append(total_rent)
+            
+        chart_data['datasets'].append(single_dataset_data)
+    
     return chart_data

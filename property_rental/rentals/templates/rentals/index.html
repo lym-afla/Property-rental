@@ -63,21 +63,7 @@
         const ctxChart = document.getElementById("homePageBarChart");
         myChart = new Chart(ctxChart, {
             type: 'bar',
-            data: {
-                labels: chartData.labels,
-                datasets: [{
-                     data: chartData.data.map(value => parseFloat(value)),
-                     datalabels: {
-                         anchor: 'end',
-                         align: 'top',
-                         offset: 5,
-                         formatter: (value, context) => {
-                             // Format the value with commas as thousand separators
-                             return value.toLocaleString();
-                         }
-                     }
-                 }]
-            },
+            data: chartData,
             plugins: [ChartDataLabels],
             options: {
                 responsive: true,
@@ -108,6 +94,45 @@
                     legend: {
                         display: false, // Hide the legend
                     },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 5,
+                        formatter: (value, context) => {
+                            return value.toLocaleString("en-US", {
+                                style: 'decimal', // or 'currency' or 'percent'
+                                minimumFractionDigits: 0, // At least 2 decimal places
+                                maximumFractionDigits: 0, // At most 2 decimal places
+                                useGrouping: true,
+                            });
+                            /* SUM OF ALL CATEGORIES ON TOP OS STACKED BAR CHART
+                            const dataArray = [];
+                            context.chart.data.datasets.forEach((dataset) => {
+                                if (dataset.data[context.dataIndex] != undefined) {
+                                    // console.log(dataset.Index);
+                                    if (context.datasetIndex > 0) {
+                                        // Including conversion to integer from string
+                                        dataArray.push(parseFloat(dataset.data[context.dataIndex]))
+                                    }
+                                }
+                            });
+                            // console.log(dataArray);
+                            let sum = dataArray.reduce((a, b) => a + b, 0);
+                            // sum = Math.round(sum * Math.pow(10, {{ number_of_digits }})) / Math.pow(10, {{ number_of_digits }});
+                            sum = Math.round(sum * Math.pow(10, 1)) / Math.pow(10, 1);
+
+                            // Keeping only one label with the last positive item
+                            let labelIndex = dataArray.findLastIndex(value => value > 0);
+                            if(context.datasetIndex === labelIndex) {
+                                return sum.toLocaleString().replace(/,/g, '.');
+                            } else if (context.datasetIndex === 0) {
+                                return (context.dataset.data[context.dataIndex].toLocaleString())
+                            } else {
+                                return "";
+                            }
+                            */
+                        }
+                    }
                 },
             },
         });

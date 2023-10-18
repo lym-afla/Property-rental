@@ -28,8 +28,10 @@ document.addEventListener('DOMContentLoaded', function() {
     newTypeButton.addEventListener('click', elementActionClickHandler);
 
     // Hide property selector for the chart
-    const propertySelector = document.getElementById('chartPropertySelection').parentElement;
-    propertySelector.style.display = 'none';
+    const propertySelector = document.getElementById('chartPropertySelection');
+    if (propertySelector) {
+        propertySelector.parentElement.style.display = 'none';
+    }
 
 });
 

@@ -20,18 +20,10 @@ function typeChartInitialization(type, chartData) {
         type: 'bar',
         data: {
             labels: chartData.labels,
-            datasets: [{
-                data: chartData.data.map(value => parseFloat(value)),
-                datalabels: {
-                    anchor: 'end',
-                    align: 'top',
-                    offset: 5,
-                    formatter: (value, context) => {
-                        // Format the value with commas as thousand separators
-                        return value.toLocaleString();
-                    }
-                }
-            }]
+            datasets: chartData.datasets
+            // [{
+            //     data: chartData.datasets.map(value => parseFloat(value.toLocaleString())),
+            // }]
         },
         plugins: [ChartDataLabels],
         options: {
@@ -63,15 +55,15 @@ function typeChartInitialization(type, chartData) {
                 legend: {
                     display: false, // Hide the legend
                 },
-                // datalabels: {
-                //     anchor: 'end',
-                //     align: 'top',
-                //     offset: 5,
-                //     formatter: (value, context) => {
-                //         // Format the value with commas as thousand separators
-                //         return value.toLocaleString();
-                //     }
-                // }
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    offset: 5,
+                    formatter: (value, context) => {
+                        // Format the value with commas as thousand separators
+                        return value.toLocaleString("en-US");
+                    }
+                }
             },
         },
     });
@@ -172,8 +164,9 @@ async function updateChart(chart, element) {
     const chartData = await getChartData(type, elementId, frequency, from, to);
 
     chart.data.labels = chartData.labels;
-    chart.data.datasets[0].data = chartData.data;
+    chart.data.datasets = chartData.datasets;
     chart.update();
+    chart.draw();
 
     // Reapply the formatter for data labels
     // chart.data.datasets[0].datalabels.formatter = (value, context) => {
