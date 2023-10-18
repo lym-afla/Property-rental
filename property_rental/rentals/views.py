@@ -14,7 +14,7 @@ from dateutil.relativedelta import relativedelta
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
-from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, chart_settings, chart_dates, chart_labels
+from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, global_chart_settings, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -52,6 +52,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         
 def index(request):
     
+    global effective_current_date
+    
     if request.user.is_authenticated:
         
         landlord = Landlord.objects.get(user=request.user)
@@ -60,36 +62,59 @@ def index(request):
         revenue_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='income')
         expense_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='expense') 
                 
+        debt = 0
+        for property in properties:
+            for tenant in property.tenants.all():
+                debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']
+                
         dashboard_card_props = [
-        {
-            'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
-            'number': properties.count(),
-            'number_text': '',
-            'text': 'Properties',
-        },
-        {
-            'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd:,.0f}'),
-            'number_text': '',
-            'text': 'Revenue YTD',
-        },
-        {
-            'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
-            'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd + expense_ytd:,.0f}'),
-            'number_text': '',
-            'text': 'Income YTD',
-        },
-        {
-            'logoLink': settings.STATIC_URL + 'rentals/img/exclamation-diamond-fill.svg',
-            'number': '$1,000',
-            'number_text': '',
-            'text': 'Rent due',
-        },
+            {
+                'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
+                'number': properties.count(),
+                'number_text': '',
+                'text': 'Properties',
+            },
+            {
+                'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
+                'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd:,.0f}'),
+                'number_text': '',
+                'text': 'Revenue YTD',
+            },
+            {
+                'logoLink': settings.STATIC_URL + 'rentals/img/cash-coin.svg',
+                'number': get_currency_symbol(currency_basis) + str(f'{revenue_ytd + expense_ytd:,.0f}'),
+                'number_text': '',
+                'text': 'Income YTD',
+            },
+            {
+                'logoLink': settings.STATIC_URL + 'rentals/img/exclamation-diamond-fill.svg',
+                'number': get_currency_symbol(currency_basis) + str(f'{-debt:,.0f}'),
+                'number_text': '',
+                'text': 'Rent due',
+            },
         ]
+        
+        chart_settings = global_chart_settings
+        from_date = calculate_from_date(global_chart_settings['To'], global_chart_settings['timeline'])
+        chart_settings['From'] = from_date.strftime("%Y-%m-%d")
+        if type(chart_settings['To']) != str: 
+            chart_settings['To'] = chart_settings['To'].strftime("%Y-%m-%d")
+        
+        chart_data = get_chart_data(type='tenant',
+                                    element_id=2,
+                                    frequency=global_chart_settings['frequency'],
+                                    from_date=from_date,
+                                    to_date=global_chart_settings['To'],
+                                    properties=None
+                                    )  
+        
+        print(f"Chart settings: {chart_settings}")
         
         return render(request, 'rentals/index.html', {
             'dashboard_card_props': dashboard_card_props,
             'app_date': effective_current_date.strftime("%Y-%m-%d"),
+            'chart_settings': chart_settings,
+            'chart_data': chart_data,
         })
     else:
         return redirect('rentals:login')
@@ -179,6 +204,8 @@ def new_form(request, form_type):
 @login_required
 def table_data(request, data_type):
     
+    global effective_current_date
+    
     try:
         landlord = Landlord.objects.get(user=request.user)
         properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
@@ -263,6 +290,8 @@ def table_data(request, data_type):
 @login_required
 def handle_element(request, data_type, element_id):
     
+    global effective_current_date
+    
     match data_type:
         case 'property':
             try:
@@ -307,9 +336,9 @@ def handle_element(request, data_type, element_id):
                     # Get data for Payments schedule
                     # Create a list of month abbreviations for the six previous months
                     number_of_months = 5
-                    months = []
+                    months_for_payment_schedule = []
                     unique_categories.insert(0, 'rent')
-                    rows = {get_category_name(category): [] for category in unique_categories}
+                    rows_for_payment_schedule = {get_category_name(category): [] for category in unique_categories}
                     for i in range(number_of_months):
                         # Calculate the month number for the previous month
                         prev_month = (effective_current_date.month - i - 1) % 12
@@ -319,11 +348,11 @@ def handle_element(request, data_type, element_id):
                         month_abbrev = month_abbreviations[prev_month - 1]
                         
                         # Add the abbreviation to the list
-                        months.append(month_abbrev)
+                        months_for_payment_schedule.append(month_abbrev)
                         
                         # Calculate the year and month for the month to check
                         year_to_check = effective_current_date.year
-                        month_to_check = prev_month + 1
+                        month_to_check = prev_month
                         
                         # Adjust the year if the month is less than 1 (January)
                         if month_to_check < 1:
@@ -336,10 +365,11 @@ def handle_element(request, data_type, element_id):
                                 category=category,
                                 period=f"{year_to_check}-{month_to_check:02}",
                             ).exists()
-                            rows[get_category_name(category)].insert(0, 'green' if transaction_exists else 'red')
+                            rows_for_payment_schedule[get_category_name(category)].insert(0, 'green' if transaction_exists else 'red')
 
                     # Reverse the list to get the months in chronological order
-                    months.reverse()
+                    months_for_payment_schedule.reverse()
+                    print(f"Payment schedule data: {months_for_payment_schedule}, {rows_for_payment_schedule}")
 
                     data = {
                         'name': element.name,
@@ -353,8 +383,8 @@ def handle_element(request, data_type, element_id):
                             'all_time': float(element.transactions.filter(category='rent', date__lte=effective_current_date).aggregate(Sum('amount'))['amount__sum'] or 0),
                         },
                         'expenses': expenses,
-                        'months': months,
-                        'rows': rows,
+                        'months': months_for_payment_schedule,
+                        'rows': rows_for_payment_schedule,
                         'address': element.address,
                         'app_date': effective_current_date,
                     }
@@ -383,9 +413,11 @@ def handle_element(request, data_type, element_id):
                     }
                     
                     # Default chart settings
-                    data['chart_settings'] = chart_settings
-                    from_date = chart_settings['To'] - relativedelta(months=6) #chart_settings['timeline']
-                    data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'])                   
+                    # global chart_settings
+                    data['chart_settings'] = global_chart_settings
+                    from_date = calculate_from_date(global_chart_settings['To'], global_chart_settings['timeline'])
+                    data['chart_settings']['From'] = from_date
+                    data['chart_data'] = get_chart_data('tenant', element.id, global_chart_settings['frequency'], from_date, global_chart_settings['To'])                   
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
             case 'transaction':
@@ -505,6 +537,9 @@ def create_element(request, data_type):
     
 # Extract property choices for Tenant form
 def property_choices(request):
+    
+    global  effective_current_date
+    
     landlord = Landlord.objects.get(user=request.user)
     properties = Property.objects.filter(
             Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
@@ -517,6 +552,7 @@ def property_choices(request):
 
 # Handling effective date update
 def update_date(request):
+    
     if request.method == 'POST':
         
         data = json.loads(request.body)
@@ -526,6 +562,9 @@ def update_date(request):
         
         global effective_current_date
         effective_current_date = formatted_date
+        
+        # Update chart_settings['To'] with the new effective_current_date
+        global_chart_settings['To'] = effective_current_date
         
         # You may want to send a response with a success message
         return JsonResponse({'message': 'Date updated successfully'})
@@ -538,13 +577,18 @@ def chart_data_request(request):
         from_date = request.GET.get('from')
         to_date = request.GET.get('to')
         
-        chart_data = get_chart_data(type, id, frequency, from_date, to_date)
+        if type == 'homePage':
+            properties = Property.objects.filter(owned_by=Landlord.objects.get(id=request.user.id))
+        else:
+            properties = None
+        
+        chart_data = get_chart_data(type, id, frequency, from_date, to_date, properties)
 
         return JsonResponse(chart_data)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
-def get_chart_data(type, element_id, frequency, from_date, to_date):
+def get_chart_data(type, element_id, frequency, from_date, to_date, properties=None):
 
     # Create an empty data dictionary
     chart_data = {
@@ -552,29 +596,43 @@ def get_chart_data(type, element_id, frequency, from_date, to_date):
         'data': [],
     }
     
-    if type == 'tenant':
-        # Query the Tenant model
-        model = Tenant
-    elif type == 'property':
-        # Query the Property model
-        model = Property        
+    # Get the correct starting date for "All time" category
+    if from_date == '1900-01-01':
+        from_date = tenant.property.activity_start_date() - relativedelta(months=1)
+    
+    # Create set of dates and labels for the chart
     dates = chart_dates(from_date, to_date, frequency)
     chart_data['labels']= chart_labels(dates, frequency)
     
-    tenant = Tenant.objects.get(id=element_id)
-    chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
+    # if type == 'tenant':
+    #     # Query the Tenant model
+    #     model = Tenant
+    # elif type == 'property':
+    #     # Query the Property model
+    #     model = Property        
     
+    print(f"Type: {type}")
     # Iterate through the date range and compile data
     for d in dates:
-        if type == 'tenant':
-            time_delta = {
+
+        time_delta = {
                 'M': 1,
                 'Q': 3,
                 'Y': 12
             }
-            start_date = d - relativedelta(months = time_delta[frequency])
+        start_date = d - relativedelta(months = time_delta[frequency])
+
+        if type == 'tenant':
+            tenant = Tenant.objects.get(id=element_id)            
             total_rent = tenant.rent_total(end_date=d, start_date=start_date)
             chart_data['data'].append(total_rent)
-        
-    print(chart_data)
+            
+        if type == 'homePage' and properties:
+            transactions = Transaction.financials(end_date = d, target_currency=currency_basis, properties=properties, start_date=start_date, transaction_type='expense')
+            print(transactions)
+            chart_data['data'].append(transactions)
+            
+    chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency) if (type == 'tenant') else currency_basis
+    
+    print(f"Get chart data function. Data: {chart_data}")
     return chart_data

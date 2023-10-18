@@ -27,6 +27,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const newTypeButton = document.querySelector('.new-entry-button');
     newTypeButton.addEventListener('click', elementActionClickHandler);
 
+    // Hide property selector for the chart
+    const propertySelector = document.getElementById('chartPropertySelection').parentElement;
+    propertySelector.style.display = 'none';
+
 });
 
 function load_table(type) {
@@ -349,7 +353,6 @@ function load_element_details(type, elementId) {
                 break;
 
             case 'tenant':
-                console.log(type);
                 // Show the page name
                 document.querySelector('h2').innerHTML = `${Type}: ${element.first_name} ${element.last_name === null ? "" : element.last_name}`;
 
@@ -361,46 +364,14 @@ function load_element_details(type, elementId) {
                 document.querySelector('#tenantRevenueCard .display-4').textContent = 
                     (typeof element.all_time_rent === 'number' && !isNaN(element.all_time_rent)) ? formatNumberWithParentheses(element.rent_currency, element.all_time_rent) : 'NA';
                 
-                // Show actual chart settings
-                const chartFrequencySettings = document.querySelectorAll('.chart-frequency');               
-                for (let i = 0; i < chartFrequencySettings.length; i++) {
-                    if (chartFrequencySettings[i].value === element.chart_settings["frequency"]) {
-                        chartFrequencySettings[i].checked = true;
-                        break;
-                    }                
-                }
+                // Show actual chart settings               
+                updateFrequencySetting(element.chart_settings["frequency"])
                 chooseSelectedOption('chartTimeline', element.chart_settings['timeline']);
+                
                 document.getElementById("chartDateTo").value = element.chart_settings['To'];
-                const toDate = new Date(document.getElementById('chartDateTo').value);
-                const chartTimeline = document.getElementById("id_chartTimeline");
-                // changeTimeline(chartTimeline);
-                // console.log(element.chart_data)
-                let fromDate;
-                switch (chartTimeline.value) {
-                    case 'YTD':
-                        fromDate = new Date(new Date().getFullYear(), 0, 1);
-                        break;
-                    case '3m':
-                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 3, toDate.getDate());
-                        break;
-                    case '6m':
-                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 6, toDate.getDate());
-                        break;
-                    case '12m':
-                        fromDate = new Date(toDate.getFullYear(), toDate.getMonth() - 12, toDate.getDate());
-                        break;
-                    case '3Y':
-                        fromDate = new Date(toDate.getFullYear() - 3, toDate.getMonth(), toDate.getDate());
-                        break;
-                    case '5Y':
-                        fromDate = new Date(toDate.getFullYear() - 5, toDate.getMonth(), toDate.getDate());
-                        break;
-                    case 'All':
-                        fromDate = new Date('2000-01-01');
-                        break;
-                };
-                document.getElementById('chartDateFrom').value = convertDate(fromDate);
-                chartInitialization(type, element.chart_data);
+                document.getElementById("chartDateFrom").value = element.chart_settings['From'];
+
+                typeChartInitialization(type, element.chart_data);
 
                 break;
 
@@ -605,18 +576,18 @@ function addTransactionListeners() {
     });
 }
 
-// Make the default selection of the respective currency option
-function chooseSelectedOption(option, choice) {
-    const selectedElement = document.getElementById(`id_${option}`);
-    // Loop through each option in the select element
-    for (let i = 0; i < selectedElement.options.length; i++) {
-        const optionElement = selectedElement.options[i];
-        // Check if the option's value matches the value to match
-        const checkText = (option === 'category' || option === 'chartTimeline') ? optionElement.value : optionElement.textContent;
-        if (checkText === choice) {
-        // Set the selected attribute to make this option selected
-        optionElement.selected = true;
-        break; // Exit the loop once a match is found
-        }
-    }
-}
+// // Make the default selection of the respective currency option
+// function chooseSelectedOption(option, choice) {
+//     const selectedElement = document.getElementById(`id_${option}`);
+//     // Loop through each option in the select element
+//     for (let i = 0; i < selectedElement.options.length; i++) {
+//         const optionElement = selectedElement.options[i];
+//         // Check if the option's value matches the value to match
+//         const checkText = (option === 'category' || option === 'chartTimeline') ? optionElement.value : optionElement.textContent;
+//         if (checkText === choice) {
+//         // Set the selected attribute to make this option selected
+//         optionElement.selected = true;
+//         break; // Exit the loop once a match is found
+//         }
+//     }
+// }

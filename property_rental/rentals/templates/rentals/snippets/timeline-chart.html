@@ -1,68 +1,78 @@
-{% comment %} <form id="{{ chart_type }}Chart"> {% endcomment %}
-    <div class="row">
-        <div class="col-4">
-            <div class="row">
-                <label for="chartFrequencyButtons" class="form-label">Chart frequency</label>
-                <div class="col btn-group" id="chartFrequencyButtons">
-                    <input type="radio" class="btn-check chart-frequency" id="chartFrequencyM" name="chartFrequency" autocomplete="off" value="M">
-                    <label class="btn btn-outline-secondary" for="chartFrequencyM">M</label>
-
-                    <input type="radio" class="btn-check chart-frequency" id="chartFrequencyQ" name="chartFrequency" autocomplete="off" value="Q">
-                    <label class="btn btn-outline-secondary" for="chartFrequencyQ">Q</label>
-
-                    <input type="radio" class="btn-check chart-frequency" id="chartFrequencyY" name="chartFrequency" autocomplete="off" value="Y">
-                    <label class="btn btn-outline-secondary" for="chartFrequencyY">Y</label>
-                </div>
-            </div>
-        </div>         
-
-        <div class="col-4">
-            <label for="id_chartTimeline" class="form-label">Chart timeline</label>
-            <select class="form-select" name="chartTimeline" id="id_chartTimeline" onchange="changeTimeline(this)">
-                <option value="YTD">YTD</option>
-                <option value="3m">Last 3 months</option>
-                <option value="6m">Last 6 months</option>
-                <option value="12m">Last 12 months</option>
-                <option value="3Y">Last 3Y</option>
-                <option value="5Y">Last 5Y</option>
-                <option value="All">All history</option>
-                <option value="Custom">Custom</option>
-            </select>
-        </div>
-
-        <!-- Modal -->
-        <div class="modal fade" id="modalChartTimeline" role="dialog" aria-hidden="true">
-            <div class="modal-dialog modal-sm modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title w-100 font-weight-bold" id="chartModalLabel">Select chart timeline</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body mx-2">
-                        <form class="row g-2" id="chartCustomTimeline">
-                            <label for="chartDateFrom" class="form-label">From</label>
-                            <input type="date" class="form-control chart-timeline" id="chartDateFrom" name="From" value="">
-                            
-                            <div class="w-100"></div>
-
-                            <label for="chartDateTo" class="form-label">To</label>
-                            <input type="date" class="form-control chart-timeline" id="chartDateTo" name="To" value="">
-                        
-                            <div class="modal-footer d-flex justify-content-center">
-                                <button type="submit" class="btn btn-secondary">Confirm</button>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% comment %} <div class="col-1">
-            <button type="submit" class="btn btn-secondary">Update</button>
-        </div> {% endcomment %}
+<div class="row">
+    
+    <div class="col-4">
+        <label for="chartPropertySelection" class="form-label">Select Properties</label>
+        <select class="form-control" id="chartPropertySelection" name="chartPropertySelection">
+            <option value="all" selected>All properties</option>
+        </select>
     </div>
-{% comment %} </form> {% endcomment %}
+
+    <div class="col-4">
+        <div class="row">
+            <label for="chartFrequencyButtons" class="form-label">Frequency</label>
+            <div class="col btn-group" id="chartFrequencyButtons">
+                <input type="radio" class="btn-check chart-frequency" id="chartFrequencyM" name="chartFrequency" autocomplete="off" value="M"
+                    {% if chart_settings.frequency == "M" %} checked {% endif %}    
+                >
+                <label class="btn btn-outline-secondary" for="chartFrequencyM">M</label>
+
+                <input type="radio" class="btn-check chart-frequency" id="chartFrequencyQ" name="chartFrequency" autocomplete="off" value="Q"
+                    {% if chart_settings.frequency == "Q" %} checked {% endif %}
+                >
+                <label class="btn btn-outline-secondary" for="chartFrequencyQ">Q</label>
+
+                <input type="radio" class="btn-check chart-frequency" id="chartFrequencyY" name="chartFrequency" autocomplete="off" value="Y"
+                    {% if chart_settings.frequency == "Y" %} checked {% endif %}
+                >
+                <label class="btn btn-outline-secondary" for="chartFrequencyY">Y</label>
+            </div>
+        </div>
+    </div>         
+
+    <div class="col-4">
+        <label for="id_chartTimeline" class="form-label">Timeline</label>
+        <select class="form-select" name="chartTimeline" id="id_chartTimeline" onchange="changeTimeline(this)">
+            <option value="YTD" {% if chart_settings.timeline == 'YTD' %} selected="selected" {% endif %}>YTD</option>
+            <option value="3m" {% if chart_settings.timeline == '3m' %} selected="selected" {% endif %}>Last 3 months</option>
+            <option value="6m" {% if chart_settings.timeline == '6m' %} selected="selected" {% endif %}>Last 6 months</option>
+            <option value="12m" {% if chart_settings.timeline == '12m' %} selected="selected" {% endif %}>Last 12 months</option>
+            <option value="3Y" {% if chart_settings.timeline == '3Y' %} selected="selected" {% endif %}>Last 3Y</option>
+            <option value="5Y" {% if chart_settings.timeline == '5Y' %} selected="selected" {% endif %}>Last 5Y</option>
+            <option value="All" {% if chart_settings.timeline == 'All' %} selected="selected" {% endif %}>All history</option>
+            <option value="Custom">Custom</option>
+        </select>
+    </div>
+
+    <hr class="mt-2 mb=2">
+
+    <!-- Modal -->
+    <div class="modal fade" id="modalChartTimeline" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title w-100 font-weight-bold" id="chartModalLabel">Select chart timeline</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body mx-2">
+                    <form class="row g-2" id="chartCustomTimeline">
+                        <label for="chartDateFrom" class="form-label">From</label>
+                        <input type="date" class="form-control chart-timeline" id="chartDateFrom" name="From" value="{{ chart_settings.From }}">
+                        
+                        <div class="w-100"></div>
+
+                        <label for="chartDateTo" class="form-label">To</label>
+                        <input type="date" class="form-control chart-timeline" id="chartDateTo" name="To" value="{{ chart_settings.To }}">
+                    
+                        <div class="modal-footer d-flex justify-content-center">
+                            <button type="submit" class="btn btn-secondary">Confirm</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="tab-pane fade show active" role="tabpanel">
     <canvas id="{{ form_type }}BarChart" role="img"></canvas>
