@@ -2,8 +2,11 @@
     
     <div class="col-4">
         <label for="chartPropertySelection" class="form-label">Select Properties</label>
-        <select class="form-control" id="chartPropertySelection" name="chartPropertySelection">
+        <select class="form-select" id="chartPropertySelection" name="chartPropertySelection">
             <option value="all" selected>All properties</option>
+            {% for property in properties %}
+                <option value={{ property.id }}>{{ property.name }}</option>
+            {% endfor %}
         </select>
     </div>
 

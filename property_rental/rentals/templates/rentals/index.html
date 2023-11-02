@@ -56,7 +56,7 @@
     <script src="{% static 'rentals/index.js' %}"></script>
     {{ chart_data|json_script:"chartData" }}
     <script>
-        // Chart initialisation}
+        // Chart initialisation
         const chartDataScript = document.getElementById('chartData');
         const chartData = JSON.parse(chartDataScript.textContent);
         console.log(chartData)

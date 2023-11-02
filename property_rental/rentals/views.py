@@ -106,13 +106,16 @@ def index(request):
                                     from_date=from_date,
                                     to_date=global_chart_settings['To'],
                                     properties=properties
-                                    )  
+                                    )
+        properties = [ {'id': property.id, 'name': property.name} for property in properties]
+        print(properties)  
         
         return render(request, 'rentals/index.html', {
             'dashboard_card_props': dashboard_card_props,
             'app_date': effective_current_date.strftime("%Y-%m-%d"),
             'chart_settings': chart_settings,
             'chart_data': chart_data,
+            'properties': properties,
         })
     else:
         return redirect('rentals:login')
@@ -574,12 +577,16 @@ def chart_data_request(request):
         frequency = request.GET.get('frequency')
         from_date = request.GET.get('from')
         to_date = request.GET.get('to')
+        # print(id == 'null')
         
         if type == 'homePage':
             landlord = Landlord.objects.get(user=request.user)
             properties = Property.objects.filter(
                 Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
-                owned_by=landlord).all()        
+                owned_by=landlord)
+            if id != 'null':
+                properties = properties.filter(id=id)
+            properties = properties.all()
         else:
             properties = None
         
@@ -618,6 +625,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
         'Y': 12
         }
     
+    print(properties, properties == None)
     if type == 'homePage' and properties:
         # Filter transactions for the specified date range
         filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))

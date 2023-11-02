@@ -2,8 +2,10 @@ let myChart;
 
 document.addEventListener('DOMContentLoaded', function() {
 
-    const form = document.getElementById('chartCustomTimeline');
-    form.addEventListener('submit', handleCustomTimeline);
+    const properties = document.get
+
+    const timelineForm = document.getElementById('chartCustomTimeline');
+    timelineForm.addEventListener('submit', handleCustomTimeline);
 
     const frequencyButtons = document.querySelectorAll('.chart-frequency');
     frequencyButtons.forEach(button => {
