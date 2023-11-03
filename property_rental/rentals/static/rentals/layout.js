@@ -482,3 +482,19 @@ function updateEffectiveDate() {
     });
 
 }
+
+// Make the default selection of the respective currency option
+function chooseSelectedOption(option, choice) {
+    const selectedElement = document.getElementById(`id_${option}`);
+    // Loop through each option in the select element
+    for (let i = 0; i < selectedElement.options.length; i++) {
+        const optionElement = selectedElement.options[i];
+        // Check if the option's value matches the value to match
+        const checkText = (option === 'category' || option === 'chartTimeline') ? optionElement.value : optionElement.textContent;
+        if (checkText === choice) {
+        // Set the selected attribute to make this option selected
+        optionElement.selected = true;
+        break; // Exit the loop once a match is found
+        }
+    }
+}

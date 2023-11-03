@@ -2,6 +2,7 @@ from datetime import date, timedelta
 import requests
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
+import datetime
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES
 
@@ -11,10 +12,9 @@ effective_current_date = date.today()
 # Define the currency of representation for aggregated data
 currency_basis = 'USD'
 
-chart_settings = {
+global_chart_settings = {
     'frequency': 'M',
     'timeline': '6m',
-    # 'From': date(effective_current_date.year, 1, 1),
     'To': effective_current_date
     }
 
@@ -31,7 +31,6 @@ def get_category_name(category):
     return code  # Return the code itself if not found
 
 def convert_period(string_date):
-    print(f"Printing string date: {string_date}")
     MONTHS = {
         '01': 'Jan',
         '02': 'Feb',
@@ -62,7 +61,7 @@ def is_yahoo_finance_available():
         pass
     return False
 
-def download_FX_rate(base_currency, target_currency, date, max_attempts=5):
+def update_FX_database(base_currency, target_currency, date, max_attempts=5):
     
     if not is_yahoo_finance_available():
         raise ConnectionError("Yahoo Finance is not available")
@@ -117,21 +116,7 @@ def chart_dates(start_date, end_date, freq):
         'Y': 'Y'
     }
     
-    #  # If the frequency is yearly, adjust the end_date to the end of the current year
-    # if freq == 'Y':
-    #     end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-    #     end_date = end_date.replace(month=12, day=31)
-    #     start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
-    #     # Keep one year if start and end within one calendar year
-    #     if end_date.year - start_date.year != 0:
-    #         start_date = datetime.date(start_date.year + 1, 1, 1)
-            
-    # if freq == 'M':
-    #     # end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-    #     end_date = end_date.replace(day=28)
-    
     # Convert the start_date and end_date strings to date objects
-    print(end_date)
     if type(start_date) == str:
         start_date = date.fromisoformat(start_date)
     if type(end_date) == str:
@@ -148,8 +133,7 @@ def chart_dates(start_date, end_date, freq):
     if freq == 'M':
         # Adjust the end_date to the end of the month
         end_date = end_date + relativedelta(months = 1)
-
-    print(pd.date_range(start_date, end_date, freq=frequency[freq]).date)
+        start_date = start_date + relativedelta(months = 1)
 
     # Get list of dates from pandas
     return pd.date_range(start_date, end_date, freq=frequency[freq]).date
@@ -177,3 +161,29 @@ def chart_labels(dates, frequency):
         return labels
     if frequency == 'Y':
         return [i.strftime("%Y") for i in dates]
+
+# Calculating from date based on the final date and timeline
+def calculate_from_date(to_date, timeline):
+    
+    if type(to_date) == str:
+        to_date = datetime.datetime.strptime(to_date, "%Y-%m-%d").date()  # Convert 'to' date to datetime.date
+
+    if timeline == 'YTD':
+        from_date = to_date.replace(months=1, day=1)
+    elif timeline == '3m':
+        from_date = to_date - relativedelta(months=3)
+    elif timeline == '6m':
+        from_date = to_date - relativedelta(months=6)
+    elif timeline == '12m':
+        from_date = to_date - relativedelta(years=1)
+    elif timeline == '3Y':
+        from_date = to_date - relativedelta(years=3)
+    elif timeline == '5Y':
+        from_date = to_date - relativedelta(years=5)
+    elif timeline == 'All time':
+        from_date = '1900-01-01' # Convention that ultimately will be converted to the date of the first transaction
+    else:
+        # Handle other cases as needed
+        from_date = to_date
+
+    return from_date

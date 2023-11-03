@@ -1,34 +1,31 @@
-let myChart; // Declare a variable to store the chart instance
+let myChart;
 
 document.addEventListener('DOMContentLoaded', function() {
 
-    const form = document.getElementById('chartCustomTimeline');
-    form.addEventListener('submit', handleCustomTimeline);
+    const properties = document.get
+
+    const timelineForm = document.getElementById('chartCustomTimeline');
+    timelineForm.addEventListener('submit', handleCustomTimeline);
 
     const frequencyButtons = document.querySelectorAll('.chart-frequency');
     frequencyButtons.forEach(button => {
-        button.addEventListener('click', async () => {
-            console.log(`Event listener triggered. ${myChart}`);
-            await updateChart(myChart);
+        button.addEventListener('click', async function() {
+            await updateChart(myChart, this);
         });
     })
 });
 
 // Setting the chart
-function chartInitialization(type, chartData) {
+function typeChartInitialization(type, chartData) {
     const ctxChart = document.getElementById(`${type}BarChart`);
     myChart = new Chart(ctxChart, {
         type: 'bar',
         data: {
             labels: chartData.labels,
-            datasets: [{
-                data: chartData.data,
-                datalabels: {
-                    anchor: 'end',
-                    align: 'top',
-                    offset: 5,
-                }
-            }]
+            datasets: chartData.datasets
+            // [{
+            //     data: chartData.datasets.map(value => parseFloat(value.toLocaleString())),
+            // }]
         },
         plugins: [ChartDataLabels],
         options: {
@@ -60,6 +57,15 @@ function chartInitialization(type, chartData) {
                 legend: {
                     display: false, // Hide the legend
                 },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    offset: 5,
+                    formatter: (value, context) => {
+                        // Format the value with commas as thousand separators
+                        return value.toLocaleString("en-US");
+                    }
+                }
             },
         },
     });
@@ -91,41 +97,27 @@ function changeTimeline(element) {
             fromDate = new Date(toDate.getFullYear() - 5, toDate.getMonth(), toDate.getDate());
             break;
         case 'All':
-            fromDate = new Date('2000-01-01');
+            fromDate = new Date('1900-01-01');
             break;
         case 'Custom':
             let myModal = new bootstrap.Modal(document.getElementById('modalChartTimeline'), {});
             myModal.show();
-            break;
+            return;
     }
 
-    if (element.value != "Custom") {
-        document.getElementById('chartDateFrom').value = convertDate(fromDate);
-        updateChart(myChart);
-    }
+    // Run if case is not 'Custom'
+    document.getElementById('chartDateFrom').value = convertDate(fromDate);
+    updateChart(myChart, element);
 }
 
 // Convert to YYYY-mmm-dd format
 function convertDate(date) {
     let day = ("0" + date.getDate()).slice(-2);
     let month = ("0" + (date.getMonth() + 1)).slice(-2);
-    console.log(day, month);
     return date.getFullYear()+"-"+(month)+"-"+(day);
 }
 
-// Handling click of custom timeline modal
-function handleCustomTimeline(event) {
-    event.preventDefault();
-
-    // Close the Modal
-    const modalReference = document.getElementById("modalChartTimeline");
-    const timelineModal = bootstrap.Modal.getInstance(modalReference);
-    timelineModal.hide();
-
-    updateChart(myChart);
-
-}
-
+// Fetching data for the chart. Defined in layout.js as used on the several pages
 function getChartData(type, elementId, frequency, from, to) {
 
     return fetch(`/get_chart_data?type=${type}&id=${elementId}&frequency=${frequency}&from=${from}&to=${to}`)
@@ -139,32 +131,65 @@ function getChartData(type, elementId, frequency, from, to) {
         });
 }
 
-async function updateChart(chart) {
+// Handling click of custom timeline modal
+function handleCustomTimeline(event) {
+    event.preventDefault();
 
-    // Get the current URL path
-    const path = window.location.pathname;
-            
-    // Extract the type from the path
-    const match = path.match(/^\/(properties|tenants|transactions)\/?/);
-    let type = match ? match[1] : null;
+    // Close the Modal
+    const modalReference = document.getElementById("modalChartTimeline");
+    const timelineModal = bootstrap.Modal.getInstance(modalReference);
+    timelineModal.hide();
 
-    // Convert plural form to singular
-    if (type) {
-        if (type === 'properties') {
-            type = 'property';
-        } else {
-            type = type.slice(0, -1);
-        }
+    // Feed select element as second argument to recover target correctly
+    updateChart(myChart, document.getElementById("id_chartTimeline"));
+
+}
+
+async function updateChart(chart, element) {
+
+    const target = element.closest('.card').getAttribute('id');
+
+    let type;
+    let elementId;
+
+    if (target === 'homePageChartCard') {
+        type = 'homePage';
+        elementId = null;
+    } else if (target === 'tenantChartCard') {
+        type = 'tenant';
+        elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)
     }
 
-    const elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)
     const frequency = document.querySelector('input[name="chartFrequency"]:checked').value;
     const from = document.getElementById("chartDateFrom").value;
     const to = document.getElementById("chartDateTo").value;
     const chartData = await getChartData(type, elementId, frequency, from, to);
 
     chart.data.labels = chartData.labels;
-    chart.data.datasets[0].data = chartData.data;
+    chart.data.datasets = chartData.datasets;
     chart.update();
+    chart.draw();
 
+    // Reapply the formatter for data labels
+    // chart.data.datasets[0].datalabels.formatter = (value, context) => {
+    //     // Format the value with commas as thousand separators
+    //     return value.toLocaleString() + ' Q';
+    //     // return "test";
+    // };
+
+    // console.log("Redrawing the chart");
+    // // Redraw the chart to reflect the updated formatter
+    // chart.draw();
+
+}
+
+// Show actual chart settings
+function updateFrequencySetting(frequency) {
+    const chartFrequencySettings = document.querySelectorAll('.chart-frequency');               
+    for (let i = 0; i < chartFrequencySettings.length; i++) {
+        if (chartFrequencySettings[i].value === frequency) {
+            chartFrequencySettings[i].checked = true;
+            break;
+        }                
+    }
 }

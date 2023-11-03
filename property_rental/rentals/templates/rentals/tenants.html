@@ -45,7 +45,7 @@
                     {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/calendar3.svg" number="" number_text="" text="Moved in" %}
                 </div>
                 <div class="col-md-3" id="tenantRentCard">
-                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/cash-coin.svg" number="" number_text="" text="Monthly rent" %}
+                    {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/cash-coin.svg" number="" number_text="" text="Monthly rent rate" %}
                 </div>
                 <div class="col-md-3" id="tenantRevenueCard">
                     {% include "rentals/snippets/dashboard_card.html" with logo_link="/static/rentals/img/cash-coin.svg" number=card.number number_text="" text="All-time rent" %}
@@ -55,9 +55,9 @@
             <div class="row">
                 <div class="col-md-12">
                     <!-- Cash Flow Chart -->
-                    <div class="card">
-                        <div class="card-header">
-                            Cash Flow Chart
+                    <div class="card" id="tenantChartCard">
+                        <div class="card-header font-weight-bold">
+                            Rent Chart
                         </div>
                         <div class="card-body">
                             {% include "rentals/snippets/timeline-chart.html" with form_type="tenant" %}
@@ -77,6 +77,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.1.0"></script>
 
-    <script src="{% static 'rentals/element.js' %}"></script>
     <script src="{% static 'rentals/chart.js' %}"></script>
+    <script src="{% static 'rentals/element.js' %}"></script>
 {% endblock script %}

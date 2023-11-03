@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 import networkx as nx
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
-from .utils import effective_current_date, download_FX_rate
+from .utils import effective_current_date, update_FX_database
 
 # Amending default AbstractUser to differentiate between Landlord and Tenant
 class User(AbstractUser):
@@ -49,6 +49,10 @@ class Property(models.Model):
             return 'Rented out'
         else:
             return 'Idle'
+        
+    # Calculation of the starting date of transaction activities
+    def activity_start_date(self):
+        return self.transactions.order_by('date').first().date
     
 class Tenant(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
@@ -158,7 +162,7 @@ class Transaction(models.Model):
     comment = models.TextField(max_length=250, blank=True, null=True)
     
     @classmethod
-    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type='income'):
+    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type=None, category=None):
         """
         Calculate the sum of transactions for a specific period and type.
 
@@ -174,14 +178,12 @@ class Transaction(models.Model):
         
         FX_conversion_required = True
         
-        queryset = cls.objects.filter(type=transaction_type, date__lte=end_date)
+        queryset = cls.objects.filter(date__lte=end_date)
         
         if properties:
             queryset = queryset.filter(property__in=properties)
-            print(f"Properties: {properties}")
         
         if properties is not None and len(properties) == 1:
-            print(f'FX conversion not required')
             target_currency = properties[0].currency
             FX_conversion_required = False
         else:
@@ -190,19 +192,20 @@ class Transaction(models.Model):
         
         if start_date:
             queryset = queryset.filter(date__range=(start_date, end_date))
+            
+        if transaction_type:
+            queryset = queryset.filter(type=transaction_type)
+            
+        if category:
+            queryset = queryset.filter(category=category)
         
         transactions = queryset.values('date', 'currency', 'amount').all()
-        print(f"Transactoins: {transactions}")
         
         total_amount = 0
         for transaction in transactions:
             
-            print(FX_conversion_required)
             if FX_conversion_required:
-                print(f"Currency: {transaction['currency']}. Target currency: {target_currency}")
                 fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
-                print(fx_rate)
-                print(f"FX rate for {transaction['amount']}: {fx_rate}")
             else:
                 fx_rate = 1
             total_amount += transaction['amount'] * fx_rate
@@ -253,7 +256,7 @@ class FX(models.Model):
 
                 if existing_rate is None or existing_rate[f'{source}{target}'] is None:
                     # Get the FX rate for the date
-                    rate_data = download_FX_rate(source, target, date)
+                    rate_data = update_FX_database(source, target, date)
 
                     if rate_data is not None:
                         # Update or create an FX instance with the new rate
