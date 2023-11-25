@@ -625,7 +625,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
         'Y': 12
         }
     
-    print(properties, properties == None)
+    print("printing from get_chart_data", properties, properties == None)
     if type == 'homePage' and properties:
         # Filter transactions for the specified date range
         filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))
