@@ -110,6 +110,11 @@ function changeTimeline(element) {
     updateChart(myChart, element);
 }
 
+// Handling changing the set of properties for the chart. Function referenced directly in timeline-chart.html
+function changeProperty(element) {
+    updateChart(myChart, element);
+}
+
 // Convert to YYYY-mmm-dd format
 function convertDate(date) {
     let day = ("0" + date.getDate()).slice(-2);
@@ -154,7 +159,10 @@ async function updateChart(chart, element) {
 
     if (target === 'homePageChartCard') {
         type = 'homePage';
-        elementId = null;
+        elementId = document.getElementById('chartPropertySelection').value
+        if (elementId === 'all') {
+            elementId = null;
+        }
     } else if (target === 'tenantChartCard') {
         type = 'tenant';
         elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)
