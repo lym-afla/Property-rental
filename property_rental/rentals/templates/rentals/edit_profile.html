@@ -1,13 +1,12 @@
-{% extends "rentals/layout.html" %}
+{% extends "rentals/profile_layout.html" %}
 {% load static %}
 
-{% block content %}
+{% block profile_content %}
 
-    <h2>Profile Details</h2>
     <form method="post">
         {% csrf_token %}
         {{ profile_form.as_p }}
-        <button type="submit">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>
     </form>
 
-{% endblock content %}
+{% endblock profile_content %}

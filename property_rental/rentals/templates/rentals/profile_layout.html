@@ -1,0 +1,25 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+
+    <div class="container mt-4">
+        <h2>Profile</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <!-- Side Navigation -->
+                <div class="nav flex-column nav-pills me-3" id="nav-tab" role="tablist" aria-orientation="vertical">
+                    <button class="nav-link active" id="nav-profile-tab" data-bs-toggle="tab" data-bs-target="#nav-profile" type="button" role="tab" aria-controls="nav-profile" aria-selected="true">User details</button>
+                    <button class="nav-link" id="nav-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-settings" type="button" role="tab" aria-controls="nav-settings" aria-selected="false">Settings</button>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <!-- Tab Content -->
+                <div class="tab-content" id="nav-tabContent">
+                    {% block profile_content %} {% endblock profile_content %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock content %}
