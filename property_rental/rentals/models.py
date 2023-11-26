@@ -14,8 +14,12 @@ from .utils import effective_current_date, update_FX_database
 class User(AbstractUser):
     is_landlord = models.BooleanField(default=False)
     is_tenant = models.BooleanField(default=False)
-    # Add additional fields as needed
-
+    
+    default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', blank=True, null=True)
+    use_default_currency_for_all_data = models.BooleanField(default=False)
+    chart_frequency = models.CharField(max_length=1, default='M')
+    chart_timeline = models.CharField(max_length=3, default='6m')
+    
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if self.is_landlord:

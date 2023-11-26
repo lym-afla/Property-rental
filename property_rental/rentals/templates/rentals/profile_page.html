@@ -1,0 +1,29 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+
+    <div class="container mt-4">
+        <h2>Profile</h2>
+        <div class="d-flex align-items-start">
+            <div class="nav flex-column nav-pills me-3" id="nav-tab" role="tablist" aria-orientation="vertical">
+              <button class="nav-link active" id="nav-profile-tab" data-bs-toggle="tab" data-bs-target="#nav-profile" type="button" role="tab" aria-controls="nav-profile" aria-selected="true">User details</button>
+              <button class="nav-link" id="nav-settings-tab" data-bs-toggle="tab" data-bs-target="#nav-settings" type="button" role="tab" aria-controls="nav-settings" aria-selected="false">Settings</button>
+            </div>
+            <div class="tab-content" id="nav-tabContent">
+                <div class="tab-pane fade show active" id="nav-profile" role="tabpanel" aria-labelledby="nav-profile-tab" tabindex="0">
+                    {% comment %} <h3>User Details</h3> {% endcomment %}
+                    <p>Username: {{ user.username }}</p>
+                    <p>First Name: {{ user.first_name }}</p>
+                    <p>Last Name: {{ user.last_name }}</p>
+                    <p>Email: {{ user.email }}</p>
+                    <a href="{% url 'rentals:edit_profile' %}">Edit Profile</a>
+                </div>
+                <div class="tab-pane fade" id="nav-settings" role="tabpanel" aria-labelledby="nav-settings-tab" tabindex="0">
+                    
+                </div>
+            </div>
+        </div>
+    <div>
+
+{% endblock content %}

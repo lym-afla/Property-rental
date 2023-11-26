@@ -14,6 +14,16 @@ class CustomUserCreationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ('username', 'email', 'password1', 'password2')
+        
+class UserProfileForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'email']
+        
+class UserSettingsForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline']
 
 class PropertyForm(forms.ModelForm):
     class Meta:

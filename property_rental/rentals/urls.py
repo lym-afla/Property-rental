@@ -11,6 +11,9 @@ urlpatterns = [
     path('properties/', views.properties, name='properties'),
     path('tenants/', views.tenants, name='tenants'),
     path('transactions/', views.transactions, name='transactions'),
+    path('profile/', views.profile_page, name='profile_page'),
+    path('edit-profile/', views.edit_profile, name='edit_profile'),
+    # path('settings/', views.settings, name='settings'),
     
     # API methods
     path('table-data/<str:data_type>', views.table_data, name='table_data'),

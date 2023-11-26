@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
 
-from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
 from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, global_chart_settings, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
@@ -66,7 +66,7 @@ def index(request):
         for property in properties:
             for tenant in property.tenants.all():
                 debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']
-                
+        print(settings.STATIC_URL)                
         dashboard_card_props = [
             {
                 'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
@@ -150,6 +150,41 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect('rentals:login')
+
+@login_required
+def profile_page(request):
+    user = request.user
+    return render(request, 'rentals/profile_page.html', {'user': user})
+
+# User profile form
+@login_required
+def edit_profile(request):
+    user = request.user
+    profile_form = UserProfileForm(instance=user)
+    # settings_form = UserSettingsForm(instance=user)
+
+    if request.method == 'POST':
+        profile_form = UserProfileForm(request.POST, instance=user)
+        if profile_form.is_valid():
+            print(f"Printing profile form from profile {profile_form}")
+            profile_form.save()
+            return redirect('rentals:profile_page')
+
+    return render(request, 'rentals/edit_profile.html', {'profile_form': profile_form})
+
+# # User settings form
+# @login_required
+# def settings(request):
+#     user = request.user
+#     settings_form = UserSettingsForm(instance=user)
+
+#     if request.method == 'POST':
+#         settings_form = UserSettingsForm(request.POST, instance=user)
+#         if settings_form.is_valid():
+#             settings_form.save()
+#             return redirect('rentals:settings')
+
+#     return render(request, 'rentals/settings.html', {'settings_form': settings_form})
 
 # Render properties page
 @login_required
