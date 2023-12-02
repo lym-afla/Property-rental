@@ -14,7 +14,7 @@ from dateutil.relativedelta import relativedelta
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
-from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, global_chart_settings, chart_dates, chart_labels, calculate_from_date
+from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -65,8 +65,7 @@ def index(request):
         debt = 0
         for property in properties:
             for tenant in property.tenants.all():
-                debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']
-        print(settings.STATIC_URL)                
+                debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']               
         dashboard_card_props = [
             {
                 'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
@@ -94,17 +93,18 @@ def index(request):
             },
         ]
         
-        chart_settings = global_chart_settings
-        from_date = calculate_from_date(global_chart_settings['To'], global_chart_settings['timeline'])
+        chart_settings = request.session['chart_settings']
+        print(f"Index: {chart_settings}")
+        from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
         chart_settings['From'] = from_date.strftime("%Y-%m-%d")
         if type(chart_settings['To']) != str: 
             chart_settings['To'] = chart_settings['To'].strftime("%Y-%m-%d")
         
         chart_data = get_chart_data(type='homePage',
                                     element_id=None,
-                                    frequency=global_chart_settings['frequency'],
+                                    frequency=chart_settings['frequency'],
                                     from_date=from_date,
-                                    to_date=global_chart_settings['To'],
+                                    to_date=chart_settings['To'],
                                     properties=properties
                                     )
         properties = [ {'id': property.id, 'name': property.name} for property in properties]
@@ -141,6 +141,16 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
+            
+            # Store user-specific settings in the session
+            request.session['chart_settings'] = {
+                'default_currency': user.default_currency,
+                'default_currency_for_all_data': user.use_default_currency_for_all_data,
+                'frequency': user.chart_frequency,
+                'timeline': user.chart_timeline,
+                'To': str(effective_current_date),
+            }
+            
             return redirect('rentals:index')
     else:
         form = AuthenticationForm()
@@ -154,7 +164,28 @@ def logout_view(request):
 @login_required
 def profile_page(request):
     user = request.user
-    return render(request, 'rentals/profile_page.html', {'user': user})
+    settings_form = UserSettingsForm(instance=user)
+
+    if request.method == 'POST':
+        if 'settings_form_submit' in request.POST:
+            settings_form = UserSettingsForm(request.POST, instance=user)
+            if settings_form.is_valid():
+                settings_form.save()
+                
+                # After saving, update the session data
+                request.session['chart_settings'] = {
+                    'default_currency': user.default_currency,
+                    'default_currency_for_all_data': user.use_default_currency_for_all_data,
+                    'frequency': user.chart_frequency,
+                    'timeline': user.chart_timeline,
+                    'To': str(effective_current_date),
+                }
+
+                return JsonResponse({'success': True}, status=200)
+            else:
+                return JsonResponse({'errors': serializer.errors}, status=400)
+
+    return render(request, 'rentals/profile_page.html', {'user': user, 'settings_form': settings_form})
 
 # User profile form
 @login_required
@@ -449,10 +480,11 @@ def handle_element(request, data_type, element_id):
                     
                     # Default chart settings
                     # global chart_settings
-                    data['chart_settings'] = global_chart_settings
-                    from_date = calculate_from_date(global_chart_settings['To'], global_chart_settings['timeline'])
+                    chart_settings = request.session['chart_settings']
+                    data['chart_settings'] = chart_settings
+                    from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
                     data['chart_settings']['From'] = from_date
-                    data['chart_data'] = get_chart_data('tenant', element.id, global_chart_settings['frequency'], from_date, global_chart_settings['To'])                   
+                    data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'])                   
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
             case 'transaction':
@@ -598,9 +630,10 @@ def update_date(request):
         
         global effective_current_date
         effective_current_date = formatted_date
+        request.session['chart_settings']['To'] = str(effective_current_date)
         
-        # Update chart_settings['To'] with the new effective_current_date
-        global_chart_settings['To'] = effective_current_date
+        # # Update chart_settings['To'] with the new effective_current_date
+        # global_chart_settings['To'] = effective_current_date
         
         # You may want to send a response with a success message
         return JsonResponse({'message': 'Date updated successfully'})
@@ -659,8 +692,6 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
         'Q': 3,
         'Y': 12
         }
-    
-    print("printing from get_chart_data", properties, properties == None)
     if type == 'homePage' and properties:
         # Filter transactions for the specified date range
         filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))

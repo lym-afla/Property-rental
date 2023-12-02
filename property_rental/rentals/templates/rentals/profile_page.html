@@ -3,14 +3,70 @@
 
 {% block profile_content %}
     <div class="tab-pane fade show active" id="nav-profile" role="tabpanel" aria-labelledby="nav-profile-tab" tabindex="0">
-        <p class="mb-2">Username: {{ user.username }}</p>
-        <p class="mb-2">First Name: {{ user.first_name }}</p>
-        <p class="mb-2">Last Name: {{ user.last_name }}</p>
-        <p class="mb-2">Email: {{ user.email }}</p>
-        <a href="{% url 'rentals:edit_profile' %}" class="btn btn-primary">Edit Profile</a>
+        {% for field in profile_form %}
+            <div class="mb-3 row">
+                <label class"col-md-3 col-form-label">{{ field.name }}</label>
+                <div class="col-md-9 d-flex align-items-center">
+                    <p class="mb-0">{{ field }}</p>
+                </div>
+            </div>
+        {% endfor %}
+        <div class="mb-3 row">
+            <label class="col-md-3 col-form-label">Username:</label>
+            <div class="col-md-9 d-flex align-items-center">
+                <p class="mb-0">{{ user.username }}</p>
+            </div>
+        </div>
+        <div class="mb-3 row">
+            <label class="col-md-3 col-form-label">First Name:</label>
+            <div class="col-md-9 d-flex align-items-center">
+                <p class="mb-0">{{ user.first_name }}</p>
+            </div>
+        </div>
+        <div class="mb-3 row">
+            <label class="col-md-3 col-form-label">Last Name:</label>
+            <div class="col-md-9 d-flex align-items-center">
+                <p class="mb-0">{{ user.last_name }}</p>
+            </div>
+        </div>
+        <div class="mb-3 row">
+            <label class="col-md-3 col-form-label">Email:</label>
+            <div class="col-md-9 d-flex align-items-center">
+                <p class="mb-0">{{ user.email }}</p>
+            </div>
+        </div>
+        <div class="mb-3 row">
+            <div class="col-md-9">
+                <a href="{% url 'rentals:edit_profile' %}" class="btn btn-primary">Edit Profile</a>
+            </div>
+        </div>
     </div>
     <div class="tab-pane fade" id="nav-settings" role="tabpanel" aria-labelledby="nav-settings-tab" tabindex="0">
-        <!-- Settings Content Goes Here -->
-    </div>
+        <form id="userSettingsForm" method="post" action="{% url 'rentals:profile_page' %}">
+            {% csrf_token %}
+            <input type="hidden" name="settings_form_submit" value="1">
 
+            {% for field in settings_form %}
+            <div class="mb-3 row">
+                <label for="{{ field.id_for_label }}" class="col-md-3 col-form-label">{{ field.label }}</label>
+                <div class="col-md-9">
+                    <div class="form-check">
+                        {{ field }}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+            <div class="mb-3 row">
+                <div class="col-md-9">
+                    <button type="submit" class="btn btn-primary">Save settings</button>
+                </div>
+            </div>
+        </form>
+    </div>
 {% endblock profile_content %}
+
+{% block script %}
+
+    <script src="{% static 'rentals/settings.js' %}"></script>
+
+{% endblock script %}

@@ -69,3 +69,11 @@ html, body {
     display: none;
 } */
 
+/* Fising the positioning of check box in the form */
+.form-check-input {
+    margin-left: 0!important; /* Override the default left margin */
+}
+
+.align-middle {
+    margin-top: 8px; /* Adjust the top margin to align the checkbox with other form elements */
+}

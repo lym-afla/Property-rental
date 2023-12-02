@@ -12,11 +12,11 @@ effective_current_date = date.today()
 # Define the currency of representation for aggregated data
 currency_basis = 'USD'
 
-global_chart_settings = {
-    'frequency': 'M',
-    'timeline': '6m',
-    'To': effective_current_date
-    }
+# global_chart_settings = {
+#     'frequency': 'M',
+#     'timeline': '6m',
+#     'To': effective_current_date
+#     }
 
 def get_currency_symbol(currency_code):
     for code, symbol in CURRENCY_CHOICES:

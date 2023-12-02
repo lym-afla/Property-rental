@@ -19,11 +19,75 @@ class UserProfileForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'})
+        }
+        labels = {
+            'username': 'Username:',
+            'first_name': 'First Name:',
+            'last_name': 'Last Name:',
+            'email': 'Email:',
+        }
+
+    # def __init__(self, *args, **kwargs):
+    #     super(UserProfileForm, self).__init__(*args, **kwargs)
+
+    #     for field_name, field in self.fields.items():
+    #         field.widget.attrs['class'] = 'form-control'
         
 class UserSettingsForm(forms.ModelForm):
+    FREQUENCY_CHOICES = [
+        ('M', 'Monthly'),
+        ('Q', 'Quarterly'),
+        ('Y', 'Yearly'),
+    ]
+
+    TIMELINE_CHOICES = [
+        ('YTD', 'Year to Date'),
+        ('3m', 'Last 3 months'),
+        ('6m', 'Last 6 months'),
+        ('12m', 'Last 12 months'),
+        ('3Y', 'Last 3 years'),
+        ('5Y', 'Last 5 years'),
+        ('All', 'All history'),
+        ('Custom', 'Custom'),
+    ]
+    
+    default_currency = forms.ChoiceField(
+        choices=CURRENCY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Default currency'
+        )
+    use_default_currency_for_all_data = forms.BooleanField(
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Use default currency for all data?',
+        required=False
+    )
+    chart_frequency = forms.ChoiceField(
+        choices=FREQUENCY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Chart frequency'
+    )
+    chart_timeline = forms.ChoiceField(
+        choices=TIMELINE_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Chart timeline'
+    )
+    
     class Meta:
         model = User
         fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline']
+        # widgets = {
+        #     'chart_frequency': forms.Select(attrs={'class': 'form-select'}),
+        #     'chart_timeline': forms.Select(attrs={'class': 'form-select'})
+        # }
+        # labels = {
+        #     'chart_frequency': 'Chart frequency:',
+        #     'chart_timeline': 'Chart timeline:',
+        # }
 
 class PropertyForm(forms.ModelForm):
     class Meta:
