@@ -14,7 +14,7 @@ from dateutil.relativedelta import relativedelta
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
-from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, currency_basis, chart_dates, chart_labels, calculate_from_date
+from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -55,6 +55,8 @@ def index(request):
     global effective_current_date
     
     if request.user.is_authenticated:
+
+        currency_basis = request.session['default_currency']
         
         landlord = Landlord.objects.get(user=request.user)
         properties = landlord.properties.filter(Q(sold__isnull=True) | Q(sold__gte=effective_current_date)).all()
@@ -94,7 +96,6 @@ def index(request):
         ]
         
         chart_settings = request.session['chart_settings']
-        print(f"Index: {chart_settings}")
         from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
         chart_settings['From'] = from_date.strftime("%Y-%m-%d")
         if type(chart_settings['To']) != str: 
@@ -105,10 +106,27 @@ def index(request):
                                     frequency=chart_settings['frequency'],
                                     from_date=from_date,
                                     to_date=chart_settings['To'],
+                                    currency=currency_basis,
                                     properties=properties
                                     )
+        
+        digits = request.session['digits']
+        expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc(properties, currency_basis, True, digits)
+        
+        pnl = {
+            'rent': {
+                'ytd': rent_ytd,
+                'all_time': rent_all_time,
+                },
+            'expenses': expenses,
+            'net_income': {
+                'ytd': rent_ytd + expenses['total']['ytd'],
+                'all_time': rent_all_time + expenses['total']['all_time'],
+                },
+            'format_args': str(digits) + ',' + get_currency_symbol(currency_basis),
+            }
+        
         properties = [ {'id': property.id, 'name': property.name} for property in properties]
-        print(properties)  
         
         return render(request, 'rentals/index.html', {
             'dashboard_card_props': dashboard_card_props,
@@ -116,6 +134,7 @@ def index(request):
             'chart_settings': chart_settings,
             'chart_data': chart_data,
             'properties': properties,
+            'pnl': pnl,
         })
     else:
         return redirect('rentals:login')
@@ -144,12 +163,13 @@ def login_view(request):
             
             # Store user-specific settings in the session
             request.session['chart_settings'] = {
-                'default_currency': user.default_currency,
-                'default_currency_for_all_data': user.use_default_currency_for_all_data,
                 'frequency': user.chart_frequency,
                 'timeline': user.chart_timeline,
                 'To': str(effective_current_date),
             }
+            request.session['default_currency'] = user.default_currency
+            request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
+            request.session['digits'] = user.digits
             
             return redirect('rentals:index')
     else:
@@ -174,16 +194,18 @@ def profile_page(request):
                 
                 # After saving, update the session data
                 request.session['chart_settings'] = {
-                    'default_currency': user.default_currency,
-                    'default_currency_for_all_data': user.use_default_currency_for_all_data,
                     'frequency': user.chart_frequency,
                     'timeline': user.chart_timeline,
                     'To': str(effective_current_date),
                 }
+                request.session['default_currency'] = user.default_currency
+                request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
+                request.session['digits'] = user.digits
 
                 return JsonResponse({'success': True}, status=200)
             else:
-                return JsonResponse({'errors': serializer.errors}, status=400)
+                print(f"profile page: {settings_form.errors}")
+                return JsonResponse({'errors': settings_form.errors}, status=400)
 
     return render(request, 'rentals/profile_page.html', {'user': user, 'settings_form': settings_form})
 
@@ -202,20 +224,6 @@ def edit_profile(request):
             return redirect('rentals:profile_page')
 
     return render(request, 'rentals/edit_profile.html', {'profile_form': profile_form})
-
-# # User settings form
-# @login_required
-# def settings(request):
-#     user = request.user
-#     settings_form = UserSettingsForm(instance=user)
-
-#     if request.method == 'POST':
-#         settings_form = UserSettingsForm(request.POST, instance=user)
-#         if settings_form.is_valid():
-#             settings_form.save()
-#             return redirect('rentals:settings')
-
-#     return render(request, 'rentals/settings.html', {'settings_form': settings_form})
 
 # Render properties page
 @login_required
@@ -280,21 +288,22 @@ def table_data(request, data_type):
         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
     
     data = [effective_current_date.strftime("%Y-%m-%d")]  # List to store elements data
-    
+    digits = request.session['digits']
+
     match data_type:
         case 'property':
             for property in properties_owned_by_landlord:
                 
                 property_tenant = Tenant.objects.filter(property=property).order_by('lease_start').first()
                 rent_since = property_tenant.lease_start if property_tenant else None
+                property_currency = property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                 
-                
-                income_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='income')
-                expense_all_time = Transaction.financials(effective_current_date, properties=[property], transaction_type='expense')
+                income_all_time = Transaction.financials(effective_current_date, target_currency=property_currency, properties=[property], transaction_type='income')
+                expense_all_time = Transaction.financials(effective_current_date, target_currency=property_currency, properties=[property], transaction_type='expense')
                 
                 current_year = effective_current_date.year
-                income_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
-                expense_YTD = Transaction.financials(properties=[property], start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='expense')
+                income_YTD = Transaction.financials(properties=[property], target_currency=property_currency, start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='income')
+                expense_YTD = Transaction.financials(properties=[property], target_currency=property_currency, start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), transaction_type='expense')
                 
                 property_data = {
                     'id': property.id,
@@ -302,48 +311,53 @@ def table_data(request, data_type):
                     'location': property.location,
                     'rent_since': rent_since,
                     'status': property.status(effective_current_date),
-                    'income_all_time': float(income_all_time),
-                    'expense_all_time': float(expense_all_time),
-                    'net_income_all_time': float(income_all_time + expense_all_time),
-                    'income_ytd': float(income_YTD),
-                    'expense_ytd': float(expense_YTD),
-                    'net_income_ytd': float(income_YTD + expense_YTD),
-                    'currency': get_currency_symbol(property.currency),
+                    'income_all_time': round(float(income_all_time), digits),
+                    'expense_all_time': round(float(expense_all_time), digits),
+                    'net_income_all_time': round(float(income_all_time + expense_all_time), digits),
+                    'income_ytd': round(float(income_YTD), digits),
+                    'expense_ytd': round(float(expense_YTD), digits),
+                    'net_income_ytd': round(float(income_YTD + expense_YTD), digits),
+                    'currency': get_currency_symbol(property_currency),
                 }
                 data.append(property_data)
         case 'tenant':
             tenants = Tenant.objects.filter(property__in=properties_owned_by_landlord)
             for tenant in tenants:
+
+                tenant_currency = tenant.property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                 
-                revenue_all_time = tenant.rent_total(effective_current_date)
+                revenue_all_time = tenant.rent_total(effective_current_date, target_currency=tenant_currency)
                 current_year = effective_current_date.year
-                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31))
+                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), target_currency=tenant_currency)
                 
                 lease_rent = tenant.lease_rent(effective_current_date)
-                
+
                 tenant_data = {
                     'id': tenant.id,
                     'first_name': tenant.first_name,
                     'property': tenant.property.name,
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
-                    'currency': get_currency_symbol(tenant.property.currency),
+                    'currency': get_currency_symbol(tenant_currency),
                     'lease_rent': lease_rent if type(lease_rent) == str else float(tenant.lease_rent(effective_current_date)),
-                    'revenue_all_time': float(revenue_all_time),
-                    'revenue_ytd': float(revenue_YTD),
-                    'debt': float(tenant.debt(effective_current_date)),
+                    'lease_native_currency': get_currency_symbol(tenant.property.currency),
+                    'revenue_all_time': round(float(revenue_all_time), digits),
+                    'revenue_ytd': round(float(revenue_YTD), digits),
+                    'debt': round(float(tenant.debt(effective_current_date) * FX.get_rate(tenant.property.currency, tenant_currency, effective_current_date)['FX']), digits),
                 }
                 data.append(tenant_data)
         case 'transaction':
             transactions = Transaction.objects.filter(property__in=properties_owned_by_landlord, date__lte=effective_current_date).order_by('-date')
+
             for transaction in transactions:
+                transaction_currency = transaction.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                 transaction_data = {
                     'id': transaction.id,
                     'transaction_date': transaction.date,
                     'property': transaction.property.name,
                     'category': get_category_name(transaction.category),
-                    'currency': get_currency_symbol(transaction.currency),
-                    'transaction_amount': float(transaction.amount) if transaction.amount else None,
+                    'currency': get_currency_symbol(transaction_currency),
+                    'transaction_amount': round(float(transaction.amount * FX.get_rate(transaction.currency, transaction_currency, transaction.date)['FX']), digits) if transaction.amount else None,
                     'comment': transaction.comment,
                     'period': convert_period(transaction.period),
                 }
@@ -377,34 +391,22 @@ def handle_element(request, data_type, element_id):
                 return JsonResponse({'error': 'Transaction not found'}, status=404)
         
     if request.method == 'GET':
+        digits = request.session['digits']
         match data_type:
             case 'property':
                 # Check if the logged-in user is the landlord of the property
                 if request.user.is_landlord and element.owned_by.user == request.user:
-                    
-                    # Calculate the start date of the current year
-                    current_year_start = effective_current_date.replace(month=1, day=1)
-                                        
-                    # Filter transactions for the specified date range
-                    filtered_transactions = element.transactions.filter(
-                        Q(date__lte=effective_current_date) &
-                        Q(type='expense')
-                    )
-                    # Get a list of unique categories from the filtered transactions
-                    unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
-                    # Initialize the expenses dictionary with unique categories
-                    expenses = {get_category_name(category): {'ytd': 0, 'all_time': 0} for category in unique_categories}
-                    
-                    for category in unique_categories:
-                        category_name = get_category_name(category)
-                        expenses[category_name]['ytd'] = float(element.transactions.filter(category=category, date__range=(current_year_start, effective_current_date)).aggregate(Sum('amount'))['amount__sum'] or 0)
-                        expenses[category_name]['all_time'] = float(element.transactions.filter(category=category, date__lte=effective_current_date).aggregate(Sum('amount'))['amount__sum'] or 0)
-                    
+
+                    # Define the currency for calculations
+                    element_currency = element.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
+
+                    expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc([element], element_currency, request.session['default_currency_for_all_data'], digits)
+
                     # Get data for Payments schedule
                     # Create a list of month abbreviations for the six previous months
                     number_of_months = 5
                     months_for_payment_schedule = []
-                    unique_categories.insert(0, 'rent')
+                    # unique_categories.insert(0, 'rent')
                     rows_for_payment_schedule = {get_category_name(category): [] for category in unique_categories}
                     for i in range(number_of_months):
                         # Calculate the month number for the previous month
@@ -441,26 +443,36 @@ def handle_element(request, data_type, element_id):
                         'name': element.name,
                         'location': element.location,
                         'num_bedrooms': element.num_bedrooms,
-                        'area': float(element.area) if element.area else None,
-                        'currency': get_currency_symbol(element.currency),
-                        'property_value': float(element.property_value) if element.property_value else None,
+                        'area': round(float(element.area), digits) if element.area else None,
+                        'currency': get_currency_symbol(element_currency),
+                        'property_value': round(float(element.property_value), digits) if element.property_value else None,
                         'rent': {
-                            'ytd': float(element.transactions.filter(category='rent', date__range=(current_year_start, effective_current_date)).aggregate(Sum('amount'))['amount__sum'] or 0),
-                            'all_time': float(element.transactions.filter(category='rent', date__lte=effective_current_date).aggregate(Sum('amount'))['amount__sum'] or 0),
+                            'ytd': round(float(rent_ytd), digits),
+                            'all_time': round(float(rent_all_time), digits),
                         },
                         'expenses': expenses,
+                        'net_income': {
+                            'ytd': round(float(rent_ytd + expenses['total']['ytd']), digits),
+                            'all_time': round(float(rent_all_time + expenses['total']['all_time']), digits),
+                        },
                         'months': months_for_payment_schedule,
                         'rows': rows_for_payment_schedule,
                         'address': element.address,
                         'app_date': effective_current_date,
                     }
+
+                    # Rounding according to user settings. Not rounded before defining data to calculate net income without rounding errors.
+                    data['expenses']['total']['ytd'] = round(float(data['expenses']['total']['ytd']), digits)
+                    data['expenses']['total']['all_time'] = round(float(data['expenses']['total']['all_time']), digits)
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
             case 'tenant':
                 # Check if the logged-in user is the landlord and tenant lives in landlord's property
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
                     
-                    lease_rent = element.lease_rent(effective_current_date)
+                    lease_rent = round(element.lease_rent(effective_current_date), digits)
+
+                    element_currency = element.property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                                         
                     data = {
                         'id': element.id,
@@ -470,31 +482,33 @@ def handle_element(request, data_type, element_id):
                         'email': element.email,
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
-                        'rent_currency': get_currency_symbol(element.property.currency),
-                        'rent_rate': lease_rent if type(lease_rent) == str else float(element.lease_rent(effective_current_date)),
+                        'rent_currency': get_currency_symbol(element_currency),
+                        'rent_native_currency': get_currency_symbol(element.property.currency),
+                        'rent_rate': lease_rent if type(lease_rent) == str else round(float(element.lease_rent(effective_current_date)), digits),
                         'property': element.property.name,
-                        'all_time_rent': float(element.rent_total(end_date=effective_current_date)),
+                        'all_time_rent': round(float(element.rent_total(end_date=effective_current_date, target_currency=element_currency)), digits),
                         'payday': element.payday,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
-                    
+
                     # Default chart settings
                     # global chart_settings
                     chart_settings = request.session['chart_settings']
                     data['chart_settings'] = chart_settings
                     from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
                     data['chart_settings']['From'] = from_date
-                    data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'])                   
+                    data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'], element_currency)                   
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this tenant'}, status=403)
             case 'transaction':
+                element_currency = element.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
                     data = {
                         'property': element.property.name,
                         'transaction_date': element.date,
                         'category': element.category,
                         'period': element.period,
-                        'currency': get_currency_symbol(element.currency),
+                        'currency': get_currency_symbol(element_currency),
                         'amount': abs(element.amount),
                         'comment': element.comment,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
@@ -658,13 +672,13 @@ def chart_data_request(request):
         else:
             properties = None
         
-        chart_data = get_chart_data(type, id, frequency, from_date, to_date, properties)
+        chart_data = get_chart_data(type, id, frequency, from_date, to_date, request.session['default_currency'], properties)
 
         return JsonResponse(chart_data)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
-def get_chart_data(type, element_id, frequency, from_date, to_date, properties=None):
+def get_chart_data(type, element_id, frequency, from_date, to_date, currency, properties=None):
 
     # Create an empty data dictionary
     chart_data = {
@@ -692,21 +706,22 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
         'Q': 3,
         'Y': 12
         }
+    
+    # Define currency
+    chart_data['currency'] = get_currency_symbol(currency)
+    
     if type == 'homePage' and properties:
         # Filter transactions for the specified date range
         filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))
         # Get a list of unique categories from the filtered transactions
         unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
         
-        # Define currency
-        chart_data['currency'] = get_currency_symbol(currency_basis)
-        
         for category in unique_categories:
             single_dataset_data = {'label': category, 'data': []}  # Initialize for each category
             
             for d in dates:
                 start_date = d - relativedelta(months = time_delta[frequency])
-                transactions = Transaction.financials(end_date = d, target_currency=currency_basis, properties=properties, start_date=start_date, category=category)
+                transactions = Transaction.financials(end_date = d, target_currency=currency, properties=properties, start_date=start_date, category=category)
                 single_dataset_data['data'].append(round(transactions, 0))
             
             chart_data['datasets'].append(single_dataset_data)
@@ -714,15 +729,73 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, properties=N
     if type == 'tenant':
         
         tenant = Tenant.objects.get(id=element_id)
-        chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
+        # chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
         
         single_dataset_data = {'data': []}
         
         for d in dates:
             start_date = d - relativedelta(months = time_delta[frequency])                        
-            total_rent = tenant.rent_total(end_date=d, start_date=start_date)
-            single_dataset_data['data'].append(total_rent)
+            total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency)
+            single_dataset_data['data'].append(round(total_rent, 0))
             
         chart_data['datasets'].append(single_dataset_data)
     
     return chart_data
+
+
+# Calculate pnl for given properties
+def pnl_calc(properties, target_currency, default_currency_for_all_data, digits):
+
+    current_year_start = effective_current_date.replace(month=1, day=1)
+                        
+    # Filter transactions for the specified date range
+    # filtered_transactions = element.transactions.filter(
+    #     Q(date__lte=effective_current_date) &
+    #     Q(type='expense')
+    # )
+
+    filtered_transactions = Transaction.objects.filter(property__in=properties, date__lte=effective_current_date, type='expense')
+
+    # Get a list of unique categories from the filtered transactions
+    unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
+    # Initialize the expenses dictionary with unique categories
+    expenses = {get_category_name(category): {'ytd': 0, 'all_time': 0} for category in unique_categories}
+    # Add the 'total' key to the expenses dictionary
+    expenses['total'] = {'ytd': 0, 'all_time': 0}
+
+    # Adding rent category to collect in one for loop
+    unique_categories.insert(0, 'rent')
+
+    for category in unique_categories:
+        
+        cf_queryset = Transaction.objects.filter(property__in=properties, category=category)
+        queryset_ytd = cf_queryset.filter(date__range=(current_year_start, effective_current_date))
+        queryset_all_time = cf_queryset.filter(date__lte=effective_current_date)
+        if not default_currency_for_all_data:
+            cf_ytd = queryset_ytd.aggregate(Sum('amount'))['amount__sum'] or 0
+            cf_all_time = queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0
+        else:
+            queryset_ytd = queryset_ytd.values('date', 'currency', 'amount').all()
+            cf_ytd = 0
+            for transaction in queryset_ytd:
+                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
+                cf_ytd += transaction['amount'] * fx_rate
+
+            queryset_all_time = queryset_all_time.values('date', 'currency', 'amount').all()
+            cf_all_time = 0
+            for transaction in queryset_all_time:
+                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
+                cf_all_time += transaction['amount'] * fx_rate
+        
+        if category == 'rent':
+            rent_ytd = cf_ytd
+            rent_all_time = cf_all_time
+        else:
+            category_name = get_category_name(category)
+            expenses[category_name]['ytd'] = round(float(cf_ytd), digits)
+            expenses[category_name]['all_time'] = round(float(cf_all_time), digits)
+
+            expenses['total']['ytd'] += cf_ytd
+            expenses['total']['all_time'] += cf_all_time
+
+    return expenses, rent_ytd, rent_all_time, unique_categories

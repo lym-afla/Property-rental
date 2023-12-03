@@ -2,7 +2,7 @@ let myChart;
 
 document.addEventListener('DOMContentLoaded', function() {
 
-    const properties = document.get
+    // const properties = document.get
 
     const timelineForm = document.getElementById('chartCustomTimeline');
     timelineForm.addEventListener('submit', handleCustomTimeline);
@@ -30,7 +30,7 @@ function typeChartInitialization(type, chartData) {
         plugins: [ChartDataLabels],
         options: {
             responsive: true,
-            aspectRatio: 1|3,
+            // aspectRatio: 1|3,
             scales: {
                 x: {
                     stacked: true,

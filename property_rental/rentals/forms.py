@@ -76,18 +76,29 @@ class UserSettingsForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select'}),
         label='Chart timeline'
     )
+    digits = forms.IntegerField(
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+        label='Digits for tables'
+    )
     
     class Meta:
         model = User
-        fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline']
-        # widgets = {
-        #     'chart_frequency': forms.Select(attrs={'class': 'form-select'}),
+        fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline', 'digits']
+        widgets = {
+            # 'chart_frequency': forms.Select(attrs={'class': 'form-select'}),
         #     'chart_timeline': forms.Select(attrs={'class': 'form-select'})
-        # }
-        # labels = {
+        }
+        labels = {
+            'digits': 'Number of digits',
         #     'chart_frequency': 'Chart frequency:',
         #     'chart_timeline': 'Chart timeline:',
-        # }
+        }
+
+    def clean_digits(self):
+        digits = self.cleaned_data.get('digits')
+        if digits > 6:
+            raise forms.ValidationError('The value for digits must be less than or equal to 6.')
+        return digits
 
 class PropertyForm(forms.ModelForm):
     class Meta:

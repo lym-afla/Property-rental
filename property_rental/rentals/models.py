@@ -6,6 +6,7 @@ from datetime import date
 from django.db.models import Q, F
 from dateutil.relativedelta import relativedelta
 import networkx as nx
+from django.core.validators import MaxValueValidator
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
 from .utils import effective_current_date, update_FX_database
@@ -19,6 +20,13 @@ class User(AbstractUser):
     use_default_currency_for_all_data = models.BooleanField(default=False)
     chart_frequency = models.CharField(max_length=1, default='M')
     chart_timeline = models.CharField(max_length=3, default='6m')
+    digits = models.IntegerField(
+        default=0,
+        validators=[MaxValueValidator(6)],
+        error_messages={
+            'max_value': 'The value for digits must be less than or equal to 6.',
+            }
+        )
     
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
@@ -88,7 +96,7 @@ class Tenant(models.Model):
         super().save(*args, **kwargs)
     
     # Calculating total rent for the tenant between specified dates or all time if either date is not specified
-    def rent_total(self, end_date, start_date=None):
+    def rent_total(self, end_date, start_date=None, target_currency=None):
         # Get all properties associated with this tenant
         property = self.property
         
@@ -109,7 +117,15 @@ class Tenant(models.Model):
 
         transactions = transactions.filter(date__range=(start_date, end_date))
 
-        total_rent = transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
+        if target_currency == None or property.currency == target_currency:
+            total_rent = transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
+        else:
+            transactions = transactions.values('date', 'currency', 'amount').all()
+            total_rent = 0
+            for transaction in transactions:
+                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
+                total_rent += transaction['amount'] * fx_rate
+
         return total_rent
     
     # Calculate tenant's debt for specified date
@@ -187,12 +203,12 @@ class Transaction(models.Model):
         if properties:
             queryset = queryset.filter(property__in=properties)
         
-        if properties is not None and len(properties) == 1:
-            target_currency = properties[0].currency
-            FX_conversion_required = False
-        else:
-            if target_currency is None:
-                raise ValueError('Target currency is not defined')
+        # if properties is not None and len(properties) == 1:
+        #     target_currency = properties[0].currency
+        #     FX_conversion_required = False
+        # else:
+        if target_currency is None:
+            raise ValueError('Target currency is not defined')
         
         if start_date:
             queryset = queryset.filter(date__range=(start_date, end_date))

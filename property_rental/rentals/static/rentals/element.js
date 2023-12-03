@@ -78,7 +78,6 @@ function fetchTableData(type) {
         tbody.innerHTML = '';  // Clear the table body
 
         document.getElementById('datePicker').value = data[0];
-        console.log(data[0]);
 
         // Need to skip the first element as effective date is passed
         let isFirstElement = true;
@@ -138,7 +137,7 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
             `
         case 'tenant':
-            const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "-" : formatNumberWithParentheses(element.currency, element.lease_rent);
+            const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "–" : formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
@@ -330,7 +329,6 @@ function load_element_details(type, elementId) {
     .then(element => {
 
         document.getElementById('datePicker').value = element.app_date;
-        console.log(element.app_date);
     
         switch(type) {
             case 'property':
@@ -362,7 +360,7 @@ function load_element_details(type, elementId) {
                 document.querySelector('#tenantPropertyCard .display-4').textContent = element.property;
                 document.querySelector('#tenantMovedInCard .display-4').textContent = formatDateToDdmmyy(element.renting_since);
                 document.querySelector('#tenantRentCard .display-4').textContent = 
-                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? formatNumberWithParentheses(element.rent_currency, element.rent_rate) : 'NA';
+                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? formatNumberWithParentheses(element.rent_native_currency, element.rent_rate) : 'NA';
                 document.querySelector('#tenantRevenueCard .display-4').textContent = 
                     (typeof element.all_time_rent === 'number' && !isNaN(element.all_time_rent)) ? formatNumberWithParentheses(element.rent_currency, element.all_time_rent) : 'NA';
                 
@@ -440,24 +438,14 @@ function populatePropertyProfitAndLossTable(element) {
     tableBody.appendChild(createTableRow('Total Income', element.rent.ytd, element.rent.all_time, element.currency, isBold=true));
     
     for (const category in element.expenses) {
-        if (element.expenses.hasOwnProperty(category)) {
+        if (element.expenses.hasOwnProperty(category) && category !== 'total') {
             const data = element.expenses[category];
             tableBody.appendChild(createTableRow(category, data.ytd, data.all_time, element.currency));
         }
     }
-
-    // Initialize total expenses
-    let totalYTDExpenses = 0;
-    let totalAllTimeExpenses = 0;
-
-    // Iterate through the expenses data and sum up the values
-    for (const category in element.expenses) {
-        totalYTDExpenses += element.expenses[category]['ytd'];
-        totalAllTimeExpenses += element.expenses[category]['all_time'];
-    }
     
-    tableBody.appendChild(createTableRow('Total Expenses', totalYTDExpenses, totalAllTimeExpenses, element.currency, isBold=true));
-    tableBody.appendChild(createTableRow('Net Income', element.rent.ytd + totalYTDExpenses, element.rent.all_time + totalAllTimeExpenses, element.currency, isBold=true));
+    tableBody.appendChild(createTableRow('Total Expenses', element.expenses.total.ytd, element.expenses.total.all_time, element.currency, isBold=true));
+    tableBody.appendChild(createTableRow('Net Income', element.net_income.ytd, element.net_income.all_time, element.currency, isBold=true));
 }
 
 // Function to create a table row for a category
@@ -551,7 +539,7 @@ function formatDateToDdmmyy(dateString) {
 // Function to format numbers with parentheses for negatives
 function formatNumberWithParentheses(currency, number) {
     if (number < 0) {
-        return `(${currency}${Math.abs(number.toFixed(0)).toLocaleString()})`;
+        return `(${currency}${Math.abs(number).toLocaleString()})`;
     } else if (number === 0) {
         return '–';
     };

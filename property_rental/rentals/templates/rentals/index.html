@@ -1,5 +1,6 @@
 {% extends "rentals/layout.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Property rental - Home{% endblock title %}
 
@@ -16,10 +17,10 @@
         </div>
         <!-- Second Row -->
         <div class="row">
-            <div class="col-md-8">
+            <div class="col-md-6">
                 <!-- Cash Flow Chart -->
                 <div class="card" id="homePageChartCard">
-                    <div class="card-header">
+                    <div class="card-header fw-bold p-3">
                         Cash Flow Chart
                     </div>
                     <div class="card-body">
@@ -29,15 +30,52 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <!-- Payment Details -->
                 <div class="card">
                     <div class="card-body p-0">
-                        <h5 class="card-title fw-bold p-3">Payment schedule</h5>
-                        <!-- Content of Payment Details goes here -->
-                        {% comment %} The second block will show details on payments: x days of payment due, or payments made in time. Details on expenses listing all the required expenses with ticks or cross if expenses missed in certain months. {% endcomment %}
+                        <h5 class="card-header fw-bold p-3">P&L</h5>
                         <div class="table-responsive">
-                            {% include "rentals/payments_table.html" %}
+                            <table class="table table-bordered pnl-table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th class="YTD text-center">YTD</th>
+                                        <th class="text-center">All-time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Rent</td>
+                                        <td class="text-center">{{ pnl.rent.ytd|format_number_with_parentheses:pnl.format_args }}</td>
+                                        <td class="text-center">{{ pnl.rent.all_time|format_number_with_parentheses:pnl.format_args }}</td>
+                                    </tr>
+                                    <tr class="fw-semibold">
+                                        <td>Total Income</td>
+                                        <td class="text-center">{{ pnl.rent.ytd|format_number_with_parentheses:pnl.format_args }}</td>
+                                        <td class="text-center">{{ pnl.rent.all_time|format_number_with_parentheses:pnl.format_args }}</td>
+                                    </tr>
+                                    {% for category, data in pnl.expenses.items %}
+                                        {% if category != 'total' %}
+                                            <tr>
+                                                <td>{{ category }}</td>
+                                                <td class="text-center">{{ data.ytd|format_number_with_parentheses:pnl.format_args }}</td>
+                                                <td class="text-center">{{ data.all_time|format_number_with_parentheses:pnl.format_args }}</td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <tr class="fw-semibold">
+                                        <td>Total Expenses</td>
+                                        <td class="text-center">{{ pnl.expenses.total.ytd|format_number_with_parentheses:pnl.format_args }}</td>
+                                        <td class="text-center">{{ pnl.expenses.total.all_time|format_number_with_parentheses:pnl.format_args }}</td>
+                                    </tr>
+                                    <tr class="fw-semibold">
+                                        <td>Net Income</td>
+                                        <td class="text-center">{{ pnl.net_income.ytd|format_number_with_parentheses:pnl.format_args }}</td>
+                                        <td class="text-center">{{ pnl.net_income.all_time|format_number_with_parentheses:pnl.format_args }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
