@@ -18,6 +18,7 @@ let formFetched = {
     'property': false,
     'tenant': false,
     'transaction': false,
+    'propertyValuation': false,
 }
 
 function elementActionClickHandler(event) {
@@ -160,6 +161,7 @@ function submitSaveHandler(event) {
     
     const formId = event.target.getAttribute("id");
     const type = formId.replace("Form", "");
+    console.log(`Saving submission. Type: ${type}`);
     handle_type('save', type); // Call the save_edit_property function    
 }
 
@@ -211,6 +213,16 @@ function handle_type(action, type, elementId) {
 
     const form = document.getElementById(`${type}Form`);
     const formData = new FormData(form);
+    
+    if (type === 'propertyValuation') {
+
+        // Extract property ID from the button
+        const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
+
+        // Set the value of the hidden field in the form
+        const hiddenInput = document.getElementById('id_property_valuation');
+        hiddenInput.value = propertyId;
+    }
 
     // Convert formFields to a JSON string
     const jsonData = JSON.stringify(Object.fromEntries(formData.entries()));
@@ -345,7 +357,7 @@ function adjustFontSize(element, width, height) {
 function defaultPropertyChoice(type) {
     if (type != 'property') {
         const checkProperty = document.getElementById('editPropertyButton');
-        if (checkProperty) {
+        if (checkProperty && document.getElementById(`${type}ModalDiv`) !== null) {
             const propertyId = checkProperty.getAttribute('data-property-id');
             document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`).selected = true;
         }
@@ -475,6 +487,7 @@ function updateEffectiveDate() {
         })
         .then(response => {
             if (response.ok) {
+                // Reload the current page
                 window.location.href = window.location.pathname;
             }
         })

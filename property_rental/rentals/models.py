@@ -46,7 +46,7 @@ class Property(models.Model):
     address = models.CharField(max_length=150, null=True, blank=True)
     num_bedrooms = models.PositiveIntegerField()
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
-    property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     sold = models.DateField(null=True, blank=True)
 
@@ -66,6 +66,73 @@ class Property(models.Model):
     def activity_start_date(self):
         return self.transactions.order_by('date').first().date
     
+    def property_value(self, date):
+        # Get the latest capital structure entry that is on or before the specified date
+        latest_before_date_value = self.capital.filter(date__lte=date, value__isnull=False).order_by('-date').first()
+        latest_before_date_debt = self.capital.filter(date__lte=date, debt__isnull=False).order_by('-date').first()
+
+        # Get the earliest capital structure entry that is on or after the specified date
+        earliest_after_date_value = self.capital.filter(date__gte=date, value__isnull=False).order_by('date').first()
+        earliest_after_date_debt = self.capital.filter(date__gte=date, debt__isnull=False).order_by('date').first()
+
+        if latest_before_date_value and earliest_after_date_value:
+            # Calculate the average value between two dates
+            value_before = latest_before_date_value.value
+            value_after = earliest_after_date_value.value
+            days_between = (earliest_after_date_value.date - latest_before_date_value.date).days
+            days_to_specified_date = (date - latest_before_date_value.date).days
+            average_value = value_before + (value_after - value_before) * days_to_specified_date / days_between
+        elif latest_before_date_value:
+            # If there is only one entry, return its value
+            average_value = latest_before_date_value.value
+        else:
+            # No capital structure entries for value, return None or some default value
+            average_value = 0
+
+        if latest_before_date_debt and earliest_after_date_debt:
+            # Calculate the average debt between two dates
+            debt_before = latest_before_date_debt.debt
+            debt_after = earliest_after_date_debt.debt
+            days_between = (earliest_after_date_debt.date - latest_before_date_debt.date).days
+            days_to_specified_date = (date - latest_before_date_debt.date).days
+            average_debt = debt_before + (debt_after - debt_before) * days_to_specified_date / days_between
+        elif latest_before_date_debt:
+            # If there is only one entry, return its debt
+            average_debt = latest_before_date_debt.debt
+        else:
+            # No capital structure entries for debt, return None or some default value
+            average_debt = 0
+
+        return average_value, average_debt
+
+
+        # if latest_before_date_value and earliest_after_date_value:
+        #     # Calculate the average value between two dates
+        #     value_before = latest_before_date.value
+        #     value_after = earliest_after_date.value
+        #     debt_before = latest_before_date.debt
+        #     debt_after = earliest_after_date.debt
+
+        #     days_between = (earliest_after_date.date - latest_before_date.date).days
+        #     days_to_specified_date = (date - latest_before_date.date).days
+
+        #     average_value = value_before + (value_after - value_before) * days_to_specified_date / days_between
+        #     average_debt = debt_before + (debt_after - debt_before) * days_to_specified_date / days_between
+        #     return average_value, average_debt
+        # elif latest_before_date:
+        #     # If there is only one entry, return its value
+        #     return latest_before_date.value, latest_before_date.debt
+        # else:
+        #     # No capital structure entries, return None or some default value
+        #     return 0, 0
+    
+# Keep track of captital structure for the property
+class Property_capital_structure(models.Model):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='capital')
+    date = models.DateField(default=timezone.now)
+    value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    debt = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
 class Tenant(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
     
@@ -312,7 +379,7 @@ class FX(models.Model):
         for entry in pairs_list:
             G.add_nodes_from([entry[:3], entry[3:]])
             G.add_edge(entry[:3], entry[3:])
-        
+
         # Finding shortest path for cross-currency conversion using "Bellman-Ford" algorithm
         cross_currency = nx.shortest_path(G, source, target, method='bellman-ford')
 

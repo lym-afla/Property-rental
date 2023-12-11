@@ -4,7 +4,6 @@ register = template.Library()
 
 @register.filter
 def format_number_with_parentheses(value, args):
-    print(args)
     digits, currency = args.split(',')
     if value < 0:
         return f'({currency}{abs(value):,.{digits}f})'

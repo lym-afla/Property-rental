@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const newTypeButton = document.querySelector('.new-entry-button');
     newTypeButton.addEventListener('click', elementActionClickHandler);
 
-    // Hide property selector for the chart
+    // Hide property selector for the chart (shown on the home page only)
     const propertySelector = document.getElementById('chartPropertySelection');
     if (propertySelector) {
         propertySelector.parentElement.style.display = 'none';
@@ -52,6 +52,11 @@ function load_table(type) {
         // document.getElementById('confirmDeleteButton').removeEventListener('click', deleteElementHandler);
         document.getElementById(`back-to-${type}-table`).removeEventListener('click', backToTableClickHandler);
         document.getElementById(`edit${Type}Button`).removeEventListener('click', elementActionClickHandler);
+        
+        // const valuationButton = document.getElementById('valuationPropertyButton');
+        // if (valuationButton) {
+        //     valuationButton.removeEventListener('click', valuationButtonClickHandler);
+        // }
         detailElementCheck.parentElement.remove();
     } else if (type === 'transaction') {
         // Remove event listeners for other types
@@ -268,8 +273,8 @@ function preFillForm(type, elementId) {
                 document.getElementById('id_address').value = data.address;
                 document.getElementById('id_num_bedrooms').value = data.num_bedrooms;
                 document.getElementById('id_area').value = data.area;
-                chooseSelectedOption('currency', data.currency);
-                document.getElementById('id_property_value').value = data.property_value;
+                // chooseSelectedOption('currency', data.currency);
+                // document.getElementById('id_property_value').value = data.property_value;
                 break;
             case 'tenant':
                 document.getElementById('id_first_name').value = data.first_name;
@@ -349,7 +354,50 @@ function load_element_details(type, elementId) {
 
                 // Populate Payments schedule table
                 createPropertyPaymentsTable(element.months, element.rows);
-                
+
+                // Show actual chart settings               
+                updateFrequencySetting(element.chart_settings["frequency"])
+                chooseSelectedOption('chartTimeline', element.chart_settings['timeline']);
+                document.getElementById("chartDateTo").value = element.chart_settings['To'];
+                document.getElementById("chartDateFrom").value = element.chart_settings['From'];
+                typeChartInitialization("propertyValuation", element.chart_data);
+
+                // Adding buttons
+                // Create Add Data button
+                const addDataButton = document.createElement('button');
+                addDataButton.type = 'button';
+                addDataButton.className = 'btn btn-secondary me-2 new-entry-button';
+                addDataButton.dataset.newType = 'propertyValuation';
+                addDataButton.id = 'addDataButton';
+                addDataButton.innerText = 'Add Data';
+
+                // Create Edit Data button
+                const editDataButton = document.createElement('button');
+                editDataButton.type = 'button';
+                editDataButton.className = 'btn btn-secondary edit-entry-button';
+                editDataButton.dataset.editType = 'propertyValuation';
+                editDataButton.id = 'editDataButton';
+                editDataButton.innerText = 'Edit Data';
+
+                // Add event listeners to the buttons
+                addDataButton.addEventListener('click', elementActionClickHandler);
+                editDataButton.addEventListener('click', elementActionClickHandler);
+
+                // Append buttons to the container
+                const dataButtonsContainer = document.getElementById('dataButtonsContainer');
+                dataButtonsContainer.appendChild(addDataButton);
+                dataButtonsContainer.appendChild(editDataButton);
+
+                // function openAddEditDataModal(action) {
+                //     // Update modal title based on the action
+                //     document.getElementById('chartModalLabel').innerText = `${action} Modal Title`;
+
+                //     // Trigger the modal opening
+                //     const addEditDataModal = new bootstrap.Modal(document.getElementById('addEditDataModal'));
+                //     addEditDataModal.show();
+                //     // Additional logic for fetching data or handling the modal content can be added here
+                // }
+
                 break;
 
             case 'tenant':
@@ -398,7 +446,12 @@ function load_element_details(type, elementId) {
                     Back to ${Type} table
                 </button>
                 <div>
-                    <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">
+                    ${type === 'property' ? `
+                        <button type="button" class="btn btn-secondary me-2 valuation-entry-button" data-${type}-id="${elementId}" id="valuationPropertyButton" data-bs-toggle="modal" data-bs-target="#propertyValueModalDiv">
+                            Valuation
+                        </button>
+                    ` : ''}
+                <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">
                         Edit
                     </button>
                     <button type="button" class="btn btn-danger" data-${type}-id="${elementId}" id="deleteButton" data-delete-type="${type}" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal">
@@ -418,6 +471,12 @@ function load_element_details(type, elementId) {
         // Add a click event listener to the button to edit property
         const editButton = document.getElementById(`edit${Type}Button`);
         editButton.addEventListener('click', elementActionClickHandler);
+
+        // // Add a click event listener to Valuation button
+        // const valuationButton = document.getElementById('valuationPropertyButton');
+        // if (valuationButton) {
+        //     valuationButton.addEventListener('click', valuationButtonClickHandler);
+        // }
 
         // // Add a click event listener to the button to delete property
         // const deleteButton = document.getElementById('confirmDeleteButton');
@@ -566,18 +625,35 @@ function addTransactionListeners() {
     });
 }
 
-// // Make the default selection of the respective currency option
-// function chooseSelectedOption(option, choice) {
-//     const selectedElement = document.getElementById(`id_${option}`);
-//     // Loop through each option in the select element
-//     for (let i = 0; i < selectedElement.options.length; i++) {
-//         const optionElement = selectedElement.options[i];
-//         // Check if the option's value matches the value to match
-//         const checkText = (option === 'category' || option === 'chartTimeline') ? optionElement.value : optionElement.textContent;
-//         if (checkText === choice) {
-//         // Set the selected attribute to make this option selected
-//         optionElement.selected = true;
-//         break; // Exit the loop once a match is found
-//         }
+// Creating the check whether valuation chart was called before
+valuationChartCalled = false;
+
+// // Get Property valuation data
+// function valuationButtonClickHandler() {
+
+//     const propertyId = document.getElementById('deleteButton').getAttribute(`data-property-id`);
+
+//     // Fetch data from the server (replace with your actual endpoint)
+//     fetch('/properties/valuation/' + propertyId)
+//         .then(response => response.json())
+//         .then(data => {
+//             console.log(data);
+
+//             // Create and open the modal
+//             handleValuationModal(data.chart_data);
+//         })
+//         .catch(error => console.error('Error fetching valuation data:', error));
+// }
+
+// // Handle Property valuation button
+// function handleValuationModal(chart_data) {
+
+//     if (!valuationChartCalled) {
+//         valuationChartCalled = true;
+//         typeChartInitialization('propertyValuation', chart_data);
 //     }
+
+//     // Open the modal
+//     const valuationModal = new bootstrap.Modal(document.getElementById('propertyValueModalDiv'));
+//     valuationModal.show();
 // }

@@ -12,8 +12,8 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
 
-from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm
-from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm
+from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
 from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
 
@@ -130,7 +130,7 @@ def index(request):
         
         return render(request, 'rentals/index.html', {
             'dashboard_card_props': dashboard_card_props,
-            'app_date': effective_current_date.strftime("%Y-%m-%d"),
+            # 'app_date': effective_current_date.strftime("%Y-%m-%d"),
             'chart_settings': chart_settings,
             'chart_data': chart_data,
             'properties': properties,
@@ -269,6 +269,8 @@ def new_form(request, form_type):
         # Passing landlord to have the selection of properties for a tenant
         landlord = Landlord.objects.get(user=request.user)
         form = TransactionForm(landlord_user=landlord)
+    elif form_type == 'propertyValuation':
+        form = PropertyValuationForm()
     else:
         messages.error(request, "Wrong form type requested")
         return redirect('rentals:index')
@@ -445,7 +447,7 @@ def handle_element(request, data_type, element_id):
                         'num_bedrooms': element.num_bedrooms,
                         'area': round(float(element.area), digits) if element.area else None,
                         'currency': get_currency_symbol(element_currency),
-                        'property_value': round(float(element.property_value), digits) if element.property_value else None,
+                        'property_value': round(float(element.property_value(effective_current_date)[0] / 1000), digits) if element.property_value(effective_current_date) else None,
                         'rent': {
                             'ytd': round(float(rent_ytd), digits),
                             'all_time': round(float(rent_all_time), digits),
@@ -464,6 +466,13 @@ def handle_element(request, data_type, element_id):
                     # Rounding according to user settings. Not rounded before defining data to calculate net income without rounding errors.
                     data['expenses']['total']['ytd'] = round(float(data['expenses']['total']['ytd']), digits)
                     data['expenses']['total']['all_time'] = round(float(data['expenses']['total']['all_time']), digits)
+
+                    chart_settings = request.session['chart_settings']
+                    data['chart_settings'] = chart_settings
+                    from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
+                    data['chart_settings']['From'] = from_date
+                    data['chart_data'] = get_chart_data('property', element.id, chart_settings['frequency'], from_date, chart_settings['To'], element_currency)
+                    
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
             case 'tenant':
@@ -613,6 +622,25 @@ def create_element(request, data_type):
                         return JsonResponse({'errors': form.errors}, status=400)
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
+            case 'propertyValuation':
+                if request.user.is_landlord:
+                    form = PropertyValuationForm(request.POST)
+                    if form.is_valid():
+                        valuation = form.save(commit=False)
+                        # Retrieve the property ID from the form data
+                        property_id = request.POST.get('property')
+                        
+                        property = get_object_or_404(Property, id=property_id)
+
+                        valuation.property = property
+                        valuation.save()
+                        
+                        return JsonResponse({'message': 'Property valuation created successfully'}, status=200)
+                    else:
+                        print(form.errors)
+                        return JsonResponse({'errors': form.errors}, status=400)
+                else:
+                    return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
     else:
         return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods
     
@@ -644,8 +672,11 @@ def update_date(request):
         
         global effective_current_date
         effective_current_date = formatted_date
+        print(f"update_date function -> effective_current_date: {effective_current_date}")
         request.session['chart_settings']['To'] = str(effective_current_date)
-        
+        print(f"update_date function -> chart_settings: {request.session['chart_settings']}")
+        request.session.save()
+
         # # Update chart_settings['To'] with the new effective_current_date
         # global_chart_settings['To'] = effective_current_date
         
@@ -687,19 +718,22 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
     }
     
     # Get the correct starting date for "All time" category
-    if from_date == '1900-01-01':
-        from_date = tenant.property.activity_start_date() - relativedelta(months=1)
+    if type == 'tenant':
+        tenant = Tenant.objects.get(id=element_id)
+        if from_date == '1900-01-01':
+            from_date = tenant.property.activity_start_date() - relativedelta(months=1)
+    elif type == 'property':
+        # Get the property or return a 404 response if not found
+        property = get_object_or_404(Property, id=element_id)
+        if from_date == '1900-01-01':
+            from_date = property.activity_start_date() - relativedelta(months=1)
+    elif type == 'homePage' and properties:
+        if from_date == '1900-01-01':
+            from_date = Transaction.objects.filter(property__in=properties).order_by('date').first().date
     
     # Create set of dates and labels for the chart
     dates = chart_dates(from_date, to_date, frequency)
-    chart_data['labels']= chart_labels(dates, frequency)
-    
-    # if type == 'tenant':
-    #     # Query the Tenant model
-    #     model = Tenant
-    # elif type == 'property':
-    #     # Query the Property model
-    #     model = Property        
+    chart_data['labels']= chart_labels(dates, frequency)        
     
     time_delta = {
         'M': 1,
@@ -712,7 +746,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
     
     if type == 'homePage' and properties:
         # Filter transactions for the specified date range
-        filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date))
+        filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date), property__in=properties)
         # Get a list of unique categories from the filtered transactions
         unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
         
@@ -728,7 +762,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
 
     if type == 'tenant':
         
-        tenant = Tenant.objects.get(id=element_id)
+        
         # chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
         
         single_dataset_data = {'data': []}
@@ -739,6 +773,29 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
             single_dataset_data['data'].append(round(total_rent, 0))
             
         chart_data['datasets'].append(single_dataset_data)
+
+    if type == 'property':
+
+        # Initializing dataset for Chart.js
+        datasets = [
+            {
+                'label': 'Debt',
+                'data': [],
+            },
+            {
+                'label': 'Equity',
+                'data': [],
+            },
+        ]
+
+        for d in dates:
+            start_date = d - relativedelta(months = time_delta[frequency])
+            value, debt = property.property_value(d)
+            datasets[0]['data'].append(round(debt / 1000, 0))
+            datasets[1]['data'].append(round((value - debt) / 1000, 0))
+
+        chart_data['datasets'] = datasets
+        chart_data['currency'] += 'k'
     
     return chart_data
 
@@ -799,3 +856,20 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data, digits)
             expenses['total']['all_time'] += cf_all_time
 
     return expenses, rent_ytd, rent_all_time, unique_categories
+
+# Fetching data for property valuation
+def property_valuation(request, property_id):
+
+    chart_settings = request.session['chart_settings']
+    
+    data = {
+        'chart_settings': chart_settings
+    }
+    
+    from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
+    data['chart_settings']['From'] = from_date
+    # data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'], element_currency) 
+
+    data['chart_data'] = get_chart_data('property', property_id, 'M', '2022-06-01', '2023-09-15', 'USD', None)
+    print(f'property_valuation function; data: {data}')
+    return JsonResponse(data)

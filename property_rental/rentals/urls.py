@@ -25,4 +25,5 @@ urlpatterns = [
     path('tenants/property-choices', views.property_choices, name='property_choices'),
     path('update-date', views.update_date, name='update_date'),
     path('get_chart_data', views.chart_data_request, name='chart_data_request'),
+    path('properties/valuation/<int:property_id>', views.property_valuation, name='property_valuation'),
 ]

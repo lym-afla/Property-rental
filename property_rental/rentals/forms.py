@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.forms.widgets import DateInput
 from django.db.models import Q
 
-from .models import User, Property, Tenant, Transaction, Lease_rent
+from .models import User, Property, Tenant, Transaction, Property_capital_structure
 from .constants import CURRENCY_CHOICES
 from .utils import effective_current_date
 
@@ -103,7 +103,7 @@ class UserSettingsForm(forms.ModelForm):
 class PropertyForm(forms.ModelForm):
     class Meta:
         model = Property
-        fields = ['name', 'location', 'address', 'num_bedrooms', 'area', 'currency', 'property_value']
+        fields = ['name', 'location', 'address', 'num_bedrooms', 'area']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'location': forms.TextInput(attrs={'class': 'form-control'}),
@@ -111,14 +111,31 @@ class PropertyForm(forms.ModelForm):
             'num_bedrooms': forms.NumberInput(attrs={'class': 'form-control'}),
             'area': forms.NumberInput(attrs={'class': 'form-control'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
-            'property_value': forms.NumberInput(attrs={'class': 'form-control'}),
         }
         labels = {
             'address': 'Address (optional)',
             'num_bedrooms': 'Number of bedrooms',
             'currency': '',
-            'property_value': 'Value (in thousands, optional)',
             'area': 'Area (optional)',
+        }
+
+class PropertyValuationForm(forms.ModelForm):
+    # currency = forms.ChoiceField(choices=CURRENCY_CHOICES, widget=forms.Select(attrs={'class': 'form-select'}), label='Currency')
+    
+    class Meta:
+        model = Property_capital_structure
+        fields = ['property', 'date', 'value', 'debt']
+        widgets = {
+            'date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'value': forms.NumberInput(attrs={'class': 'form-control'}),
+            'debt': forms.NumberInput(attrs={'class': 'form-control'}),
+            'property': forms.HiddenInput(attrs={'id': 'id_property_valuation', 'class': 'visually-hidden'}),
+        }
+        labels = {
+            'date': 'Date of entry',
+            'value': 'Value',
+            'debt': 'Debt',
+            'property': '',  # Empty string to hide the label
         }
         
 class TenantForm(forms.ModelForm):

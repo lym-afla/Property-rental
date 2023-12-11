@@ -58,8 +58,8 @@ function typeChartInitialization(type, chartData) {
                     display: false, // Hide the legend
                 },
                 datalabels: {
-                    anchor: 'end',
-                    align: 'top',
+                    anchor: (type === 'tenant') ? 'end' : 'center',
+                    align: (type === 'tenant') ? 'top' : 'center',
                     offset: 5,
                     formatter: (value, context) => {
                         // Format the value with commas as thousand separators
@@ -152,7 +152,13 @@ function handleCustomTimeline(event) {
 
 async function updateChart(chart, element) {
 
-    const target = element.closest('.card').getAttribute('id');
+    let target;
+
+    if (element.closest('.card')) {
+        target = element.closest('.card').getAttribute('id');
+    } else {
+        target = element.closest('.modal').getAttribute('id');
+    }
 
     let type;
     let elementId;
@@ -163,8 +169,12 @@ async function updateChart(chart, element) {
         if (elementId === 'all') {
             elementId = null;
         }
-    } else if (target === 'tenantChartCard') {
-        type = 'tenant';
+    } else {
+        if (target === 'tenantChartCard') {
+            type = 'tenant';
+        } else if (target === 'propertyValueModalDiv') {
+            type = 'property';
+        }
         elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)
     }
 

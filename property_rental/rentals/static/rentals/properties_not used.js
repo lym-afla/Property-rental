@@ -124,6 +124,9 @@ function load_property_details(propertyId) {
                     Back to properties
                 </button>
                 <div>
+                    <button type="button" class="btn btn-secondary me-2 valuation-entry-button" data-property-id="${propertyId}" id="valuationPropertyButton">
+                        Edit
+                    </button>
                     <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-property-id="${propertyId}" data-edit-type="property" id="editPropertyButton">
                         Edit
                     </button>

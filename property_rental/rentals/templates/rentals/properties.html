@@ -93,10 +93,36 @@
                 </div>
             </div>
         </div>
-
     </div>
+
+    <div class="modal fade" id="propertyValueModalDiv" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Valuation Chart</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% include "rentals/snippets/timeline-chart.html" with form_type="propertyValuation" %}
+                    <div class="modal-footer justify-content-between">
+                        <button type="submit" class="btn btn-primary flex-fill col-md-5">First button</button>
+                        <button type="button" class="btn btn-secondary flex-fill col-md-5" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="propertyValuationModalDiv"></div>
+
 {% endblock content %}
 
 {% block script %}
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.1.0"></script>
+
+    <script src="{% static 'rentals/chart.js' %}"></script>
     <script src="{% static 'rentals/element.js' %}"></script>
+
 {% endblock script %}
