@@ -251,6 +251,10 @@ function handle_type(action, type, elementId) {
             document.getElementById('successModal').setAttribute('data-success-type', type);
 
             form.reset();
+
+            if (type === 'propertyValuation') {
+                updateChart(myChart, document.getElementById("id_chartTimeline"));
+            }
         } else {
             throw new Error(variables[action].error_text);
         }

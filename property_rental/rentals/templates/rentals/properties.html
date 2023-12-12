@@ -92,10 +92,25 @@
                     </div>
                 </div>
             </div>
+            <!-- Third Row -->
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <!-- Valuation Chart -->
+                    <div class="card" id="propertyValuationChartCard">
+                        <div class="card-header font-weight-bold">
+                            Property Valuation Chart
+                        </div>
+                        <div class="card-body">
+                            {% include "rentals/snippets/timeline-chart.html" with form_type="propertyValuation" %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+        
     </div>
 
-    <div class="modal fade" id="propertyValueModalDiv" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    {% comment %} <div class="modal fade" id="propertyValueModalDiv" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
@@ -111,7 +126,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> {% endcomment %}
 
     <div id="propertyValuationModalDiv"></div>
 

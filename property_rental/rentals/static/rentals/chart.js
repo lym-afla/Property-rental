@@ -156,8 +156,8 @@ async function updateChart(chart, element) {
 
     if (element.closest('.card')) {
         target = element.closest('.card').getAttribute('id');
-    } else {
-        target = element.closest('.modal').getAttribute('id');
+    // } else {
+    //     target = element.closest('.modal').getAttribute('id');
     }
 
     let type;
@@ -172,7 +172,7 @@ async function updateChart(chart, element) {
     } else {
         if (target === 'tenantChartCard') {
             type = 'tenant';
-        } else if (target === 'propertyValueModalDiv') {
+        } else if (target === 'propertyValuationChartCard') {
             type = 'property';
         }
         elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)

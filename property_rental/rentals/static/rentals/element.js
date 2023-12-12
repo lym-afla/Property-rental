@@ -357,9 +357,11 @@ function load_element_details(type, elementId) {
 
                 // Show actual chart settings               
                 updateFrequencySetting(element.chart_settings["frequency"])
-                chooseSelectedOption('chartTimeline', element.chart_settings['timeline']);
-                document.getElementById("chartDateTo").value = element.chart_settings['To'];
-                document.getElementById("chartDateFrom").value = element.chart_settings['From'];
+                chooseSelectedOption("chartTimeline", element.chart_settings["timeline"]);
+
+                document.getElementById("chartDateTo").value = element.chart_settings["To"];
+                document.getElementById("chartDateFrom").value = element.chart_settings["From"];
+                
                 typeChartInitialization("propertyValuation", element.chart_data);
 
                 // Adding buttons
@@ -446,12 +448,7 @@ function load_element_details(type, elementId) {
                     Back to ${Type} table
                 </button>
                 <div>
-                    ${type === 'property' ? `
-                        <button type="button" class="btn btn-secondary me-2 valuation-entry-button" data-${type}-id="${elementId}" id="valuationPropertyButton" data-bs-toggle="modal" data-bs-target="#propertyValueModalDiv">
-                            Valuation
-                        </button>
-                    ` : ''}
-                <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">
+                    <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">
                         Edit
                     </button>
                     <button type="button" class="btn btn-danger" data-${type}-id="${elementId}" id="deleteButton" data-delete-type="${type}" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal">

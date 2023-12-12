@@ -629,6 +629,7 @@ def create_element(request, data_type):
                         valuation = form.save(commit=False)
                         # Retrieve the property ID from the form data
                         property_id = request.POST.get('property')
+                        print(f"create_element: {property_id}")
                         
                         property = get_object_or_404(Property, id=property_id)
 
