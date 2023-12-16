@@ -33,6 +33,12 @@ document.addEventListener('DOMContentLoaded', function() {
         propertySelector.parentElement.style.display = 'none';
     }
 
+    // Disable property valuation Edit form Edit and Delete button
+    const propertyValuationEditDeleteButtons = document.getElementById("propertyEditValuationModalDiv");
+    if (propertyValuationEditDeleteButtons) {
+        disableEditDeleteButtons();
+    }
+
 });
 
 function load_table(type) {
@@ -41,10 +47,12 @@ function load_table(type) {
 
     const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
-    // Show the [type] table and hide other views
-    document.getElementById(`${type}Table`).style.display = '';
-    document.querySelector('.new-entry-button').style.display = '';
-    document.getElementById(`${type}DetailsContainer`).style.display = 'none';
+    if (type != "propertyValuation") {
+        // Show the [type] table and hide other views
+        document.getElementById(`${type}Table`).style.display = '';
+        document.querySelector('.new-entry-button').style.display = '';
+        document.getElementById(`${type}DetailsContainer`).style.display = 'none';
+    }
     
     // Delete event listeners from the buttons on detailed [Type] page
     const detailElementCheck = document.getElementById(`back-to-${type}-table`);
@@ -58,25 +66,36 @@ function load_table(type) {
         //     valuationButton.removeEventListener('click', valuationButtonClickHandler);
         // }
         detailElementCheck.parentElement.remove();
-    } else if (type === 'transaction') {
+    } else if (type === 'transaction' || type === 'propertyValuation') {
         // Remove event listeners for other types
         // document.getElementById('confirmDeleteButton').removeEventListener('click', deleteElementHandler);
-        // document.getElementById(`edit${Type}Button`).removeEventListener('click', elementActionClickHandler);
+        document.getElementById(`edit${Type}Button`).removeEventListener('click', elementActionClickHandler);
 
         // Assign transaction related event listeners for editing and deleting elements
         // document.getElementById('confirmDeleteButton').addEventListener('click', deleteElementHandler);
         document.getElementById(`edit${Type}Button`).addEventListener('click', elementActionClickHandler);
     }
     
-    // Show the page name
-    document.querySelector('h2').innerHTML = (type === 'property') ? 'Properties' : `${Type}s`;
+    if (type != "propertyValuation") {
+        // Show the page name
+        document.querySelector('h2').innerHTML = (type === 'property') ? 'Properties' : `${Type}s`;
+    }
 
     fetchTableData(type);
 }
 
 function fetchTableData(type) {
 
-    fetch(`/table-data/${type}`)
+    let fetchUrl;
+
+    if (type === 'propertyValuation') {
+        const propertyId = document.getElementById('deleteButton').getAttribute(`data-property-id`);
+        fetchUrl = `/table-data/${type}?property_id=${propertyId}`;
+    } else {
+        fetchUrl = `/table-data/${type}`;
+    }
+
+    fetch(fetchUrl)
     .then(response => response.json())
     .then(data => {
         const tbody = document.querySelector(`#${type}Table tbody`);
@@ -103,7 +122,7 @@ function fetchTableData(type) {
             tbody.appendChild(row);
 
             // Need to remove event listeners if already created to prevent duplication. Does not relate to transactions as there is no detailed page for transactions
-            if (type != 'transaction') {
+            if (type != 'transaction' && type != 'propertyValuation') {
                 const rowName = row.querySelector(`.${type}Name`);
                 rowName.removeEventListener('click', tableElementClickHandler);
                 rowName.addEventListener('click', tableElementClickHandler);
@@ -111,8 +130,8 @@ function fetchTableData(type) {
 
         });
 
-        if (type === 'transaction') {
-            addTransactionListeners();
+        if (type === 'transaction' || type === 'propertyValuation') {
+            addTransactionValuationListeners(type);
         }
     })
     .catch(error => {
@@ -140,7 +159,7 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.income_ytd)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.expense_ytd)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
-            `
+            `;
         case 'tenant':
             const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "–" : formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
             return `
@@ -151,7 +170,7 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
                 <td class="text-center text-danger">${formatNumberWithParentheses(element.currency, element.debt)}</td>
-            `
+            `;
         case 'transaction':
             const period = element.period ? `(${element.period})` : "";
             return `
@@ -164,7 +183,20 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.transaction_amount)}</td>
                 <td>${element.comment}</td>
                 <!-- Other cells as needed -->
-            `
+            `;
+        case 'propertyValuation':
+            const value = element.value !== null ? formatNumberWithParentheses(element.currency, element.value) : '–';
+            const debt = element.debt !== null ? formatNumberWithParentheses(element.currency, element.debt) : '–';
+
+            return `
+                <td>
+                    <input class="form-check-input propertyValuation-radio" type="radio" name="radioPropertyValuation" value="${element.id}">
+                </td>
+                <td>${formatDateToDdmmyy(element.date)}</td>
+                <td class="text-center">${value}</td>
+                <td class="text-center">${debt}</td>
+                <!-- Add other fields as needed -->
+            `;
         default:
             // Handle other cases or show an error message
             console.error('Unknown element type:', type);
@@ -304,6 +336,13 @@ function preFillForm(type, elementId) {
                 document.getElementById('id_amount').value = data.amount;
                 document.getElementById('id_comment').value = data.comment;
                 break;
+            case 'propertyValuation':
+                console.log(`preFillForm. propertyValuation ${data.property_id}`)
+                document.getElementById('id_capital_structure_date').value = data.date;
+                document.getElementById('id_capital_structure_value').value = data.value;
+                document.getElementById('id_capital_structure_debt').value = data.debt;
+                document.getElementById('id_property_valuation').value = data.property_id;
+                break;
         }
     })
     .catch(error => console.log(error));
@@ -337,7 +376,7 @@ function load_element_details(type, elementId) {
     
         switch(type) {
             case 'property':
-                console.log(type);
+
                 // Show the page name
                 document.querySelector('h2').innerHTML = `${Type}: ${element.name}`;
                 
@@ -364,31 +403,41 @@ function load_element_details(type, elementId) {
                 
                 typeChartInitialization("propertyValuation", element.chart_data);
 
-                // Adding buttons
-                // Create Add Data button
-                const addDataButton = document.createElement('button');
-                addDataButton.type = 'button';
-                addDataButton.className = 'btn btn-secondary me-2 new-entry-button';
-                addDataButton.dataset.newType = 'propertyValuation';
-                addDataButton.id = 'addDataButton';
-                addDataButton.innerText = 'Add Data';
+                const addDataButton = document.getElementById('addPropertyValuationDataButton');
+                const editDataButton = document.getElementById('editPropertyValuationDataButton');
 
-                // Create Edit Data button
-                const editDataButton = document.createElement('button');
-                editDataButton.type = 'button';
-                editDataButton.className = 'btn btn-secondary edit-entry-button';
-                editDataButton.dataset.editType = 'propertyValuation';
-                editDataButton.id = 'editDataButton';
-                editDataButton.innerText = 'Edit Data';
+                if (!addDataButton && !editDataButton) {
+                    // Adding buttons
+                    // Create Add Data button
+                    const addDataButton = document.createElement('button');
+                    addDataButton.type = 'button';
+                    addDataButton.className = 'btn btn-secondary me-2 new-entry-button';
+                    addDataButton.dataset.newType = 'propertyValuation';
+                    addDataButton.id = 'addPropertyValuationDataButton';
+                    addDataButton.innerText = 'Add Data';
 
-                // Add event listeners to the buttons
-                addDataButton.addEventListener('click', elementActionClickHandler);
-                editDataButton.addEventListener('click', elementActionClickHandler);
+                    // Create Edit Data button
+                    const editDataButton = document.createElement('button');
+                    editDataButton.type = 'button';
+                    editDataButton.className = 'btn btn-secondary edit-entry-button';
+                    editDataButton.dataset.editType = 'propertyValuation';
+                    editDataButton.id = 'editPropertyValuationDataButton';
+                    editDataButton.innerText = 'Edit Data';
+                    editDataButton.dataset.bsToggle="modal";
+                    editDataButton.dataset.bsTarget = '#propertyEditValuationModalDiv';
 
-                // Append buttons to the container
-                const dataButtonsContainer = document.getElementById('dataButtonsContainer');
-                dataButtonsContainer.appendChild(addDataButton);
-                dataButtonsContainer.appendChild(editDataButton);
+                    // Add event listeners to the buttons
+                    addDataButton.addEventListener('click', elementActionClickHandler);
+                    editDataButton.addEventListener('click', () => {
+                        console.log(`load_element_details`);
+                        load_table("propertyValuation");
+                    });
+
+                    // Append buttons to the container
+                    const dataButtonsContainer = document.getElementById('dataButtonsContainer');
+                    dataButtonsContainer.appendChild(addDataButton);
+                    dataButtonsContainer.appendChild(editDataButton);
+                }
 
                 // function openAddEditDataModal(action) {
                 //     // Update modal title based on the action
@@ -603,11 +652,14 @@ function formatNumberWithParentheses(currency, number) {
 }
 
 // Add listeners to radio buttons on transaction table
-function addTransactionListeners() {
+function addTransactionValuationListeners(type) {
+
+    const Type = type.charAt(0).toUpperCase() + type.slice(1);
+
     // Select the radio buttons and buttons
-    const radioButtons = document.querySelectorAll('.transaction-radio');
-    const editButton = document.getElementById('editTransactionButton');
-    const deleteButton = document.getElementById('deleteButton');
+    const radioButtons = document.querySelectorAll(`.${type}-radio`);
+    const editButton = document.getElementById(`edit${Type}Button`);
+    const deleteButton = document.getElementById(`delete${Type}Button`);
     
     // Add a change event listener to the radio buttons
     radioButtons.forEach((radio) => {
@@ -622,35 +674,16 @@ function addTransactionListeners() {
     });
 }
 
-// Creating the check whether valuation chart was called before
-valuationChartCalled = false;
+// Disable property valuation Edit form Edit and Delete buttons
+function disableEditDeleteButtons() {
+    const editButton = document.getElementById('editPropertyValuationButton');
+    const deleteButton = document.getElementById('deletePropertyValuationButton');
+    const myModal = new bootstrap.Modal(document.getElementById('propertyEditValuationModalDiv'));
 
-// // Get Property valuation data
-// function valuationButtonClickHandler() {
-
-//     const propertyId = document.getElementById('deleteButton').getAttribute(`data-property-id`);
-
-//     // Fetch data from the server (replace with your actual endpoint)
-//     fetch('/properties/valuation/' + propertyId)
-//         .then(response => response.json())
-//         .then(data => {
-//             console.log(data);
-
-//             // Create and open the modal
-//             handleValuationModal(data.chart_data);
-//         })
-//         .catch(error => console.error('Error fetching valuation data:', error));
-// }
-
-// // Handle Property valuation button
-// function handleValuationModal(chart_data) {
-
-//     if (!valuationChartCalled) {
-//         valuationChartCalled = true;
-//         typeChartInitialization('propertyValuation', chart_data);
-//     }
-
-//     // Open the modal
-//     const valuationModal = new bootstrap.Modal(document.getElementById('propertyValueModalDiv'));
-//     valuationModal.show();
-// }
+    // Add an event listener when the modal is hidden
+    myModal._element.addEventListener('hidden.bs.modal', function() {
+        // Disable Edit and Delete buttons
+        editButton.disabled = true;
+        deleteButton.disabled = true;
+    });
+}

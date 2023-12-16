@@ -1,4 +1,4 @@
-let myChart;
+// let myChart;
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const frequencyButtons = document.querySelectorAll('.chart-frequency');
     frequencyButtons.forEach(button => {
         button.addEventListener('click', async function() {
-            await updateChart(myChart, this);
+            await updateChart(window.myChart, this);
         });
     })
 });
@@ -18,57 +18,67 @@ document.addEventListener('DOMContentLoaded', function() {
 // Setting the chart
 function typeChartInitialization(type, chartData) {
     const ctxChart = document.getElementById(`${type}BarChart`);
-    myChart = new Chart(ctxChart, {
-        type: 'bar',
-        data: {
-            labels: chartData.labels,
-            datasets: chartData.datasets
-            // [{
-            //     data: chartData.datasets.map(value => parseFloat(value.toLocaleString())),
-            // }]
-        },
-        plugins: [ChartDataLabels],
-        options: {
-            responsive: true,
-            // aspectRatio: 1|3,
-            scales: {
-                x: {
-                    stacked: true,
-                    grid: {
-                        display: false
-                    }
-                },
-                y: {
-                    grace: '5%',
-                    stacked: true,
-                    title: {
-                        display: true,
-                        text: chartData.currency,
+
+    // Check if a Chart instance with the given ID exists
+    if (window.myChart) {
+        // Update the existing chart
+        window.myChart.data.labels = chartData.labels;
+        window.myChart.data.datasets = chartData.datasets;
+        window.myChart.update();
+    } else {
+        // Create a new Chart instance
+        window.myChart = new Chart(ctxChart, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: chartData.datasets
+                // [{
+                //     data: chartData.datasets.map(value => parseFloat(value.toLocaleString())),
+                // }]
+            },
+            plugins: [ChartDataLabels],
+            options: {
+                responsive: true,
+                // aspectRatio: 1|3,
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: {
+                            display: false
+                        }
                     },
-                    grid: {
-                        display: false
+                    y: {
+                        grace: '5%',
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: chartData.currency,
+                        },
+                        grid: {
+                            display: false
+                        }
+                    },
+                },
+                layout: {
+                    padding: 20
+                },
+                plugins: {
+                    legend: {
+                        display: false, // Hide the legend
+                    },
+                    datalabels: {
+                        anchor: (type === 'tenant') ? 'end' : 'center',
+                        align: (type === 'tenant') ? 'top' : 'center',
+                        offset: 5,
+                        formatter: (value, context) => {
+                            // Format the value with commas as thousand separators
+                            return (value !== 0) ? value.toLocaleString("en-US") : '';
+                        }
                     }
                 },
             },
-            layout: {
-                padding: 20
-            },
-            plugins: {
-                legend: {
-                    display: false, // Hide the legend
-                },
-                datalabels: {
-                    anchor: (type === 'tenant') ? 'end' : 'center',
-                    align: (type === 'tenant') ? 'top' : 'center',
-                    offset: 5,
-                    formatter: (value, context) => {
-                        // Format the value with commas as thousand separators
-                        return value.toLocaleString("en-US");
-                    }
-                }
-            },
-        },
-    });
+        });
+    }
 }
 
 // Handling changing the timeline of the chart. Function referenced directly in timeline-chart.html
@@ -107,12 +117,12 @@ function changeTimeline(element) {
 
     // Run if case is not 'Custom'
     document.getElementById('chartDateFrom').value = convertDate(fromDate);
-    updateChart(myChart, element);
+    updateChart(window.myChart, element);
 }
 
 // Handling changing the set of properties for the chart. Function referenced directly in timeline-chart.html
 function changeProperty(element) {
-    updateChart(myChart, element);
+    updateChart(window.myChart, element);
 }
 
 // Convert to YYYY-mmm-dd format
@@ -146,7 +156,7 @@ function handleCustomTimeline(event) {
     timelineModal.hide();
 
     // Feed select element as second argument to recover target correctly
-    updateChart(myChart, document.getElementById("id_chartTimeline"));
+    updateChart(window.myChart, document.getElementById("id_chartTimeline"));
 
 }
 
@@ -186,17 +196,6 @@ async function updateChart(chart, element) {
     chart.data.labels = chartData.labels;
     chart.data.datasets = chartData.datasets;
     chart.update();
-    chart.draw();
-
-    // Reapply the formatter for data labels
-    // chart.data.datasets[0].datalabels.formatter = (value, context) => {
-    //     // Format the value with commas as thousand separators
-    //     return value.toLocaleString() + ' Q';
-    //     // return "test";
-    // };
-
-    // console.log("Redrawing the chart");
-    // // Redraw the chart to reflect the updated formatter
     // chart.draw();
 
 }

@@ -49,6 +49,11 @@ class TransactionSerializer(serializers.ModelSerializer):
                 internal_value['amount'] = -abs(internal_value['amount'])
 
         return internal_value
+    
+class PropertyValuationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Property_capital_structure
+        fields = '__all__'
         
 def index(request):
     
@@ -364,6 +369,21 @@ def table_data(request, data_type):
                     'period': convert_period(transaction.period),
                 }
                 data.append(transaction_data)
+        case 'propertyValuation':
+            property_id = request.GET.get('property_id')
+            selected_property = Property.objects.get(id=property_id)
+            property_valuations = selected_property.capital.filter(capital_structure_date__lte=effective_current_date).order_by('-capital_structure_date')
+            property_currency = selected_property.currency
+
+            for valuation in property_valuations:
+                valuation_data = {
+                    'id': valuation.id,
+                    'date': valuation.capital_structure_date,
+                    'value': round(float(valuation.capital_structure_value), digits) if valuation.capital_structure_value is not None else None,
+                    'debt': round(float(valuation.capital_structure_debt), digits) if valuation.capital_structure_debt is not None else None,
+                    'currency': get_currency_symbol(property_currency),
+                }
+                data.append(valuation_data)
         case _:
             return JsonResponse({'error': 'Data type does not exist.'}, status=400)
 
@@ -391,6 +411,11 @@ def handle_element(request, data_type, element_id):
                 element = Transaction.objects.get(id=element_id)
             except Transaction.DoesNotExist:
                 return JsonResponse({'error': 'Transaction not found'}, status=404)
+        case 'propertyValuation':
+            try:
+                element = Property_capital_structure.objects.get(id=element_id)
+            except Property_capital_structure.DoesNotExist:
+                return JsonResponse({'error': 'Property valuation entry not found'}, status=404)
         
     if request.method == 'GET':
         digits = request.session['digits']
@@ -522,6 +547,15 @@ def handle_element(request, data_type, element_id):
                         'comment': element.comment,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
+            case 'propertyValuation':
+                # element_currency = element.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
+                if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    data = {
+                        'date': element.capital_structure_date,
+                        'value': element.capital_structure_value,
+                        'debt': element.capital_structure_debt,
+                        'property_id': element.property.id,
+                    }
         return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
         element.delete()
@@ -538,6 +572,8 @@ def handle_element(request, data_type, element_id):
                     serializer = TenantSerializer(instance=element, data=json_data)
                 case 'transaction':
                     serializer = TransactionSerializer(instance=element, data=json_data)
+                case 'propertyValuation':
+                    serializer = PropertyValuationSerializer(instance=element, data=json_data)
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({'success': True}, status=200)
@@ -625,6 +661,8 @@ def create_element(request, data_type):
             case 'propertyValuation':
                 if request.user.is_landlord:
                     form = PropertyValuationForm(request.POST)
+                    print(f"645. Create_element: {request.POST.get('property')}")
+                    print(f'646 {form}')
                     if form.is_valid():
                         valuation = form.save(commit=False)
                         # Retrieve the property ID from the form data

@@ -124,19 +124,29 @@ class PropertyValuationForm(forms.ModelForm):
     
     class Meta:
         model = Property_capital_structure
-        fields = ['property', 'date', 'value', 'debt']
+        fields = ['property', 'capital_structure_date', 'capital_structure_value', 'capital_structure_debt']
         widgets = {
-            'date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'value': forms.NumberInput(attrs={'class': 'form-control'}),
-            'debt': forms.NumberInput(attrs={'class': 'form-control'}),
-            'property': forms.HiddenInput(attrs={'id': 'id_property_valuation', 'class': 'visually-hidden'}),
+            'capital_structure_date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'capital_structure_value': forms.NumberInput(attrs={'class': 'form-control'}),
+            'capital_structure_debt': forms.NumberInput(attrs={'class': 'form-control'}),
+            'property': forms.NumberInput(attrs={'id': 'id_property_valuation'}),
         }
         labels = {
-            'date': 'Date of entry',
-            'value': 'Value',
-            'debt': 'Debt',
-            'property': '',  # Empty string to hide the label
+            'capital_structure_date': 'Date of entry',
+            'capital_structure_value': 'Value',
+            'capital_structure_debt': 'Debt',
+            # 'property': '',  # Empty string to hide the label
         }
+
+        def clean(self):
+            cleaned_data = super().clean()
+            value = cleaned_data.get('capital_structure_value')
+            debt = cleaned_data.get('capital_structure_debt')
+
+            if value is None and debt is None:
+                raise forms.ValidationError("You must provide either 'value' or 'debt' or both.")
+
+            return cleaned_data
         
 class TenantForm(forms.ModelForm):
     lease_rent = forms.DecimalField(widget=forms.NumberInput(attrs={'class': 'form-control'}), label='Monthly rate')

@@ -32,10 +32,16 @@ function elementActionClickHandler(event) {
         action = 'edit';
     }
 
-    console.log(action);
+    console.log(`elementActionClickHandler ${action}`);
 
     // Defining the type of entry
     const type = event.target.getAttribute(`data-${action}-type`);
+
+    // Closing property valuation modal after attempting to edit
+    if (type === "propertyValuation") {
+        const myModal = bootstrap.Modal.getInstance(document.getElementById('propertyEditValuationModalDiv'));
+        myModal.hide();
+    }
 
     // If the form has already been fetched, show the modal and return
     if (!formFetched[type]) {
@@ -51,17 +57,27 @@ function elementActionClickHandler(event) {
             resetPropertyChoices();
         }
         
+        // Assign property id value
+        if (type === 'propertyValuation') {
+            // Extract property ID from the button
+            const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
+            // Set the value of the hidden field in the form
+            const hiddenInput = document.getElementById('id_property_valuation');
+            hiddenInput.value = propertyId;
+        }
+        
         console.log(`${type} form already fetched`);
         
         attachSubmitEventListener(action, type);
 
         const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
         modal.show();
+
         if (action === 'edit') {
             let elementId;
-            if (type === "transaction") {
-                const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
-        
+            const Type = type.charAt(0).toUpperCase() + type.slice(1);
+            if (type === "transaction" || type === "propertyValuation") {
+                const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
                 if (selectedRadio) {
                     elementId = selectedRadio.value;
                     console.log(`Selected radio button value: ${elementId}`);
@@ -74,8 +90,8 @@ function elementActionClickHandler(event) {
             preFillForm(type, elementId);
         }
 
-        defaultPropertyChoice(type);
-
+        // defaultPropertyChoice(type);
+        console.log("XXXXX Running modal change namges");
         changeModalTitle(action, type);
     }
 }
@@ -97,6 +113,15 @@ function getForm(action, type) {
             divModal.querySelector('[value=""]').remove();
         }
 
+        // Assign property id value
+        if (type === 'propertyValuation') {
+            // Extract property ID from the button
+            const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
+            // Set the value of the hidden field in the form
+            const hiddenInput = document.getElementById('id_property_valuation');
+            hiddenInput.value = propertyId;
+        }
+
         // Attach an event listener to the form's submit event
         attachSubmitEventListener(action, type);
        
@@ -105,9 +130,9 @@ function getForm(action, type) {
 
         if (action === 'edit') {
             let elementId;
-            if (type === "transaction") {
-                const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
-        
+            const Type = type.charAt(0).toUpperCase() + type.slice(1);
+            if (type === "transaction" || type === "propertyValuation") {
+                const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
                 if (selectedRadio) {
                     elementId = selectedRadio.value;
                     console.log(`Selected radio button value: ${elementId}`);
@@ -115,7 +140,6 @@ function getForm(action, type) {
                     throw new Error("Couldn't retrieve radio button value");
                 }
             } else {
-                const Type = type.charAt(0).toUpperCase() + type.slice(1);
                 elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
             }
 
@@ -125,7 +149,7 @@ function getForm(action, type) {
         // Update the formFetched variable to indicate that the form has been fetched
         formFetched[type] = true;
 
-        defaultPropertyChoice(type);
+        // defaultPropertyChoice(type);
         
         changeModalTitle(action, type);
     })
@@ -157,8 +181,6 @@ function attachSubmitEventListener(action, type) {
 function submitSaveHandler(event) {
     event.preventDefault(); // Prevent the default form submission
     
-    console.log("Saving submission");
-    
     const formId = event.target.getAttribute("id");
     const type = formId.replace("Form", "");
     console.log(`Saving submission. Type: ${type}`);
@@ -174,9 +196,9 @@ function submitEditHandler(event) {
     const formId = event.target.getAttribute("id");
     const type = formId.replace("Form", "");
     let elementId;
-    if (type === "transaction") {
-        const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
-
+    const Type = type.charAt(0).toUpperCase() + type.slice(1);
+    if (type === "transaction" || type === "propertyValuation") {
+        const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
         if (selectedRadio) {
             elementId = selectedRadio.value;
             console.log(`Selected radio button value: ${elementId}`);
@@ -213,16 +235,6 @@ function handle_type(action, type, elementId) {
 
     const form = document.getElementById(`${type}Form`);
     const formData = new FormData(form);
-    
-    if (type === 'propertyValuation') {
-
-        // Extract property ID from the button
-        const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
-
-        // Set the value of the hidden field in the form
-        const hiddenInput = document.getElementById('id_property_valuation');
-        hiddenInput.value = propertyId;
-    }
 
     // Convert formFields to a JSON string
     const jsonData = JSON.stringify(Object.fromEntries(formData.entries()));
@@ -253,7 +265,7 @@ function handle_type(action, type, elementId) {
             form.reset();
 
             if (type === 'propertyValuation') {
-                updateChart(myChart, document.getElementById("id_chartTimeline"));
+                updateChart(window.myChart, document.getElementById("id_chartTimeline"));
             }
         } else {
             throw new Error(variables[action].error_text);
@@ -361,8 +373,8 @@ function adjustFontSize(element, width, height) {
 function defaultPropertyChoice(type) {
     if (type != 'property') {
         const checkProperty = document.getElementById('editPropertyButton');
-        if (checkProperty && document.getElementById(`${type}ModalDiv`) !== null) {
-            const propertyId = checkProperty.getAttribute('data-property-id');
+        const propertyId = checkProperty.getAttribute('data-property-id');
+        if (checkProperty && (document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`) !== null)) {        
             document.getElementById(`${type}ModalDiv`).querySelector(`[value="${propertyId}"]`).selected = true;
         }
     }
@@ -370,6 +382,7 @@ function defaultPropertyChoice(type) {
 
 // Change the heading of the modal form
 function changeModalTitle(action, type) {
+    console.log('Changing modal title');
     const modalTitle = document.getElementById(`${type}ModalLabel`);
     if (action === 'new' && modalTitle.innerHTML.includes("Edit")) {
         modalTitle.innerHTML = modalTitle.innerHTML.replace("Edit existing", "Create new");

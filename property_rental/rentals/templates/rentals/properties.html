@@ -107,26 +107,44 @@
                 </div>
             </div>
         </div>
-        
     </div>
 
-    {% comment %} <div class="modal fade" id="propertyValueModalDiv" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal fade" id="propertyEditValuationModalDiv" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Valuation Chart</h5>
+                    <h5 class="modal-title">Property valuation entries</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    {% include "rentals/snippets/timeline-chart.html" with form_type="propertyValuation" %}
+                    <div>
+                        <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-edit-type="propertyValuation" id="editPropertyValuationButton" disabled>
+                            Edit
+                        </button>
+                        <button type="button" class="btn btn-danger" id="deletePropertyValuationButton" data-delete-type="propertyValuation" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal" disabled>
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </div>
+                    <table id="propertyValuationTable" class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Date</th>
+                                <th class="text-center">Value</th>
+                                <th class="text-center">Debt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
                     <div class="modal-footer justify-content-between">
-                        <button type="submit" class="btn btn-primary flex-fill col-md-5">First button</button>
+                        {% comment %} <button type="submit" class="btn btn-primary flex-fill col-md-5">First button</button> {% endcomment %}
                         <button type="button" class="btn btn-secondary flex-fill col-md-5" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
         </div>
-    </div> {% endcomment %}
+    </div>
 
     <div id="propertyValuationModalDiv"></div>
 

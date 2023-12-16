@@ -2,7 +2,13 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="{{ form_type }}ModalLabel">Create new {{ form_type }}</h5>
+                <h5 class="modal-title" id="{{ form_type }}ModalLabel">
+                    {% if form_type == 'propertyValuation' %}
+                        Create new property valuation entry
+                    {% else %}
+                        Create new {{ form_type }}
+                    {% endif %}
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -10,21 +16,25 @@
                     {% csrf_token %}
                     {% for field in form %}
                         {% if 'currency' not in field.name %}
-                            <div class="mb-3">
-                                {% if field.name == 'property_value' or field.name == 'lease_rent' or field.name == 'amount' %}
-                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                    <div class="row">
-                                        <div class="col-md-4">
-                                            {{ form.currency }}
-                                        </div>
-                                        <div class="col-md-8">
-                                            {{ field }}
-                                        </div>
+                            {% if form_type == 'propertyValuation' and field.name == 'property' %}
+                                <div class="mb-3" style="display: none">
+                            {% else %}
+                                <div class="mb-3">
+                            {% endif %}
+                            {% if field.name == 'property_value' or field.name == 'lease_rent' or field.name == 'amount' %}
+                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        {{ form.currency }}
                                     </div>
-                                {% else %}
-                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                    {{ field }}
-                                {% endif %}
+                                    <div class="col-md-8">
+                                        {{ field }}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                {{ field }}
+                            {% endif %}
                             </div>
                         {% endif %}
                     {% endfor %}
@@ -36,7 +46,13 @@
                         {% endfor %}
                     </div>
                     <div class="modal-footer justify-content-between">
-                        <button type="submit" class="btn btn-primary flex-fill col-md-5">Create {{ form_type }}</button>
+                        <button type="submit" class="btn btn-primary flex-fill col-md-5">
+                            {% if form_type == 'propertyValuation' %}
+                                Create property valuation
+                            {% else %}
+                                Create {{ form_type }}
+                            {% endif %}
+                        </button>
                         <button type="button" class="btn btn-secondary flex-fill col-md-5" data-bs-dismiss="modal">Close</button>
                     </div>                            
                 </form>
