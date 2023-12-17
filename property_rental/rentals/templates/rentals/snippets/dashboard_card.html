@@ -7,7 +7,7 @@
                     
         <!-- Number -->
         <div class="mt-2">
-            <span class="display-4 {% if text == 'Rent due' and number != 0 %} text-danger {% else %} {% endif %}">{{ number }}</span><span class="fs-5">{{ number_text }}</span>
+            <span class="display-4 {% if text == 'Rent due' and number|slice:"1:" != '0' %} text-danger {% else %} {% endif %}">{{ number }}</span><span class="fs-5">{{ number_text }}</span>
         </div>
                     
         <!-- Text -->

@@ -24,6 +24,7 @@ function typeChartInitialization(type, chartData) {
         // Update the existing chart
         window.myChart.data.labels = chartData.labels;
         window.myChart.data.datasets = chartData.datasets;
+        window.myChart.options.scales.y.title.text = chartData.currency;
         window.myChart.update();
     } else {
         // Create a new Chart instance
@@ -166,8 +167,6 @@ async function updateChart(chart, element) {
 
     if (element.closest('.card')) {
         target = element.closest('.card').getAttribute('id');
-    // } else {
-    //     target = element.closest('.modal').getAttribute('id');
     }
 
     let type;
@@ -185,7 +184,8 @@ async function updateChart(chart, element) {
         } else if (target === 'propertyValuationChartCard') {
             type = 'property';
         }
-        elementId = document.getElementById("deleteButton").getAttribute(`data-${type}-id`)
+        const Type = type.charAt(0).toUpperCase() + type.slice(1);
+        elementId = document.getElementById(`delete${Type}Button`).getAttribute(`data-${type}-id`)
     }
 
     const frequency = document.querySelector('input[name="chartFrequency"]:checked').value;
@@ -195,6 +195,7 @@ async function updateChart(chart, element) {
 
     chart.data.labels = chartData.labels;
     chart.data.datasets = chartData.datasets;
+    chart.options.scales.y.title.text = chartData.currency;
     chart.update();
     // chart.draw();
 

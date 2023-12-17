@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', function() {
         disableEditDeleteButtons();
     }
 
+    // Add event listener to the confirmation button to delete property valuation 
+    const propertyValuationDeleteButton = document.getElementById("confirmPropertyValuationDeleteButton");
+    if (propertyValuationDeleteButton) {
+        propertyValuationDeleteButton.addEventListener("click", propertyValuationDeleteElementHandler);
+    }
+
 });
 
 function load_table(type) {
@@ -87,9 +93,10 @@ function load_table(type) {
 function fetchTableData(type) {
 
     let fetchUrl;
+    // const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     if (type === 'propertyValuation') {
-        const propertyId = document.getElementById('deleteButton').getAttribute(`data-property-id`);
+        const propertyId = document.getElementById(`deletePropertyButton`).getAttribute(`data-property-id`);
         fetchUrl = `/table-data/${type}?property_id=${propertyId}`;
     } else {
         fetchUrl = `/table-data/${type}`;
@@ -225,72 +232,6 @@ function backToTableClickHandler(event) {
     load_table(type);
 }
 
-// // Delete click handler
-// function deleteElementHandler(event) {
-
-//     event.preventDefault();
-
-//     // Extract what type of element is being dealt with
-//     const deleteButton = document.getElementById(`deleteButton`);
-//     const type = deleteButton.getAttribute("data-delete-type");
-    
-//     let elementId;
-
-//     // Get element ID from delete button
-//     if (type === "transaction") {
-//         const selectedRadio = document.querySelector('input[name="radioTransaction"]:checked');
-
-//         if (selectedRadio) {
-//             elementId = selectedRadio.value;
-//             console.log(`Selected radio button value: ${elementId}`);
-//         } else {
-//             throw new Error("Couldn't retrieve radio button value");
-//         }
-   
-//     } else { 
-//         elementId = deleteButton.getAttribute(`data-${type}-id`);
-//     }
-
-//     const csrftoken = getCookie('csrftoken');
-
-//     fetch(`/handling/${type}/${elementId}`, {
-//         method: 'DELETE',
-//         headers: {
-//             'X-CSRFToken': csrftoken
-//         }
-//     })
-//     .then(response => {
-//         if (response.ok) {
-//             return response.json();
-//         } else {
-//             throw new Error(`${type} deletion failed`);
-//         }
-//     })
-//     .then(data => {
-//         // Close the Delete Confirmation Modal
-//         let modalReference = document.getElementById("deleteConfirmationModal");
-//         let confirmationModal = bootstrap.Modal.getInstance(modalReference);
-//         confirmationModal.hide();
-        
-//         const successDiv = document.getElementById('successModal');
-
-//         // Show success modal or message
-//         const successModal = new bootstrap.Modal(successDiv);
-//         successModal.show();
-        
-//         // Pass the type to success div
-//         successDiv.setAttribute(`data-success-type`, type);
-
-//         // Edit success modal message
-//         const successMessage = data.message.charAt(0).toUpperCase() + data.message.slice(1)
-//         document.querySelector('#successModal .modal-body').textContent = successMessage;
-//         document.querySelector('#successModal a').style.display = 'none';
-//     })
-//     .catch(error => {
-//         console.error('Error:', error);
-//     });    
-// }
-
 // Pre-fill data for editing form
 function preFillForm(type, elementId) {
     
@@ -305,7 +246,7 @@ function preFillForm(type, elementId) {
                 document.getElementById('id_address').value = data.address;
                 document.getElementById('id_num_bedrooms').value = data.num_bedrooms;
                 document.getElementById('id_area').value = data.area;
-                // chooseSelectedOption('currency', data.currency);
+                chooseSelectedOption('currency', data.currency);
                 // document.getElementById('id_property_value').value = data.property_value;
                 break;
             case 'tenant':
@@ -342,12 +283,30 @@ function preFillForm(type, elementId) {
                 document.getElementById('id_capital_structure_value').value = data.value;
                 document.getElementById('id_capital_structure_debt').value = data.debt;
                 document.getElementById('id_property_valuation').value = data.property_id;
+                
+                // Making the proper currency selection
+                // Get the select element
+                const selectElement = document.getElementById('id_currency');
+
+                // Iterate through the options
+                for (let i = 0; i < selectElement.options.length; i++) {
+                    let option = selectElement.options[i];
+
+                    // Check if the option's value matches the desired currencyValue
+                    if (option.value === data.currency) {
+                        // Set the selected attribute for the matching option
+                        option.selected = true;
+                    }
+                }
+                // document.getElementById('id_currency').value = data.currency;
                 break;
         }
     })
     .catch(error => console.log(error));
 
-    document.querySelector('.modal-footer .btn-primary').textContent = 'Save changes';
+    document.querySelectorAll('.modal-footer .btn-primary').forEach(button => {
+        button.textContent = 'Save changes';
+    });
 
 }
 
@@ -385,8 +344,17 @@ function load_element_details(type, elementId) {
                 document.querySelector('#propertyBedroomsCard .display-4').textContent = element.num_bedrooms;
                 document.querySelector('#propertyAreaCard .display-4').textContent = 
                     (typeof element.area === 'number' && !isNaN(element.area)) ? element.area.toFixed(0) : 'NA';
-                document.querySelector('#propertyValueCard .display-4').textContent = 
-                    (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? formatNumberWithParentheses(element.currency, element.property_value) + "k" : 'NA';
+                // document.querySelector('#propertyValueCard .display-4').textContent = 
+                //     (typeof element.property_value === 'number' && !isNaN(element.property_value)) ? formatNumberWithParentheses(element.currency, element.property_value) + "k" : 'NA';
+                
+                let valueText;
+                if (typeof element.property_value === 'number' && !isNaN(element.property_value)) {
+                    valueText = (element.property_value === 0) ? element.currency : formatNumberWithParentheses(element.currency, element.property_value) + "k";
+                } else {
+                    valueText = 'NA';
+                }
+
+                document.querySelector('#propertyValueCard .display-4').textContent = valueText;
                 
                 // Populate P&L table
                 populatePropertyProfitAndLossTable(element);
@@ -500,7 +468,7 @@ function load_element_details(type, elementId) {
                     <button type="button" class="btn btn-secondary me-2 edit-entry-button" data-${type}-id="${elementId}" data-edit-type="${type}" id="edit${Type}Button">
                         Edit
                     </button>
-                    <button type="button" class="btn btn-danger" data-${type}-id="${elementId}" id="deleteButton" data-delete-type="${type}" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal">
+                    <button type="button" class="btn btn-danger" data-${type}-id="${elementId}" id="delete${Type}Button" data-delete-type="${type}" data-bs-toggle="modal" data-bs-target="#deleteConfirmationModal">
                         <i class="bi bi-trash3"></i>
                     </button>
                 </div>
@@ -686,4 +654,63 @@ function disableEditDeleteButtons() {
         editButton.disabled = true;
         deleteButton.disabled = true;
     });
+}
+
+// Property Valuation delete click handler
+function propertyValuationDeleteElementHandler(event) {
+
+    event.preventDefault();
+
+    // Get element ID from delete button
+
+        const selectedRadio = document.querySelector('input[name="radioPropertyValuation"]:checked');
+        
+        let elementId;
+        if (selectedRadio) {
+            elementId = selectedRadio.value;
+            console.log(`Selected radio button value: ${elementId}`);
+        } else {
+            throw new Error("Couldn't retrieve radio button value");
+        }
+
+    const csrftoken = getCookie('csrftoken');
+
+    fetch(`/handling/propertyValuation/${elementId}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': csrftoken
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();
+        } else {
+            throw new Error("Property valuation deletion failed");
+        }
+    })
+    .then(data => {
+        // Close the Delete Confirmation Modal
+        let modalReference = document.getElementById("propertyValuationDeleteConfirmationModal");
+        let confirmationModal = bootstrap.Modal.getInstance(modalReference);
+        confirmationModal.hide();
+        
+        const successDiv = document.getElementById("successModal");
+
+        // Show success modal or message
+        const successModal = new bootstrap.Modal(successDiv);
+        successModal.show();
+        
+        // Pass the type to success div
+        successDiv.setAttribute(`data-success-type`, "propertyValuation");
+
+        // Edit success modal message
+        const successMessage = data.message.charAt(0).toUpperCase() + data.message.slice(1)
+        document.querySelector('#successModal .modal-body').textContent = successMessage;
+        document.querySelector('#successModal a').style.display = 'none';
+
+        updateChart(window.myChart, document.getElementById("id_chartTimeline"));
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });    
 }

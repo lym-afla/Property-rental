@@ -10,7 +10,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteButton = document.getElementById('confirmDeleteButton');
     deleteButton.addEventListener('click', deleteElementHandler);
 
-    updateEffectiveDate();
+    // Run updateEffectiveDate only if not on Login or Register page
+    if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+        updateEffectiveDate();
+    }
 });
 
 // Define a variable to track whether the form has been fetched
@@ -49,6 +52,8 @@ function elementActionClickHandler(event) {
         getForm(action, type);
         
     } else {
+        console.log(`${type} form already fetched`);
+        
         const form = document.getElementById(`${type}Form`);
         form.reset();
 
@@ -57,42 +62,68 @@ function elementActionClickHandler(event) {
             resetPropertyChoices();
         }
         
-        // Assign property id value
-        if (type === 'propertyValuation') {
-            // Extract property ID from the button
-            const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
-            // Set the value of the hidden field in the form
-            const hiddenInput = document.getElementById('id_property_valuation');
-            hiddenInput.value = propertyId;
-        }
-        
-        console.log(`${type} form already fetched`);
-        
-        attachSubmitEventListener(action, type);
+        formHandler(action, type);
 
-        const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
-        modal.show();
+        // // Assign property id value
+        // if (type === 'propertyValuation') {
+        //     // Extract property ID from the button
+        //     const propertyId = document.getElementById('deletePropertyValuationButton').getAttribute('data-property-id');
+        //     // Set the value of the hidden field in the form
+        //     const hiddenInput = document.getElementById('id_property_valuation');
+        //     hiddenInput.value = propertyId;
+        // }
 
-        if (action === 'edit') {
-            let elementId;
-            const Type = type.charAt(0).toUpperCase() + type.slice(1);
-            if (type === "transaction" || type === "propertyValuation") {
-                const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
-                if (selectedRadio) {
-                    elementId = selectedRadio.value;
-                    console.log(`Selected radio button value: ${elementId}`);
-                } else {
-                    throw new Error("Couldn't retrieve radio button value");
-                }
-            } else {
-                elementId = event.target.getAttribute(`data-${type}-id`);
-            }
-            preFillForm(type, elementId);
-        }
+        // // Attach an event listener to the form's submit event
+        // attachSubmitEventListener(action, type);
 
-        // defaultPropertyChoice(type);
-        console.log("XXXXX Running modal change namges");
-        changeModalTitle(action, type);
+        // const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
+        // modal.show();
+
+        // if (action === 'edit') {
+        //     let elementId;
+        //     const Type = type.charAt(0).toUpperCase() + type.slice(1);
+        //     if (type === "transaction" || type === "propertyValuation") {
+        //         const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
+        //         if (selectedRadio) {
+        //             elementId = selectedRadio.value;
+        //             console.log(`Selected radio button value: ${elementId}`);
+        //         } else {
+        //             throw new Error("Couldn't retrieve radio button value");
+        //         }
+        //     } else {
+        //         elementId = event.target.getAttribute(`data-${type}-id`);
+        //         if (type === "property") {
+        //             document.getElementById("propertyForm").querySelector(".separator").style.display = "none";
+        //             document.getElementById("id_capital_structure_date").parentNode.style.display = "none";
+        //             document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "none";
+        //         }
+        //     }
+        //     preFillForm(type, elementId);
+        // } else if (action === "new") {
+        //     if (type === "propertyValuation") {
+        //         // Making the proper currency selection
+        //         // Get the select element
+        //         const selectElement = document.getElementById('id_currency');
+
+        //         // Iterate through the options
+        //         for (let i = 0; i < selectElement.options.length; i++) {
+        //             let option = selectElement.options[i];
+
+        //             // Check if the option's value matches the desired currencyValue
+        //             if (option.textContent === document.getElementById('propertyValueCard').querySelector('.display-4').textContent.trim()[0]) {
+        //                 // Set the selected attribute for the matching option
+        //                 option.selected = true;
+        //             }
+        //         }
+        //     } else if (type === "property") {
+        //         document.getElementById("propertyForm").querySelector(".separator").style.display = "block";
+        //         document.getElementById("id_capital_structure_date").parentNode.style.display = "block";
+        //         document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "block";
+        //     }
+        // }
+
+        // // defaultPropertyChoice(type);
+        // changeModalTitle(action, type);
     }
 }
 
@@ -113,45 +144,74 @@ function getForm(action, type) {
             divModal.querySelector('[value=""]').remove();
         }
 
-        // Assign property id value
-        if (type === 'propertyValuation') {
-            // Extract property ID from the button
-            const propertyId = document.getElementById('deleteButton').getAttribute('data-property-id');
-            // Set the value of the hidden field in the form
-            const hiddenInput = document.getElementById('id_property_valuation');
-            hiddenInput.value = propertyId;
-        }
+        formHandler(action, type);
 
-        // Attach an event listener to the form's submit event
-        attachSubmitEventListener(action, type);
+        // // Assign property id value
+        // if (type === 'propertyValuation') {
+        //     // Extract property ID from the button
+        //     const propertyId = document.getElementById('deletePropertyValuationButton').getAttribute('data-property-id');
+        //     // Set the value of the hidden field in the form
+        //     const hiddenInput = document.getElementById('id_property_valuation');
+        //     hiddenInput.value = propertyId;
+        // }
+
+        // // Attach an event listener to the form's submit event
+        // attachSubmitEventListener(action, type);
        
-        const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
-        modal.show();
+        // const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
+        // modal.show();
 
-        if (action === 'edit') {
-            let elementId;
-            const Type = type.charAt(0).toUpperCase() + type.slice(1);
-            if (type === "transaction" || type === "propertyValuation") {
-                const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
-                if (selectedRadio) {
-                    elementId = selectedRadio.value;
-                    console.log(`Selected radio button value: ${elementId}`);
-                } else {
-                    throw new Error("Couldn't retrieve radio button value");
-                }
-            } else {
-                elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
-            }
+        // if (action === 'edit') {
+        //     let elementId;
+        //     const Type = type.charAt(0).toUpperCase() + type.slice(1);
+        //     if (type === "transaction" || type === "propertyValuation") {
+        //         const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
+        //         if (selectedRadio) {
+        //             elementId = selectedRadio.value;
+        //             console.log(`Selected radio button value: ${elementId}`);
+        //         } else {
+        //             throw new Error("Couldn't retrieve radio button value");
+        //         }
+        //     } else {
+        //         elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
+        //         if (type === "property") {
+        //             document.getElementById("propertyForm").querySelector(".separator").style.display = "none";
+        //             document.getElementById("id_capital_structure_date").parentNode.style.display = "none";
+        //             document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "none";
+        //         }
+        //     }
+        //     preFillForm(type, elementId);
+        // } else if (action === "new") {
+        //     if (type === "propertyValuation") {
+        //         // Making the proper currency selection
+        //         // Get the select element
+        //         const selectElement = document.getElementById('id_currency');
 
-            preFillForm(type, elementId);
-        }
+        //         // Iterate through the options
+        //         for (let i = 0; i < selectElement.options.length; i++) {
+        //             let option = selectElement.options[i];
 
+        //             // Check if the option's value matches the desired currencyValue
+        //             if (option.textContent === document.getElementById('propertyValueCard').querySelector('.display-4').textContent.trim()[0]) {
+        //                 // Set the selected attribute for the matching option
+        //                 option.selected = true;
+        //             }
+        //         }
+        //     } else if (type === "property") {
+        //         document.getElementById("propertyForm").querySelector(".separator").style.display = "block";
+        //         document.getElementById("id_capital_structure_date").parentNode.style.display = "block";
+        //         document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "block";
+        //     }
+        // }
+
+        
+
+        // // defaultPropertyChoice(type);
+        
+        // changeModalTitle(action, type);
+        
         // Update the formFetched variable to indicate that the form has been fetched
         formFetched[type] = true;
-
-        // defaultPropertyChoice(type);
-        
-        changeModalTitle(action, type);
     })
     .catch(error => {
         console.error("Error fetching form:", error);
@@ -206,7 +266,7 @@ function submitEditHandler(event) {
             throw new Error("Couldn't retrieve radio button value");
         } 
     } else {
-        elementId = document.getElementById('deleteButton').getAttribute(`data-${type}-id`);
+        elementId = document.getElementById(`delete${Type}Button`).getAttribute(`data-${type}-id`);
     }
     
     handle_type('edit', type, elementId); // Call the edit_property function    
@@ -282,6 +342,7 @@ function okButtonEventHandler() {
     const successDiv = document.getElementById('successModal');
     const successText = successDiv.querySelector('.modal-body').textContent;
     let type = successDiv.getAttribute("data-success-type");
+    const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     // Hide the modal
     let successModalInstance = bootstrap.Modal.getInstance(successDiv);
@@ -301,8 +362,10 @@ function okButtonEventHandler() {
     } else if (successText.includes("edited")) {
         if (type === 'transaction') {
             load_table(type);
+        } else if (type === 'propertyValuation') {
+            // updateChart(window.myChart, document.getElementById("propertyValuationChartCard"));
         } else {
-            const elementId = document.getElementById('deleteButton').getAttribute(`data-${type}-id`);
+            const elementId = document.getElementById(`delete${Type}Button`).getAttribute(`data-${type}-id`);
             load_element_details(type, elementId);
         }
     }
@@ -420,8 +483,11 @@ function deleteElementHandler(event) {
 
     event.preventDefault();
 
-    // Extract what type of element is being dealt with
-    const deleteButton = document.getElementById(`deleteButton`);
+    let deleteButton;
+
+    // Extract what type of element is being dealt with. Check whether property Valuation functionality exists first
+    deleteButton = document.querySelector('[data-delete-type]');
+    
     const type = deleteButton.getAttribute("data-delete-type");
     
     let elementId;
@@ -527,4 +593,71 @@ function chooseSelectedOption(option, choice) {
         break; // Exit the loop once a match is found
         }
     }
+}
+
+// Form handling for new and existing forms
+function formHandler(action, type) {
+
+    // Assign property id value
+    if (type === 'propertyValuation') {
+        // Extract property ID from the button
+        const propertyId = document.getElementById('deletePropertyValuationButton').getAttribute('data-property-id');
+        // Set the value of the hidden field in the form
+        const hiddenInput = document.getElementById('id_property_valuation');
+        hiddenInput.value = propertyId;
+    }
+
+    // Attach an event listener to the form's submit event
+    attachSubmitEventListener(action, type);
+
+    const modal = new bootstrap.Modal(document.getElementById(`${type}Modal`));
+    modal.show();
+
+    if (action === 'edit') {
+        let elementId;
+        const Type = type.charAt(0).toUpperCase() + type.slice(1);
+        if (type === "transaction" || type === "propertyValuation") {
+            const selectedRadio = document.querySelector(`input[name="radio${Type}"]:checked`);
+            if (selectedRadio) {
+                elementId = selectedRadio.value;
+                console.log(`Selected radio button value: ${elementId}`);
+            } else {
+                throw new Error("Couldn't retrieve radio button value");
+            }
+        } else {
+            elementId = document.getElementById(`edit${Type}Button`).getAttribute(`data-${type}-id`);
+            console.log(`Getting elementId: ${elementId}`);
+            if (type === "property") {
+                document.getElementById("propertyForm").querySelector(".separator").style.display = "none";
+                document.getElementById("id_capital_structure_date").parentNode.style.display = "none";
+                document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "none";
+            }
+        }
+        preFillForm(type, elementId);
+    } else if (action === "new") {
+        if (type === "propertyValuation") {
+            // Making the proper currency selection
+            // Get the select element
+            const selectElement = document.getElementById('id_currency');
+
+            // Iterate through the options
+            for (let i = 0; i < selectElement.options.length; i++) {
+                let option = selectElement.options[i];
+
+                // Check if the option's value matches the desired currencyValue
+                if (option.textContent === document.getElementById('propertyValueCard').querySelector('.display-4').textContent.trim()[0]) {
+                    // Set the selected attribute for the matching option
+                    option.selected = true;
+                }
+            }
+        } else if (type === "property") {
+            document.getElementById("propertyForm").querySelector(".separator").style.display = "block";
+            document.getElementById("id_capital_structure_date").parentNode.style.display = "block";
+            document.getElementById("id_capital_structure_value").parentNode.parentNode.parentNode.style.display = "block";
+        }
+    }
+
+    // defaultPropertyChoice(type);
+    changeModalTitle(action, type);
+
 }

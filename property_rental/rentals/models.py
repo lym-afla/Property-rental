@@ -40,13 +40,11 @@ class Landlord(models.Model):
 
 class Property(models.Model):
     owned_by = models.ForeignKey(Landlord, on_delete=models.CASCADE, related_name='properties')
-    # tenants = models.ForeignKey(Tenant, on_delete=models.SET_NULL, related_name='property', blank=True, null=True)
     name = models.CharField(max_length=50)
     location = models.CharField(max_length=50)
     address = models.CharField(max_length=150, null=True, blank=True)
     num_bedrooms = models.PositiveIntegerField()
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
-    # property_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     sold = models.DateField(null=True, blank=True)
 
@@ -71,9 +69,9 @@ class Property(models.Model):
         latest_before_date_value = self.capital.filter(capital_structure_date__lte=date, capital_structure_value__isnull=False).order_by('-capital_structure_date').first()
         latest_before_date_debt = self.capital.filter(capital_structure_date__lte=date, capital_structure_debt__isnull=False).order_by('-capital_structure_date').first()
 
-        # Get the earliest capital structure entry that is on or after the specified date
-        earliest_after_date_value = self.capital.filter(capital_structure_date__gte=date, capital_structure_value__isnull=False).order_by('capital_structure_date').first()
-        earliest_after_date_debt = self.capital.filter(capital_structure_date__gte=date, capital_structure_debt__isnull=False).order_by('capital_structure_date').first()
+        # Get the earliest capital structure entry that is after the specified date
+        earliest_after_date_value = self.capital.filter(capital_structure_date__gt=date, capital_structure_value__isnull=False).order_by('capital_structure_date').first()
+        earliest_after_date_debt = self.capital.filter(capital_structure_date__gt=date, capital_structure_debt__isnull=False).order_by('capital_structure_date').first()
 
         if latest_before_date_value and earliest_after_date_value:
             # Calculate the average value between two dates
@@ -104,27 +102,6 @@ class Property(models.Model):
             average_debt = 0
 
         return average_value, average_debt
-
-
-        # if latest_before_date_value and earliest_after_date_value:
-        #     # Calculate the average value between two dates
-        #     value_before = latest_before_date.value
-        #     value_after = earliest_after_date.value
-        #     debt_before = latest_before_date.debt
-        #     debt_after = earliest_after_date.debt
-
-        #     days_between = (earliest_after_date.date - latest_before_date.date).days
-        #     days_to_specified_date = (date - latest_before_date.date).days
-
-        #     average_value = value_before + (value_after - value_before) * days_to_specified_date / days_between
-        #     average_debt = debt_before + (debt_after - debt_before) * days_to_specified_date / days_between
-        #     return average_value, average_debt
-        # elif latest_before_date:
-        #     # If there is only one entry, return its value
-        #     return latest_before_date.value, latest_before_date.debt
-        # else:
-        #     # No capital structure entries, return None or some default value
-        #     return 0, 0
     
 # Keep track of captital structure for the property
 class Property_capital_structure(models.Model):

@@ -99,6 +99,8 @@ def index(request):
                 'text': 'Rent due',
             },
         ]
+
+        print(f'index function. debt. {get_currency_symbol(currency_basis) + str(f'{-debt:,.0f}')}')
         
         chart_settings = request.session['chart_settings']
         from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
@@ -497,7 +499,6 @@ def handle_element(request, data_type, element_id):
                     from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])
                     data['chart_settings']['From'] = from_date
                     data['chart_data'] = get_chart_data('property', element.id, chart_settings['frequency'], from_date, chart_settings['To'], element_currency)
-                    
                 else:
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403) 
             case 'tenant':
@@ -555,7 +556,9 @@ def handle_element(request, data_type, element_id):
                         'value': element.capital_structure_value,
                         'debt': element.capital_structure_debt,
                         'property_id': element.property.id,
+                        'currency': element.property.currency,
                     }
+                print(f'561. Printing data: {data}')
         return JsonResponse(data, status=200)            
     elif request.method == 'DELETE':
         element.delete()
@@ -650,7 +653,7 @@ def create_element(request, data_type):
                         transaction.save()
                         
                         # When adding new transaction update FX rates from Yahoo
-                        FX.updage_FX_rate()
+                        FX.update_fx_rates()
                         
                         return JsonResponse({'message': 'Tenant created successfully'}, status=200)
                     else:
@@ -739,10 +742,12 @@ def chart_data_request(request):
             if id != 'null':
                 properties = properties.filter(id=id)
             properties = properties.all()
+            currency = request.session['default_currency']
         else:
             properties = None
+            currency = Property.objects.get(id=id).currency
         
-        chart_data = get_chart_data(type, id, frequency, from_date, to_date, request.session['default_currency'], properties)
+        chart_data = get_chart_data(type, id, frequency, from_date, to_date, currency, properties)
 
         return JsonResponse(chart_data)
 

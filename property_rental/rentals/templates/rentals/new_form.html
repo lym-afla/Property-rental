@@ -15,27 +15,71 @@
                 <form method="post" id="{{ form_type }}Form">
                     {% csrf_token %}
                     {% for field in form %}
-                        {% if 'currency' not in field.name %}
-                            {% if form_type == 'propertyValuation' and field.name == 'property' %}
-                                <div class="mb-3" style="display: none">
-                            {% else %}
-                                <div class="mb-3">
-                            {% endif %}
-                            {% if field.name == 'property_value' or field.name == 'lease_rent' or field.name == 'amount' %}
-                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        {{ form.currency }}
-                                    </div>
-                                    <div class="col-md-8">
-                                        {{ field }}
-                                    </div>
-                                </div>
-                            {% else %}
+                        {% if form_type == 'property' and 'currency' in field.name %}
+                            <div class="mb-3">
                                 <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
                                 {{ field }}
-                            {% endif %}
                             </div>
+                        {% endif %}
+                        {% if 'currency' not in field.name %}
+                            {% if field.name == 'property_value' or field.name == 'lease_rent' or field.name == 'amount' %}
+                                <div class="mb-3">
+                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            {{ form.currency }}
+                                        </div>
+                                        <div class="col-md-8">
+                                            {{ field }}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% elif field.name == 'capital_structure_date' %}
+                                {% if form_type != 'propertyValuation' %}
+                                    <div class="separator">
+                                        <span class="separator-text">Valuation</span>
+                                    </div>
+                                {% endif %}
+                                <div class="mb-3">
+                                    <label for="{{ form.capital_structure_date.id_for_label }}" class="form-label">{{ form.capital_structure_date.label }}</label>
+                                    {{ form.capital_structure_date }}
+                                </div>
+                                <div class="mb-3">
+                                    <div class="row">
+                                        {% if form_type == 'propertyValuation' %}
+                                            <div class="col-md-2 align-self-end">
+                                                {{ form.currency }}
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label for="{{ form.capital_structure_value.id_for_label }}" class="form-label">{{ form.capital_structure_value.label }}</label>
+                                                {{ form.capital_structure_value }}
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label for="{{ form.capital_structure_debt.id_for_label }}" class="form-label">{{ form.capital_structure_debt.label }}</label>
+                                                {{ form.capital_structure_debt }}
+                                            </div>
+                                        {% else %}
+                                            <div class="col-md-6">
+                                                <label for="{{ form.capital_structure_value.id_for_label }}" class="form-label">{{ form.capital_structure_value.label }}</label>
+                                                {{ form.capital_structure_value }}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="{{ form.capital_structure_debt.id_for_label }}" class="form-label">{{ form.capital_structure_debt.label }}</label>
+                                                {{ form.capital_structure_debt }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% elif field.name != 'capital_structure_date' and field.name != 'capital_structure_value' and field.name != 'capital_structure_debt'  %}
+                                {% if form_type == 'propertyValuation' and field.name == 'property' %}
+                                    <div class="mb-3" style="display: none">
+                                {% else %}
+                                    <div class="mb-3">
+                                {% endif %}
+                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                                {{ field }}
+                                </div>
+                            {% endif %}
                         {% endif %}
                     {% endfor %}
                     <div class="invalid-feedback">

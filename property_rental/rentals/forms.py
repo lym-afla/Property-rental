@@ -101,9 +101,26 @@ class UserSettingsForm(forms.ModelForm):
         return digits
 
 class PropertyForm(forms.ModelForm):
+    # Adding elements for Property_capital_structure instance
+    capital_structure_date = forms.DateField(
+        label='Date',
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+    )
+    capital_structure_value = forms.DecimalField(
+        label='Value',
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+    capital_structure_debt = forms.DecimalField(
+        label='Debt',
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+    
     class Meta:
         model = Property
-        fields = ['name', 'location', 'address', 'num_bedrooms', 'area']
+        fields = ['name', 'location', 'address', 'num_bedrooms', 'area', 'currency', 'capital_structure_date', 'capital_structure_value', 'capital_structure_debt']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'location': forms.TextInput(attrs={'class': 'form-control'}),
@@ -115,16 +132,38 @@ class PropertyForm(forms.ModelForm):
         labels = {
             'address': 'Address (optional)',
             'num_bedrooms': 'Number of bedrooms',
-            'currency': '',
+            'currency': 'Currency',
             'area': 'Area (optional)',
         }
 
+        def save(self, commit=True):
+            property_instance = super().save(commit)
+            date = self.cleaned_data.get('capital_structure_date')
+            value = self.cleaned_data.get('capital_structure_value')
+            debt = self.cleaned_data.get('capital_structure_debt')
+
+            if value or debt:
+                capital_structure_instance = Property_capital_structure(
+                    property=property_instance,
+                    capital_structure_date=date,
+                    capital_structure_value=value,
+                    capital_structure_debt=debt,
+                )
+                capital_structure_instance.save()
+
+            return property_instance
+
 class PropertyValuationForm(forms.ModelForm):
-    # currency = forms.ChoiceField(choices=CURRENCY_CHOICES, widget=forms.Select(attrs={'class': 'form-select'}), label='Currency')
+    currency = forms.ChoiceField(
+        choices=CURRENCY_CHOICES, 
+        widget=forms.Select(attrs={'class': 'form-control', 'disabled': 'True'}), 
+        label='Currency',
+        required=False
+    )
     
     class Meta:
         model = Property_capital_structure
-        fields = ['property', 'capital_structure_date', 'capital_structure_value', 'capital_structure_debt']
+        fields = ['property', 'capital_structure_date', 'currency', 'capital_structure_value', 'capital_structure_debt']
         widgets = {
             'capital_structure_date': DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'capital_structure_value': forms.NumberInput(attrs={'class': 'form-control'}),
@@ -135,7 +174,6 @@ class PropertyValuationForm(forms.ModelForm):
             'capital_structure_date': 'Date of entry',
             'capital_structure_value': 'Value',
             'capital_structure_debt': 'Debt',
-            # 'property': '',  # Empty string to hide the label
         }
 
         def clean(self):
