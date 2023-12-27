@@ -69,6 +69,8 @@ def index(request):
         revenue_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='income')
         expense_ytd = Transaction.financials(target_currency=currency_basis, end_date=effective_current_date, properties=properties, start_date=date(current_year, 1, 1), transaction_type='expense') 
                 
+        print(f'index function. properties. {properties == None}')
+
         debt = 0
         for property in properties:
             for tenant in property.tenants.all():
@@ -100,7 +102,7 @@ def index(request):
             },
         ]
 
-        print(f'index function. debt. {get_currency_symbol(currency_basis) + str(f'{-debt:,.0f}')}')
+        # print(f'index function. debt. {get_currency_symbol(currency_basis) + str(f'{-debt:,.0f}')}')
         
         chart_settings = request.session['chart_settings']
         from_date = calculate_from_date(chart_settings['To'], chart_settings['timeline'])

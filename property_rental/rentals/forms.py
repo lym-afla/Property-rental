@@ -14,6 +14,20 @@ class CustomUserCreationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ('username', 'email', 'password1', 'password2')
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = self.cleaned_data["email"]
+
+        user_type = self.cleaned_data.get("user_type")
+        if user_type == "landlord":
+            user.is_landlord = True
+        elif user_type == "tenant":
+            user.is_tenant = True
+
+        if commit:
+            user.save()
+        return user
         
 class UserProfileForm(forms.ModelForm):
     class Meta:

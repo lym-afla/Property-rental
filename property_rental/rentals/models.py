@@ -244,7 +244,7 @@ class Transaction(models.Model):
         
         queryset = cls.objects.filter(date__lte=end_date)
         
-        if properties:
+        if properties is not None:
             queryset = queryset.filter(property__in=properties)
         
         # if properties is not None and len(properties) == 1:
@@ -273,6 +273,7 @@ class Transaction(models.Model):
             else:
                 fx_rate = 1
             total_amount += transaction['amount'] * fx_rate
+
         return total_amount
     
     def __str__(self):
