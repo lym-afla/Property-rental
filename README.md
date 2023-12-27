@@ -9,13 +9,14 @@ This is a web application to keep track of a portfolio of properties in terms of
 + `Chart.js` package is used to include charts in the application, normally showing P&L entries for the portfolio or distinct properties and rent history
 + Instances of the main models (user, property, tenant, transaction) can also be edited in case of the wrong data
 + User settings are also included to be able to save user details (username, name, email) and data visual properties (default currency, chart frequency, chart timeline and number of digits shown in tables)
-+ The application is multi-currency. Each property has its onw _natural_ currrency. Data representation, however, can be made in any currency (set up in user settings). And home page, summarising all the statistics is shown using single default currency. After the new transaction is entered special function is run to update FX database to be able to convert currencies
++ The application is multi-currency. Each property has its onw _natural_ currrency. Data representation, however, can be made in any currency (set up in user settings). And home page, summarising all the statistics is shown using single default currency. After the new transaction is entered, special function is run to update FX database to be able to convert currencies
 + For consistency of FX conversions _Bellman-Ford_ algorithm used for shortest path cross-currency conversion using `networkx` library to deal with undirected graphs
++ The application has the ability to update the effective date, such that all the data and calculations are shown as of that effective date 
 
 ## File structure
 `Property_rental` build with Django with the single app `rentals`. Rentals app has fairly standard structure:
-+ `migrations` folder
-+ `static` folder with images used, styles.css and a number of JavaScript files that are used to handle actions on web pages
++ `migrations` folder keep the history of model updates
++ `static` folder with images used, styles.css and a number of JavaScript files that are used to handle actions on web pages and `AJAX` requests to update forms, charts and tables
 + `templates` folder with a number of `html` pages, templates and snippets used when rendering pages (layouts for home page, property, tenants and transaction pages, chart divs, tables)
 + Fairly standard `views.py`, `models.py`, `urls.py` handling routing and exchange of data between back-end and front-end
 + In addition, `forms.py` to do form creation and handling, `constants.py` to use constants throughout the app, mainly in models and forms, and `utils.py` with additional useful functions to do, for instance, currency format representation, preparing datasets for charting (dates, labels), updating FX spot rates from yahoo finance (using yfinance package)
