@@ -118,7 +118,6 @@ class PropertyForm(forms.ModelForm):
     # Adding elements for Property_capital_structure instance
     capital_structure_date = forms.DateField(
         label='Date',
-        required=False,
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
     )
     capital_structure_value = forms.DecimalField(
@@ -150,22 +149,26 @@ class PropertyForm(forms.ModelForm):
             'area': 'Area (optional)',
         }
 
-        def save(self, commit=True):
-            property_instance = super().save(commit)
-            date = self.cleaned_data.get('capital_structure_date')
-            value = self.cleaned_data.get('capital_structure_value')
-            debt = self.cleaned_data.get('capital_structure_debt')
+        # def save(self, commit=True):
+        #     property_instance = super().save(commit)
+        #     date = self.cleaned_data.get('capital_structure_date')
+        #     value = self.cleaned_data.get('capital_structure_value')
+        #     debt = self.cleaned_data.get('capital_structure_debt')
+        #     print(f'157 of forms.py. {value, debt}')
+        #     if date:
+        #         capital_structure_instance = Property_capital_structure(
+        #             property=property_instance,
+        #             capital_structure_date=date,
+        #             capital_structure_value=value,
+        #             capital_structure_debt=debt,
+        #         )
+        #         capital_structure_instance.save()
+        #         print(f'167 of form.py. {capital_structure_instance}')
 
-            if value or debt:
-                capital_structure_instance = Property_capital_structure(
-                    property=property_instance,
-                    capital_structure_date=date,
-                    capital_structure_value=value,
-                    capital_structure_debt=debt,
-                )
-                capital_structure_instance.save()
+        #     if commit:
+        #         property_instance.save()
 
-            return property_instance
+        #     return property_instance
 
 class PropertyValuationForm(forms.ModelForm):
     currency = forms.ChoiceField(

@@ -601,9 +601,24 @@ def create_element(request, data_type):
                     # Form for creating new property
                     form = PropertyForm(request.POST or None)
                     if form.is_valid():
-                        property = form.save(commit=False)
-                        property.owned_by = Landlord.objects.get(user=request.user)
-                        property.save()
+                        property_instance = form.save(commit=False)
+                        property_instance.owned_by = Landlord.objects.get(user=request.user)
+                        property_instance.save()
+
+                        # Create Property_capital_structure instance
+                        date = form.cleaned_data.get('capital_structure_date')
+                        value = form.cleaned_data.get('capital_structure_value')
+                        debt = form.cleaned_data.get('capital_structure_debt')
+
+                        if date:
+                            capital_structure_instance = Property_capital_structure(
+                                property=property_instance,
+                                capital_structure_date=date,
+                                capital_structure_value=value,
+                                capital_structure_debt=debt,
+                            )
+                            capital_structure_instance.save()
+                        
                         return JsonResponse({'message': 'Property created successfully'}, status=200)
                     else:
                         return JsonResponse({'errors': form.errors}, status=400)
@@ -666,13 +681,13 @@ def create_element(request, data_type):
             case 'propertyValuation':
                 if request.user.is_landlord:
                     form = PropertyValuationForm(request.POST)
-                    print(f"645. Create_element: {request.POST.get('property')}")
-                    print(f'646 {form}')
+                    # print(f"645. Create_element: {request.POST.get('property')}")
+                    # print(f'646 {form}')
                     if form.is_valid():
                         valuation = form.save(commit=False)
                         # Retrieve the property ID from the form data
                         property_id = request.POST.get('property')
-                        print(f"create_element: {property_id}")
+                        # print(f"create_element: {property_id}")
                         
                         property = get_object_or_404(Property, id=property_id)
 

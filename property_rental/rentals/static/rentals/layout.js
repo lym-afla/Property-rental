@@ -601,10 +601,11 @@ function formHandler(action, type) {
     // Assign property id value
     if (type === 'propertyValuation') {
         // Extract property ID from the button
-        const propertyId = document.getElementById('deletePropertyValuationButton').getAttribute('data-property-id');
+        const propertyId = document.getElementById('deletePropertyButton').getAttribute('data-property-id');
         // Set the value of the hidden field in the form
         const hiddenInput = document.getElementById('id_property_valuation');
         hiddenInput.value = propertyId;
+        console.log(`formHandler. property ID: ${propertyId}`);
     }
 
     // Attach an event listener to the form's submit event
