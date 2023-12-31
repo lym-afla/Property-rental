@@ -79,7 +79,7 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
         
         # Fetch historical data for the currency pair within the date range
         data = yf.Ticker(currency_pair)
-        exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
+        # exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
         try:
             exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
         except:
