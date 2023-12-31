@@ -53,13 +53,13 @@
                             </div>
                         {% endif %}
                     </div>
-                    <div class="mb-3">
+                    {% comment %} <div class="mb-3">
                         <label for="{{ form.user_type.id_for_label }}" class="form-label">User Type</label>
                         <select class="form-select" id="{{ form.user_type.id_for_label }}" name="{{ form.user_type.name }}">
                             <option value="landlord">Landlord</option>
                             <option value="tenant">Tenant</option>
                         </select>
-                    </div>
+                    </div> {% endcomment %}
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">Register</button>
                     </div>
