@@ -6,3 +6,5 @@ property_rental/rentals/__pycache__/
 property_rental/rentals/migrations/__pycache__/
 
 property_rental/db.sqlite3
+
+property_rental/staticfiles/
