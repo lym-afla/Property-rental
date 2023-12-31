@@ -299,6 +299,8 @@ function handle_type(action, type, elementId) {
     // Convert formFields to a JSON string
     const jsonData = JSON.stringify(Object.fromEntries(formData.entries()));
 
+    showLoadingIndicator();
+
     fetch(variables[action].link, {
         method: variables[action].method,
         body: action === 'save' ? formData : jsonData,
@@ -332,7 +334,10 @@ function handle_type(action, type, elementId) {
         }
     })
     .catch(error => {
-        console.error('Error:', error)
+        console.error('Error:', error);
+    })
+    .finally(() => {
+        hideLoadingIndicator();
     });
 }
 
@@ -661,4 +666,14 @@ function formHandler(action, type) {
     // defaultPropertyChoice(type);
     changeModalTitle(action, type);
 
+}
+
+// Show loading indicator
+function showLoadingIndicator() {
+    document.getElementById('loading-indicator').classList.remove('loading-invisible');
+}
+
+// Hide loading indicator
+function hideLoadingIndicator() {
+    document.getElementById('loading-indicator').classList.add('loading-invisible');
 }
