@@ -1,0 +1,74 @@
+{% extends "rentals/layout.html" %}
+{% load static %}
+
+{% block content %}
+
+    <div class="container mt-4">
+        <h2>FX data</h2>
+
+        {% if messages %}
+            <div class="alert alert-danger">
+                <ul>
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        <table id="fxTable" class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th class="text-center">EURUSD</th>
+                    <th class="text-center">GBPUSD</th>
+                    <th class="text-center">USDRUB</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fx_entry in fx_entries %}
+                    <tr>
+                        <td>{{ fx_entry.date }}</td>
+                        <td class="text-center">{{ fx_entry.EURUSD|default_if_none:''|floatformat:4 }}</td>
+                        <td class="text-center">{{ fx_entry.GBPUSD|default_if_none:''|floatformat:4 }}</td>
+                        <td class="text-center">{{ fx_entry.USDRUB|default_if_none:''|floatformat:2 }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="d-flex justify-content-center">
+            <ul class="pagination">
+                {% if fx_entries.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1" aria-label="First">
+                            <span aria-hidden="true">&laquo;&laquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ fx_entries.previous_page_number }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                {% endif %}
+
+                <li class="page-item disabled">
+                    <span class="page-link">Page {{ fx_entries.number }} of {{ fx_entries.paginator.num_pages }}.</span>
+                </li>
+
+                {% if fx_entries.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ fx_entries.next_page_number }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ fx_entries.paginator.num_pages }}" aria-label="Last">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}
