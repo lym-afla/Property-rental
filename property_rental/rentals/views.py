@@ -11,6 +11,7 @@ from datetime import date, datetime
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
@@ -937,3 +938,29 @@ def property_valuation(request, property_id):
     data['chart_data'] = get_chart_data('property', property_id, 'M', '2022-06-01', '2023-09-15', 'USD', None)
     print(f'property_valuation function; data: {data}')
     return JsonResponse(data)
+
+# Compiling the table with FX data
+def fx_list(request):
+    # Get all FX instances sorted by date
+    fx_list = FX.objects.order_by('-date')
+
+    # Paginate the FX instances
+    paginator = Paginator(fx_list, 10)  # Show 10 entries per page
+    page = request.GET.get('page')
+
+    try:
+        fx_entries = paginator.page(page)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        fx_entries = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        fx_entries = paginator.page(paginator.num_pages)
+
+        # Invert the values
+    for fx_entry in fx_entries:
+        fx_entry.EURUSD = 1 / fx_entry.EURUSD if fx_entry.EURUSD else None
+        fx_entry.GBPUSD = 1 / fx_entry.GBPUSD if fx_entry.GBPUSD else None
+        fx_entry.USDRUB = 1 / fx_entry.USDRUB if fx_entry.USDRUB else None
+
+    return render(request, 'rentals/fx_list.html', {'fx_entries': fx_entries})

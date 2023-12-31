@@ -13,7 +13,7 @@ urlpatterns = [
     path('transactions/', views.transactions, name='transactions'),
     path('profile/', views.profile_page, name='profile_page'),
     path('edit-profile/', views.edit_profile, name='edit_profile'),
-    # path('edit-settings/', views.edit_settings, name='edit_settings'),
+    path('fx/', views.fx_list, name='fx_list'),
     
     # API methods
     path('table-data/<str:data_type>', views.table_data, name='table_data'),
