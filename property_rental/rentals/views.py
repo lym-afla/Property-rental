@@ -764,7 +764,7 @@ def chart_data_request(request):
             properties = None
             if type == 'property':
                 currency = Property.objects.get(id=id).currency
-            elif:
+            elif type == 'tenant':
                 currency = Tenant.objects.get(id=id).property.currency
 
         chart_data = get_chart_data(type, id, frequency, from_date, to_date, currency, properties)
