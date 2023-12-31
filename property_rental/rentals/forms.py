@@ -9,7 +9,7 @@ from .utils import effective_current_date
 
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
-    user_type = forms.ChoiceField(choices=[("landlord", "Landlord"), ("tenant", "Tenant")])
+    # user_type = forms.ChoiceField(choices=[("landlord", "Landlord"), ("tenant", "Tenant")])
 
     class Meta:
         model = User
@@ -19,10 +19,11 @@ class CustomUserCreationForm(UserCreationForm):
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
 
-        user_type = self.cleaned_data.get("user_type")
-        if user_type == "landlord":
+        # user_type = self.cleaned_data.get("user_type")
+        user_type = 'landlord'
+        if user_type == 'landlord':
             user.is_landlord = True
-        elif user_type == "tenant":
+        elif user_type == 'tenant':
             user.is_tenant = True
 
         if commit:

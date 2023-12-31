@@ -4,7 +4,9 @@ property_rental/AW-rental
 property_rental/property_rental/__pycache__/
 property_rental/rentals/__pycache__/
 property_rental/rentals/migrations/__pycache__/
+property_rental/rentals/templatetags/__pycache__/
 
 property_rental/db.sqlite3
 
 property_rental/staticfiles/
+property_rental/rentals/templatetags/__pycache__/custom_filters.cpython-311.pyc
