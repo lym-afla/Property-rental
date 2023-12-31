@@ -119,6 +119,7 @@ class PropertyForm(forms.ModelForm):
     # Adding elements for Property_capital_structure instance
     capital_structure_date = forms.DateField(
         label='Date',
+        required=False,
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
     )
     capital_structure_value = forms.DecimalField(
