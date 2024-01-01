@@ -325,12 +325,12 @@ class FX(models.Model):
 
                     if rate_data is not None:
                         # Update or create an FX instance with the new rate
-                        fx_instance, created = cls.objects.get_or_create(date=rate_data['actual_date'])
+                        fx_instance, created = cls.objects.get_or_create(date=rate_data['requested_date'])
                         setattr(fx_instance, f'{source}{target}', rate_data['exchange_rate'])
                         fx_instance.save()
-                        print(f'{source}{target} for {rate_data["actual_date"]} is updated')
+                        print(f'{source}{target} for {rate_data["requested_date"]} is updated')
                     else:
-                        raise Exception(f'{source}{target} for {rate_data["actual_date"]} is NOT updated. Yahoo Finance is not responding correctly')
+                        raise Exception(f'{source}{target} for {rate_data["requested_date"]} is NOT updated. Yahoo Finance is not responding correctly')
                 else:
                     print(f'{source}{target} for {date} already exists')
                     
