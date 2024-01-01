@@ -671,7 +671,7 @@ def create_element(request, data_type):
                         transaction.save()
 
                         # When adding new transaction update FX rates from Yahoo
-                        FX.update_fx_rates()
+                        FX.update_fx_rates(property_id)
 
                         return JsonResponse({'message': 'Tenant created successfully'}, status=200)
                     else:

@@ -300,15 +300,18 @@ class FX(models.Model):
     USDRUB = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
     
     @classmethod
-    def update_fx_rates(cls):
+    def update_fx_rates(cls, property_id):
         # Get FX model variables, except 'date'
         fx_variables = [field for field in cls._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
 
         # Extract source and target currencies
         currency_pairs = [(field.name[:3], field.name[3:]) for field in fx_variables]
 
+        # Get the specific property
+        property_instance = Property.objects.get(id=property_id)
+
         # Scan Transaction instances in the database to collect dates
-        transaction_dates = Transaction.objects.values_list('date', flat=True)
+        transaction_dates = property_instance.transactions.values_list('date', flat=True)
 
         print(f"Checking FX rates for {len(transaction_dates)} dates")
         count = 0
