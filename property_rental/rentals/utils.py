@@ -93,7 +93,8 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
 
             return {
                 'exchange_rate': exchange_rate,
-                'actual_date': actual_date
+                'actual_date': actual_date,
+                'requested_date': date
             }
 
         # Increment the attempt counter
