@@ -27,7 +27,7 @@
             </div>
         {% endif %}
         
-        <table id="transactionTable" class="table table-bordered">
+        <table id="transactionTable" class="table table-striped table-bordered table-hover">
             <thead>
                 <tr>
                     <th></th>
@@ -51,15 +51,17 @@
 {% block script %}
     <script src="{% static 'rentals/element.js' %}"></script>
 
-    {% comment %} <!-- Include jQuery -->
+    <!-- Include jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- DataTables Bootstrap 5 CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
 
     <!-- Include DataTables CSS and JS files -->
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    
-    <script>
-        new DataTable(document.getElementById('transactionTable'));
-    </script> {% endcomment %}
 
 {% endblock script %}
