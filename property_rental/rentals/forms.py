@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import UserCreationForm, PasswordChangeForm
 from django.forms.widgets import DateInput
 from django.db.models import Q
 
@@ -114,6 +114,12 @@ class UserSettingsForm(forms.ModelForm):
         if digits > 6:
             raise forms.ValidationError('The value for digits must be less than or equal to 6.')
         return digits
+
+class CustomPasswordChangeForm(PasswordChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ['old_password', 'new_password1', 'new_password2']:
+            self.fields[field_name].widget.attrs['class'] = 'form-control'
 
 class PropertyForm(forms.ModelForm):
     # Adding elements for Property_capital_structure instance

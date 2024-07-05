@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -14,7 +14,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth.views import PasswordResetView
 
-from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
 from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
@@ -196,6 +196,7 @@ def logout_view(request):
 def profile_page(request):
     user = request.user
     settings_form = UserSettingsForm(instance=user)
+    password_change_form = CustomPasswordChangeForm(user)
 
     if request.method == 'POST':
         if 'settings_form_submit' in request.POST:
@@ -217,8 +218,17 @@ def profile_page(request):
             else:
                 print(f"profile page: {settings_form.errors}")
                 return JsonResponse({'errors': settings_form.errors}, status=400)
+        elif 'password_change_form_submit' in request.POST:
+            password_change_form = CustomPasswordChangeForm(user, request.POST)
+            if password_change_form.is_valid():
+                password_change_form.save()
+                update_session_auth_hash(request, user)
+                return redirect('rentals:profile_page')
+            else:
+                print(f"profile page: {password_change_form.errors}")
+                return JsonResponse({'errors': password_change_form.errors}, status=400)
 
-    return render(request, 'rentals/profile_page.html', {'user': user, 'settings_form': settings_form})
+    return render(request, 'rentals/profile_page.html', {'user': user, 'settings_form': settings_form, 'password_change_form': password_change_form})
 
 # User profile form
 @login_required

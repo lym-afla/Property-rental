@@ -11,3 +11,5 @@ property_rental/db.sqlite3
 property_rental/staticfiles/
 
 property_rental/testing.py
+
+property_rental/AW-rentals/
