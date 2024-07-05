@@ -149,9 +149,9 @@ function fetchTableData(type) {
             paging: true,
             pageLength: 10,
             lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
-            order: [[1, 'desc']], // Sort by the second column (Date) in descending order
+            order: [],
             columnDefs: [
-                { orderable: false, targets: 0 } // Disable sorting on the first column (checkbox column)
+                { orderable: false, targets: '_all' } // Disable sorting on the first column (checkbox column)
             ],
             // Bootstrap styling
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +

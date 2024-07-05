@@ -13,3 +13,4 @@ property_rental/staticfiles/
 property_rental/testing.py
 
 property_rental/AW-rentals/
+property_rental/property_rental/settings.py

@@ -21,13 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-a=k@fy_!&!)3ppfmidh7sgali98qp=&t40367etr=37*w7zdgi'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-a=k@fy_!&!)3ppfmidh7sgali98qp=&t40367etr=37*w7zdgi')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.environ.get('DJANGO_DEBUG', '') != 'False'
 
-ALLOWED_HOSTS = ['lymafla.pythonanywhere.com', '127.0.0.1']
-
+ALLOWED_HOSTS = ['lymafla.pythonanywhere.com', '127.0.0.1', 'localhost']
 
 # Application definition
 
@@ -122,7 +121,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = '/home/lymafla/property_rental/lym-afla/property_rental/staticfiles'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Additional locations of static files
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'rentals', 'static', 'rentals'),
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
