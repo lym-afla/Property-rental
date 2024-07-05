@@ -93,7 +93,6 @@ function load_table(type) {
 function fetchTableData(type) {
 
     let fetchUrl;
-    // const Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     if (type === 'propertyValuation') {
         const propertyId = document.getElementById(`deletePropertyButton`).getAttribute(`data-property-id`);
@@ -140,6 +139,29 @@ function fetchTableData(type) {
         if (type === 'transaction' || type === 'propertyValuation') {
             addTransactionValuationListeners(type);
         }
+
+        // Initialize or reinitialize DataTables
+        if ($.fn.DataTable.isDataTable(`#${type}Table`)) {
+            $(`#${type}Table`).DataTable().destroy();
+        }
+        $(`#${type}Table`).DataTable({
+            searching: true,
+            paging: true,
+            pageLength: 10,
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+            order: [[1, 'desc']], // Sort by the second column (Date) in descending order
+            columnDefs: [
+                { orderable: false, targets: 0 } // Disable sorting on the first column (checkbox column)
+            ],
+            // Bootstrap styling
+            dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+                 '<"row"<"col-sm-12"tr>>' +
+                 '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search records"
+            }
+        });
     })
     .catch(error => {
         console.error('Error fetching property data', error);

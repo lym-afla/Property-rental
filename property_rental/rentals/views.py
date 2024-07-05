@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.contrib.auth.views import PasswordResetView
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
