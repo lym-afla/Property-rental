@@ -975,3 +975,22 @@ def fx_list(request):
         fx_entry.USDRUB = 1 / fx_entry.USDRUB if fx_entry.USDRUB else None
 
     return render(request, 'rentals/fx_list.html', {'fx_entries': fx_entries})
+
+# View to update FX rates for a given property.
+def update_fx_view(request):
+    try:
+        # Get all properties
+        all_properties = Property.objects.all()
+
+        # Loop through each property and update FX rates
+        for property_instance in all_properties:
+            # Call the method to update FX rates
+            FX.update_fx_rates(property_instance.id)
+
+        messages.success(request, "FX rates updated successfully for all properties.")
+    except Exception as e:
+        # Capture and display any errors
+        messages.error(request, f"Error updating FX rates: {str(e)}")
+
+    # Redirect back to the FX page
+    return redirect('rentals:fx_list')
