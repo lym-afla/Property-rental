@@ -370,25 +370,38 @@ class FX(models.Model):
             
             for element in pairs_list:
                 if i_source in element and i_target in element:
-                    if element.find(i_source) == 0:
-                        try:
-                            fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first()
-                        except:
-                            raise ValueError
-                        fx_rate *= fx_call['quote']
-                        # dates_list.append(fx_call['date'])
-                        # dates_async = (dates_list[0] != fx_call['date']) or dates_async
-                    else:
-                        try:
-                            fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_target}{i_source}')).order_by("-date").first()
-                        except:
-                            raise ValueError
-                        fx_rate /= fx_call['quote']
-                    dates_list.append(fx_call['date'])
-                    dates_async = (dates_list[0] != fx_call['date']) or dates_async
+
+                    # Determine the correct field name for the FX pair
+                    fx_field = f'{i_source}{i_target}' if element.find(i_source) == 0 else f'{i_target}{i_source}'
+
+                    
+                    # print("FX.get_rate. Inputs:", date, element, i_source, i_target)
+                    # print("FX.get_rate. Database call:", cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first())
+                    try:
+                        # fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first()
+                        fx_call = cls.objects.filter(
+                            date__lte=date
+                            ).exclude(**{fx_field: None}).values('date', quote=F(fx_field)).order_by("-date").first()
+                        
+                        if not fx_call:
+                            raise ValueError(f"FX rate for {i_source} to {i_target} not found.")
+                        
+                    
+                        # Update fx_rate based on the direction of the conversion
+                        if element.find(i_source) == 0:
+                            fx_rate *= fx_call['quote']
+                        else:
+                            fx_rate /= fx_call['quote']
+
+                        dates_list.append(fx_call['date'])
+                        dates_async = (dates_list[0] != fx_call['date']) or dates_async
+    
+                    except Exception as e:
+                        raise ValueError(f"Error fetching FX rate for {i_source} to {i_target}: {str(e)}")
+                                        
                     break
         
-        # Thea target is to multiply when using, not divide
+        # Final result adjustment: multiply to get the final FX rate
         fx_rate = round(1 / fx_rate, 6)
                 
         return {
