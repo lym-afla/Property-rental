@@ -8,9 +8,15 @@
 
         <!-- Update FX Button -->
         <div class="mb-3">
-            <a href="{% url 'rentals:update_fx' %}" class="btn btn-primary">
+            <button id="update-fx-btn" class="btn btn-primary">
                 Update FX
-            </a>
+            </button>
+            <div id="loading-message" class="text-center" style="display: none;">
+                <p>Updating FX rates, please wait...</p>
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
         </div>
 
         {% if messages %}
@@ -78,4 +84,42 @@
             </ul>
         </div>
     </div>
-{% endblock %}
+{% endblock content %}
+
+{% block script %}
+
+    <script>
+        document.getElementById('update-fx-btn').addEventListener('click', function() {
+            // Hide the button and show the loading message
+            document.getElementById('update-fx-btn').style.display = 'none';
+            document.getElementById('loading-message').style.display = 'block';
+
+            // Make an AJAX POST request to trigger the FX update
+            fetch("{% url 'rentals:update_fx' %}", {
+                method: 'POST',  // Send a POST request
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',  // Include the CSRF token for security
+                    'Content-Type': 'application/json'
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);  // Display success message
+                } else {
+                    alert('Error: ' + data.message);  // Display error message
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An unexpected error occurred.');
+            })
+            .finally(() => {
+                // Restore the button and hide the loading message
+                document.getElementById('update-fx-btn').style.display = 'block';
+                document.getElementById('loading-message').style.display = 'none';
+            });
+        });
+    </script>
+
+{% endblock script %}
