@@ -987,10 +987,9 @@ def update_fx_view(request):
             # Call the method to update FX rates
             FX.update_fx_rates(property_instance.id)
 
-        messages.success(request, "FX rates updated successfully for all properties.")
+        # Return a success response if everything went well
+        return JsonResponse({'success': True, 'message': 'FX rates updated successfully.'})
+    
     except Exception as e:
-        # Capture and display any errors
-        messages.error(request, f"Error updating FX rates: {str(e)}")
-
-    # Redirect back to the FX page
-    return redirect('rentals:fx_list')
+        # Handle any errors and return a failure response
+        return JsonResponse({'success': False, 'message': str(e)})
