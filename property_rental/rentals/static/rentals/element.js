@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const newTypeButton = document.querySelector('.new-entry-button');
     newTypeButton.addEventListener('click', elementActionClickHandler);
 
+
+
     // Hide property selector for the chart (shown on the home page only)
     const propertySelector = document.getElementById('chartPropertySelection');
     if (propertySelector) {
@@ -191,6 +193,7 @@ function fillRow(type, element) {
             `;
         case 'tenant':
             const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "–" : formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
+            
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
@@ -280,7 +283,7 @@ function preFillForm(type, elementId) {
                 // Add current tenant's property to the selection of properties
                 const propertySelect = document.getElementById('id_property'); // Find the 'property' select element in your form by its ID
                 const option = document.createElement('option'); // Create a new option element
-                option.value = data.id; // Set the value to the property ID
+                option.value = data.property_id; // Set the value to the property ID (not tenant ID)
                 option.text = data.property;
                 propertySelect.appendChild(option); // Append the option to the select element
                 option.selected = true;
@@ -472,6 +475,35 @@ function load_element_details(type, elementId) {
         }
 
         formatCards(type);
+
+        // Add Vacate button for tenants after all DOM elements are created
+        if (type === 'tenant') {
+            // Check if tenant is vacated (fallback to false if property doesn't exist)
+            const isVacated = element.is_vacated || false;
+            
+            if (!isVacated) {
+                                 // Use setTimeout to ensure buttons are fully rendered
+                 setTimeout(() => {
+                     const editButton = document.getElementById(`edit${Type}Button`);
+                     if (editButton && !document.getElementById('vacateTenantBtn')) {
+                         const vacateButton = document.createElement('button');
+                         vacateButton.type = 'button';
+                         vacateButton.className = 'btn btn-warning me-2';
+                         vacateButton.id = 'vacateTenantBtn';
+                         vacateButton.innerHTML = '<i class="bi bi-door-open"></i> Vacate';
+                         vacateButton.setAttribute('data-tenant-id', elementId);
+                         
+                         // Add event listener
+                         vacateButton.addEventListener('click', function() {
+                             showVacateModal(elementId);
+                         });
+                         
+                         // Insert before the edit button (in the right-side button group)
+                         editButton.parentNode.insertBefore(vacateButton, editButton);
+                     }
+                 }, 50);
+            }
+        }
 
     })
     .catch(error => {
@@ -735,4 +767,120 @@ function propertyValuationDeleteElementHandler(event) {
     .catch(error => {
         console.error('Error:', error);
     });    
+}
+
+// Vacate tenant functionality
+function showVacateModal(tenantId) {
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="vacateModal" tabindex="-1" aria-labelledby="vacateModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="vacateModalLabel">Set Vacate Date</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="vacateForm">
+                            <div class="mb-3">
+                                <label for="vacate_date" class="form-label">Vacate Date</label>
+                                <input type="date" class="form-control" id="vacate_date" name="vacate_date" required>
+                                <div class="form-text">Select the date when the tenant will vacate the property</div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-warning" id="confirmVacateBtn">Set Vacate Date</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('vacateModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Set default value to today, but allow past dates
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('vacate_date').value = today;
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('vacateModal'));
+    modal.show();
+    
+    // Add event listener to confirm button
+    document.getElementById('confirmVacateBtn').addEventListener('click', function() {
+        const vacateDate = document.getElementById('vacate_date').value;
+        if (!vacateDate) {
+            alert('Please select a vacate date');
+            return;
+        }
+        
+        vacateTenant(tenantId, vacateDate);
+    });
+}
+
+function vacateTenant(tenantId, vacateDate) {
+    const formData = new FormData();
+    formData.append('vacate_date', vacateDate);
+    
+    fetch(`/vacate-tenant/${tenantId}`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('vacateModal'));
+            modal.hide();
+            
+            // Show success message
+            alert(data.message);
+            
+            // Check if we're on the tenant details page or table view
+            const tenantDetailsContainer = document.getElementById('tenantDetailsContainer');
+            const tenantTable = document.getElementById('tenantTable');
+            
+            if (tenantDetailsContainer && tenantDetailsContainer.style.display !== 'none') {
+                // We're on tenant details page - reload the details
+                load_element_details('tenant', tenantId);
+            } else if (tenantTable && tenantTable.style.display !== 'none') {
+                // We're on tenant table page - reload the table
+                load_table('tenant');
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error occurred'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error occurred while processing the request');
+    });
+}
+
+// Helper function to get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }

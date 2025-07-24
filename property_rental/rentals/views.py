@@ -12,9 +12,8 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.contrib.auth.views import PasswordResetView
 
-from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm
+from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm, TenantVacateForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
 from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
@@ -361,6 +360,8 @@ def table_data(request, data_type):
                     'property': tenant.property.name,
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
+                    'is_vacated': tenant.lease_end is not None and tenant.lease_end <= effective_current_date,
+                    'will_vacate': tenant.lease_end is not None and tenant.lease_end > effective_current_date,
                     'currency': get_currency_symbol(tenant_currency),
                     'lease_rent': lease_rent if type(lease_rent) == str else float(tenant.lease_rent(effective_current_date)),
                     'lease_native_currency': get_currency_symbol(tenant.property.currency),
@@ -531,10 +532,13 @@ def handle_element(request, data_type, element_id):
                         'email': element.email,
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
+                        'is_vacated': element.lease_end is not None and element.lease_end <= effective_current_date,
+                        'will_vacate': element.lease_end is not None and element.lease_end > effective_current_date,
                         'rent_currency': get_currency_symbol(element_currency),
                         'rent_native_currency': get_currency_symbol(element.property.currency),
                         'rent_rate': lease_rent if type(lease_rent) == str else round(float(element.lease_rent(effective_current_date)), digits),
                         'property': element.property.name,
+                        'property_id': element.property.id,
                         'all_time_rent': round(float(element.rent_total(end_date=effective_current_date, target_currency=element_currency)), digits),
                         'payday': element.payday,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
@@ -638,7 +642,7 @@ def create_element(request, data_type):
                     return JsonResponse({'error': 'You do not have permission to access this property'}, status=403)
             case 'tenant':
                 if request.user.is_landlord:
-                    form = TenantForm(Landlord.objects.get(user=request.user), request.POST)
+                    form = TenantForm(landlord_user=Landlord.objects.get(user=request.user), data=request.POST)
                     if form.is_valid():
                         tenant = form.save(commit=False)
                         # Retrieve the property ID from the form data
@@ -715,6 +719,38 @@ def create_element(request, data_type):
     else:
         return HttpResponseNotAllowed(['POST'])  # Return a 405 Method Not Allowed response for other methods
 
+@login_required
+def vacate_tenant(request, tenant_id):
+    """Handle tenant vacate action - set lease_end date"""
+    
+    if request.method == 'POST':
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+            
+            # Check if the logged-in user is the landlord of the property
+            if not request.user.is_landlord or tenant.property.owned_by.user != request.user:
+                return JsonResponse({'error': 'You do not have permission to vacate this tenant'}, status=403)
+            
+            form = TenantVacateForm(tenant=tenant, data=request.POST)
+            if form.is_valid():
+                vacate_date = form.cleaned_data['vacate_date']
+                
+                # Set the lease_end date
+                tenant.lease_end = vacate_date
+                tenant.save()
+                
+                return JsonResponse({
+                    'message': f'Tenant {tenant.first_name} {tenant.last_name} will vacate on {vacate_date.strftime("%Y-%m-%d")}',
+                    'vacate_date': vacate_date.strftime("%Y-%m-%d")
+                }, status=200)
+            else:
+                return JsonResponse({'errors': form.errors}, status=400)
+                
+        except Tenant.DoesNotExist:
+            return JsonResponse({'error': 'Tenant not found'}, status=404)
+    else:
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+
 # Extract property choices for Tenant form
 def property_choices(request):
 
@@ -727,7 +763,11 @@ def property_choices(request):
             owned_by=landlord,
         )
 
-    data = [[property.id, property.name] for property in properties]
+    if properties.exists():
+        data = [[property.id, property.name] for property in properties]
+    else:
+        # Return a special message when no properties are available
+        data = [['', 'No available properties (all properties have active tenants)']]
 
     return JsonResponse(data, safe=False)
 

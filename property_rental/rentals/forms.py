@@ -215,18 +215,52 @@ class TenantForm(forms.ModelForm):
     lease_rent = forms.DecimalField(widget=forms.NumberInput(attrs={'class': 'form-control'}), label='Monthly rate')
     currency = forms.ChoiceField(choices=CURRENCY_CHOICES, widget=forms.Select(attrs={'class': 'form-select'}), label='Currency')
 
-    def __init__(self, landlord_user, *args, **kwargs):
+    def __init__(self, landlord_user=None, *args, **kwargs):
         super(TenantForm, self).__init__(*args, **kwargs)
 
-        # Customize the queryset for the property field based on the landlord user
-        queryset = Property.objects.filter(
-            Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
-            owned_by=landlord_user,
-        )
-        self.fields['property'].queryset = queryset
-        # Set the initial value to the first item in the queryset
-        if queryset.exists():
-            self.fields['property'].initial = queryset.first()
+        if landlord_user:
+            # Customize the queryset for the property field based on the landlord user
+            # Only show properties that have no tenants or tenants with expired leases
+            queryset = Property.objects.filter(
+                Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
+                Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
+                owned_by=landlord_user,
+            )
+            
+            # If no properties are available, replace ModelChoiceField with ChoiceField
+            if not queryset.exists():
+                self.fields['property'] = forms.ChoiceField(
+                    choices=[('', 'No available properties (all properties have active tenants)')],
+                    widget=forms.Select(attrs={'class': 'form-select', 'disabled': True}),
+                    label='Select property',
+                    required=False
+                )
+            else:
+                # Set normal queryset for available properties
+                self.fields['property'].queryset = queryset
+                # Set the initial value to the first item in the queryset
+                self.fields['property'].initial = queryset.first()
+        else:
+            # If no landlord_user provided, replace with ChoiceField
+            self.fields['property'] = forms.ChoiceField(
+                choices=[('', 'No properties available')],
+                widget=forms.Select(attrs={'class': 'form-select', 'disabled': True}),
+                label='Select property',
+                required=False
+            )
+    
+    def clean_property(self):
+        property_instance = self.cleaned_data.get('property')
+        # If it's a string (from ChoiceField), it means no properties were available
+        if isinstance(property_instance, str) or not property_instance:
+            if hasattr(self.fields['property'], 'queryset'):
+                # This is a ModelChoiceField, so validate normally
+                if not property_instance:
+                    raise forms.ValidationError('Please select a valid property. If no properties are available, you need to create a property first or end existing tenant leases.')
+            else:
+                # This is a ChoiceField (disabled state), skip validation
+                return None
+        return property_instance
         
     class Meta:
         model = Tenant
@@ -278,5 +312,20 @@ class TransactionForm(forms.ModelForm):
             'date': 'Transaction date',
             'period': 'The month and year for this transaction',
         }
+
+class TenantVacateForm(forms.Form):
+    vacate_date = forms.DateField(
+        widget=DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        label='Vacate Date',
+        help_text='Select the date when the tenant will vacate the property'
+    )
+    
+    def __init__(self, tenant=None, *args, **kwargs):
+        super(TenantVacateForm, self).__init__(*args, **kwargs)
+        if tenant:
+            # Set initial value to today, but allow past dates
+            from datetime import date
+            self.fields['vacate_date'].initial = date.today()
+        
 
         
