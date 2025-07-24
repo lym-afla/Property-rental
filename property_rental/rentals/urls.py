@@ -20,6 +20,7 @@ urlpatterns = [
     # path('properties/table-data', views.get_properties, name='get_properties'), # TO BE DELETED
     path('handling/<str:data_type>/<int:element_id>', views.handle_element, name='handle_element'),
     path('handling/<str:data_type>', views.create_element, name='create_element'),
+    path('vacate-tenant/<int:tenant_id>', views.vacate_tenant, name='vacate_tenant'),
     # path('properties/<int:property_id>', views.property_details, name='property_details'), # TO BE DELETED
     path('new-form/<str:form_type>', views.new_form, name='new_form'),
     path('tenants/property-choices', views.property_choices, name='property_choices'),

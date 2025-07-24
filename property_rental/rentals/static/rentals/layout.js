@@ -471,14 +471,26 @@ function resetPropertyChoices() {
             propertyChoices.remove(0);
         }
 
-        // Compiling property choices
-        properties.forEach(property => {
-            const [id, name] = property; // Destructure the array
-            const option = document.createElement('option'); // Create a new option element
-            option.value = id;
-            option.text = name;
+        // Check if we got the special "no properties" message
+        if (properties.length === 1 && properties[0][0] === '') {
+            // This is the "no properties available" case
+            const option = document.createElement('option');
+            option.value = '';
+            option.text = properties[0][1]; // The message text
+            option.selected = true;
             propertyChoices.appendChild(option);
-        })
+            propertyChoices.disabled = true; // Disable the dropdown
+        } else {
+            // Normal case: compile property choices
+            propertyChoices.disabled = false; // Ensure dropdown is enabled
+            properties.forEach(property => {
+                const [id, name] = property; // Destructure the array
+                const option = document.createElement('option'); // Create a new option element
+                option.value = id;
+                option.text = name;
+                propertyChoices.appendChild(option);
+            });
+        }
     })
     .catch(err => console.error('Error', err));
 }
