@@ -948,8 +948,15 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
                 single_dataset_data['data'].append(round(month_total, 0))
             else:
                 # For non-monthly frequencies, use rent_total with include_post_vacation=True
-                start_date = d - relativedelta(months = time_delta[frequency])
-                total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency, include_post_vacation=True)
+                if frequency == 'Y':
+                    # For yearly, use calendar year (Jan 1 to Dec 31)
+                    year_start = d.replace(month=1, day=1)
+                    year_end = d.replace(month=12, day=31)
+                    total_rent = tenant.rent_total(end_date=year_end, start_date=year_start, target_currency=currency, include_post_vacation=True)
+                else:
+                    # For quarterly, use rolling period
+                    start_date = d - relativedelta(months = time_delta[frequency])
+                    total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency, include_post_vacation=True)
                 single_dataset_data['data'].append(round(total_rent, 0))
 
         chart_data['datasets'].append(single_dataset_data)

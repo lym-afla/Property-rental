@@ -122,9 +122,6 @@ def chart_dates(start_date, end_date, freq):
     if freq == 'Y':
         end_date = end_date.replace(month=12, day=31)
         start_date = start_date.replace(month=1, day=1)
-        # Keep one year if start and end within one calendar year
-        if end_date.year - start_date.year != 0:
-            start_date = date(start_date.year + 1, 1, 1)
 
     if freq == 'M':
         # For monthly, adjust to next month start
@@ -155,8 +152,19 @@ def chart_dates(start_date, end_date, freq):
             dates.append(current_date)
             current_date += relativedelta(months=1)
     
-    elif freq == 'Q':  # Quarterly - simplified 
+    elif freq == 'Q':  # Quarterly - align to quarter boundaries
+        # Start from the first quarter that includes or follows the start date
         current_date = original_start
+        # Move to the next quarter boundary
+        if current_date.month <= 3:
+            current_date = current_date.replace(month=3, day=31)
+        elif current_date.month <= 6:
+            current_date = current_date.replace(month=6, day=30)
+        elif current_date.month <= 9:
+            current_date = current_date.replace(month=9, day=30)
+        else:
+            current_date = current_date.replace(month=12, day=31)
+        
         while current_date <= original_end:
             dates.append(current_date)
             current_date += relativedelta(months=3)

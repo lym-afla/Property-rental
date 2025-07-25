@@ -254,7 +254,7 @@ class Tenant(models.Model):
         total_rent_paid = self.rent_total(
             end_date=check_date, 
             start_date=self.lease_start, 
-            include_post_vacation=True  # Debt calculation should not include post-vacation payments
+            include_post_vacation=True
         )
         
         # Debt is amount due minus amount paid (negative means tenant owes money)
