@@ -141,20 +141,37 @@ function fetchTableData(type) {
         if (type === 'transaction' || type === 'propertyValuation') {
             addTransactionValuationListeners(type);
         }
+        
+        // Add event listeners for vacate buttons
+        if (type === 'tenant') {
+            addVacateButtonListeners();
+        }
 
         // Initialize or reinitialize DataTables
         if ($.fn.DataTable.isDataTable(`#${type}Table`)) {
             $(`#${type}Table`).DataTable().destroy();
         }
+        
+        // Configure column-specific settings
+        let columnDefs = [
+            { orderable: false, targets: '_all' } // Disable sorting on all columns by default
+        ];
+        
+        // For tenant table, disable sorting on Action column and enable for others
+        if (type === 'tenant') {
+            columnDefs = [
+                { orderable: true, targets: [0, 1, 2, 3, 4, 5, 6, 7] }, // Enable sorting for most columns
+                { orderable: false, targets: [8] } // Disable sorting for Action column
+            ];
+        }
+        
         $(`#${type}Table`).DataTable({
             searching: true,
             paging: true,
             pageLength: 10,
             lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
             order: [],
-            columnDefs: [
-                { orderable: false, targets: '_all' } // Disable sorting on the first column (checkbox column)
-            ],
+            columnDefs: columnDefs,
             // Bootstrap styling
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
                  '<"row"<"col-sm-12"tr>>' +
@@ -194,14 +211,40 @@ function fillRow(type, element) {
         case 'tenant':
             const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "–" : formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
             
+            // Determine status display
+            let statusDisplay = '';
+            let statusClass = '';
+            if (element.status === 'Active') {
+                statusDisplay = '<i class="fas fa-circle text-success"></i> Active';
+                statusClass = 'text-success';
+            } else if (element.status === 'Will Vacate') {
+                statusDisplay = '<i class="fas fa-circle text-warning"></i> Will Vacate';
+                statusClass = 'text-warning';
+            } else if (element.status === 'Vacated') {
+                statusDisplay = '<i class="fas fa-circle text-danger"></i> Vacated';
+                statusClass = 'text-danger';
+            }
+            
+            // Determine action column content
+            let actionColumn = '';
+            if (element.status === 'Active') {
+                actionColumn = `<button class="btn btn-sm btn-warning vacate-btn" data-tenant-id="${element.id}" data-tenant-name="${element.first_name}">Vacate</button>`;
+            } else if (element.status === 'Will Vacate' && element.lease_end) {
+                actionColumn = `<small class="text-muted">Vacates: ${formatDateToDdmmyy(element.lease_end)}</small>`;
+            } else if (element.status === 'Vacated' && element.lease_end) {
+                actionColumn = `<small class="text-muted">Vacated: ${formatDateToDdmmyy(element.lease_end)}</small>`;
+            }
+            
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
                 <td class="text-center">${element.property}</td>
                 <td class="text-center">${formatDateToDdmmyy(element.lease_start)}</td>
+                <td class="text-center ${statusClass}">${statusDisplay}</td>
                 <td class="text-center">${currentRent}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_all_time)}</td>
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.revenue_ytd)}</td>
                 <td class="text-center text-danger">${formatNumberWithParentheses(element.currency, element.debt)}</td>
+                <td class="text-center">${actionColumn}</td>
             `;
         case 'transaction':
             const period = element.period ? `(${element.period})` : "";
@@ -476,32 +519,56 @@ function load_element_details(type, elementId) {
 
         formatCards(type);
 
-        // Add Vacate button for tenants after all DOM elements are created
+        // Add Vacate button and status info for tenants after all DOM elements are created
         if (type === 'tenant') {
             // Check if tenant is vacated (fallback to false if property doesn't exist)
             const isVacated = element.is_vacated || false;
+            const willVacate = element.will_vacate || false;
             
-            if (!isVacated) {
-                                 // Use setTimeout to ensure buttons are fully rendered
-                 setTimeout(() => {
-                     const editButton = document.getElementById(`edit${Type}Button`);
-                     if (editButton && !document.getElementById('vacateTenantBtn')) {
-                         const vacateButton = document.createElement('button');
-                         vacateButton.type = 'button';
-                         vacateButton.className = 'btn btn-warning me-2';
-                         vacateButton.id = 'vacateTenantBtn';
-                         vacateButton.innerHTML = '<i class="bi bi-door-open"></i> Vacate';
-                         vacateButton.setAttribute('data-tenant-id', elementId);
-                         
-                         // Add event listener
-                         vacateButton.addEventListener('click', function() {
-                             showVacateModal(elementId);
-                         });
-                         
-                         // Insert before the edit button (in the right-side button group)
-                         editButton.parentNode.insertBefore(vacateButton, editButton);
-                     }
-                 }, 50);
+            // Add status information to the tenant header
+            const tenantHeader = document.querySelector('h2');
+            let statusBadge = '';
+            if (isVacated) {
+                statusBadge = '<span class="badge bg-danger ms-2">Vacated</span>';
+                if (element.left_property_at) {
+                    statusBadge += `<small class="text-muted ms-2">on ${formatDateToDdmmyy(element.left_property_at)}</small>`;
+                }
+            } else if (willVacate) {
+                statusBadge = '<span class="badge bg-warning ms-2">Will Vacate</span>';
+                if (element.left_property_at) {
+                    statusBadge += `<small class="text-muted ms-2">on ${formatDateToDdmmyy(element.left_property_at)}</small>`;
+                }
+            } else {
+                statusBadge = '<span class="badge bg-success ms-2">Active</span>';
+            }
+            
+            if (tenantHeader && !tenantHeader.querySelector('.badge')) {
+                tenantHeader.innerHTML += statusBadge;
+            }
+            
+            // Add Vacate button only for active tenants
+            if (!isVacated && !willVacate) {
+                // Use setTimeout to ensure buttons are fully rendered
+                setTimeout(() => {
+                    const editButton = document.getElementById(`edit${Type}Button`);
+                    if (editButton && !document.getElementById('vacateTenantBtn')) {
+                        const vacateButton = document.createElement('button');
+                        vacateButton.type = 'button';
+                        vacateButton.className = 'btn btn-warning me-2';
+                        vacateButton.id = 'vacateTenantBtn';
+                        vacateButton.innerHTML = '<i class="bi bi-door-open"></i> Vacate';
+                        vacateButton.setAttribute('data-tenant-id', elementId);
+                        
+                        // Add event listener with tenant name
+                        vacateButton.addEventListener('click', function() {
+                            const tenantName = `${element.first_name} ${element.last_name || ''}`.trim();
+                            showVacateModal(elementId, tenantName);
+                        });
+                        
+                        // Insert before the edit button (in the right-side button group)
+                        editButton.parentNode.insertBefore(vacateButton, editButton);
+                    }
+                }, 50);
             }
         }
 
@@ -825,6 +892,75 @@ function showVacateModal(tenantId) {
         
         vacateTenant(tenantId, vacateDate);
     });
+}
+
+function addVacateButtonListeners() {
+    const vacateButtons = document.querySelectorAll('.vacate-btn');
+    vacateButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const tenantId = this.getAttribute('data-tenant-id');
+            const tenantName = this.getAttribute('data-tenant-name');
+            
+            // Create and show vacate modal
+            showVacateModal(tenantId, tenantName);
+        });
+    });
+}
+
+function showVacateModal(tenantId, tenantName) {
+    // Create modal HTML if it doesn't exist
+    let modal = document.getElementById('vacateModal');
+    if (!modal) {
+        const modalHTML = `
+            <div class="modal fade" id="vacateModal" tabindex="-1" aria-labelledby="vacateModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="vacateModalLabel">Vacate Tenant</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Set vacation date for tenant: <strong id="vacateModalTenantName"></strong></p>
+                            <div class="mb-3">
+                                <label for="vacateDate" class="form-label">Vacation Date</label>
+                                <input type="date" class="form-control" id="vacateDate" required>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-warning" id="confirmVacateBtn">Confirm Vacate</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        modal = document.getElementById('vacateModal');
+        
+        // Add event listener to confirm button
+        document.getElementById('confirmVacateBtn').addEventListener('click', function() {
+            const vacateDate = document.getElementById('vacateDate').value;
+            const tenantId = modal.getAttribute('data-tenant-id');
+            
+            if (vacateDate) {
+                vacateTenant(tenantId, vacateDate);
+            } else {
+                alert('Please select a vacation date');
+            }
+        });
+    }
+    
+    // Set tenant info and show modal
+    document.getElementById('vacateModalTenantName').textContent = tenantName;
+    modal.setAttribute('data-tenant-id', tenantId);
+    
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('vacateDate').value = today;
+    
+    // Show modal
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
 }
 
 function vacateTenant(tenantId, vacateDate) {

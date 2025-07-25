@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from django.http import JsonResponse, HttpResponseNotAllowed
+from django.http import JsonResponse, HttpResponse, HttpResponseNotAllowed
 import json
 from rest_framework import serializers
 from datetime import date, datetime
@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import models
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm, TenantVacateForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
@@ -348,11 +349,23 @@ def table_data(request, data_type):
 
                 tenant_currency = tenant.property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
 
-                revenue_all_time = tenant.rent_total(effective_current_date, target_currency=tenant_currency)
+                # Use rent_total with include_post_vacation=True to include payments after tenant vacated
+                revenue_all_time = tenant.rent_total(effective_current_date, target_currency=tenant_currency, include_post_vacation=True)
                 current_year = effective_current_date.year
-                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), target_currency=tenant_currency)
+                revenue_YTD = tenant.rent_total(start_date=date(current_year, 1, 1), end_date=date(current_year, 12, 31), target_currency=tenant_currency, include_post_vacation=True)
 
                 lease_rent = tenant.lease_rent(effective_current_date)
+
+                # Determine tenant status
+                is_vacated = tenant.lease_end is not None and tenant.lease_end <= effective_current_date
+                will_vacate = tenant.lease_end is not None and tenant.lease_end > effective_current_date
+                
+                if is_vacated:
+                    status = 'Vacated'
+                elif will_vacate:
+                    status = 'Will Vacate'
+                else:
+                    status = 'Active'
 
                 tenant_data = {
                     'id': tenant.id,
@@ -360,8 +373,9 @@ def table_data(request, data_type):
                     'property': tenant.property.name,
                     'lease_start': tenant.lease_start,
                     'lease_end': tenant.lease_end,
-                    'is_vacated': tenant.lease_end is not None and tenant.lease_end <= effective_current_date,
-                    'will_vacate': tenant.lease_end is not None and tenant.lease_end > effective_current_date,
+                    'is_vacated': is_vacated,
+                    'will_vacate': will_vacate,
+                    'status': status,
                     'currency': get_currency_symbol(tenant_currency),
                     'lease_rent': lease_rent if type(lease_rent) == str else float(tenant.lease_rent(effective_current_date)),
                     'lease_native_currency': get_currency_symbol(tenant.property.currency),
@@ -524,6 +538,17 @@ def handle_element(request, data_type, element_id):
 
                     element_currency = element.property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
 
+                    # Determine tenant status
+                    is_vacated = element.lease_end is not None and element.lease_end <= effective_current_date
+                    will_vacate = element.lease_end is not None and element.lease_end > effective_current_date
+                    
+                    if is_vacated:
+                        status = 'Vacated'
+                    elif will_vacate:
+                        status = 'Will Vacate'
+                    else:
+                        status = 'Active'
+
                     data = {
                         'id': element.id,
                         'first_name': element.first_name,
@@ -532,14 +557,15 @@ def handle_element(request, data_type, element_id):
                         'email': element.email,
                         'renting_since': element.lease_start,
                         'left_property_at': element.lease_end,
-                        'is_vacated': element.lease_end is not None and element.lease_end <= effective_current_date,
-                        'will_vacate': element.lease_end is not None and element.lease_end > effective_current_date,
+                        'is_vacated': is_vacated,
+                        'will_vacate': will_vacate,
+                        'status': status,
                         'rent_currency': get_currency_symbol(element_currency),
                         'rent_native_currency': get_currency_symbol(element.property.currency),
                         'rent_rate': lease_rent if type(lease_rent) == str else round(float(element.lease_rent(effective_current_date)), digits),
                         'property': element.property.name,
                         'property_id': element.property.id,
-                        'all_time_rent': round(float(element.rent_total(end_date=effective_current_date, target_currency=element_currency)), digits),
+                        'all_time_rent': round(float(element.rent_total(end_date=effective_current_date, target_currency=element_currency, include_post_vacation=True)), digits),
                         'payday': element.payday,
                         'app_date': effective_current_date.strftime("%Y-%m-%d"),
                     }
@@ -877,16 +903,42 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
             chart_data['datasets'].append(single_dataset_data)
 
     if type == 'tenant':
-
-
-        # chart_data['currency'] = get_currency_symbol(tenant.rent_history.first().currency)
-
         single_dataset_data = {'data': []}
 
         for d in dates:
-            start_date = d - relativedelta(months = time_delta[frequency])
-            total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency)
-            single_dataset_data['data'].append(round(total_rent, 0))
+            # For monthly charts, we want to show rent payments for the specific month
+            # Calculate the start and end of the month for this date
+            if frequency == 'M':
+                # Get the start of the month
+                month_start = d.replace(day=1)
+                # Get the end of the month
+                if d.month == 12:
+                    month_end = d.replace(year=d.year + 1, month=1, day=1) - relativedelta(days=1)
+                else:
+                    month_end = d.replace(month=d.month + 1, day=1) - relativedelta(days=1)
+                
+                # Get rent transactions for this specific month only
+                rent_transactions = Transaction.objects.filter(
+                    property=tenant.property,
+                    category='rent',
+                    date__range=(month_start, month_end)
+                )
+                
+                # Calculate total for this month with currency conversion if needed
+                if currency == None or tenant.property.currency == currency:
+                    month_total = rent_transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
+                else:
+                    month_total = 0
+                    for transaction in rent_transactions:
+                        fx_rate = FX.get_rate(transaction.currency, currency, transaction.date)['FX']
+                        month_total += transaction.amount * fx_rate
+                        
+                single_dataset_data['data'].append(round(month_total, 0))
+            else:
+                # For non-monthly frequencies, use rent_total with include_post_vacation=True
+                start_date = d - relativedelta(months = time_delta[frequency])
+                total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency, include_post_vacation=True)
+                single_dataset_data['data'].append(round(total_rent, 0))
 
         chart_data['datasets'].append(single_dataset_data)
 
@@ -1033,3 +1085,11 @@ def update_fx_view(request):
     except Exception as e:
         # Handle any errors and return a failure response
         return JsonResponse({'success': False, 'message': str(e)})
+
+def chrome_devtools_config(request):
+    """Handle Chrome DevTools configuration requests"""
+    return JsonResponse({}, status=200)
+
+def well_known_handler(request, path):
+    """Handle .well-known requests to prevent 404 errors in logs"""
+    return HttpResponse("", status=204)  # No Content
