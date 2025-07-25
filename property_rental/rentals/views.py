@@ -393,6 +393,7 @@ def table_data(request, data_type):
                     'id': transaction.id,
                     'transaction_date': transaction.date,
                     'property': transaction.property.name,
+                    'tenant': f"{transaction.tenant.first_name} {transaction.tenant.last_name}" if transaction.tenant else "—",
                     'category': get_category_name(transaction.category),
                     'currency': get_currency_symbol(transaction_currency),
                     'transaction_amount': round(float(transaction.amount * FX.get_rate(transaction.currency, transaction_currency, transaction.date)['FX']), digits) if transaction.amount else None,
@@ -582,8 +583,10 @@ def handle_element(request, data_type, element_id):
             case 'transaction':
                 element_currency = element.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
+                    tenant_label = f"{element.tenant.first_name} {element.tenant.last_name}" if element.tenant else ""
                     data = {
                         'property': element.property.name,
+                        'tenant': tenant_label,
                         'transaction_date': element.date,
                         'category': element.category,
                         'period': element.period,
@@ -704,17 +707,25 @@ def create_element(request, data_type):
                         transaction = form.save(commit=False)
                         # Retrieve the property ID from the form data
                         property_id = request.POST.get('property')
+                        tenant_id = request.POST.get('tenant')
                         transaction.amount = abs(transaction.amount) if transaction.category in INCOME_CATEGORIES else -abs(transaction.amount)
 
                         property = get_object_or_404(Property, id=property_id)
-
                         transaction.property = property
+                        
+                        # Assign tenant if provided
+                        if tenant_id:
+                            tenant = get_object_or_404(Tenant, id=tenant_id)
+                            # Verify tenant belongs to this property
+                            if tenant.property == property:
+                                transaction.tenant = tenant
+                        
                         transaction.save()
 
                         # When adding new transaction update FX rates from Yahoo
                         FX.update_fx_rates(property_id)
 
-                        return JsonResponse({'message': 'Tenant created successfully'}, status=200)
+                        return JsonResponse({'message': 'Transaction created successfully'}, status=200)
                     else:
                         print(form.errors)
                         return JsonResponse({'errors': form.errors}, status=400)
@@ -920,6 +931,7 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
                 # Get rent transactions for this specific month only
                 rent_transactions = Transaction.objects.filter(
                     property=tenant.property,
+                    tenant=tenant,
                     category='rent',
                     date__range=(month_start, month_end)
                 )

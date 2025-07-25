@@ -286,6 +286,7 @@ class TenantForm(forms.ModelForm):
         
 class TransactionForm(forms.ModelForm):
     property = forms.ModelChoiceField(queryset=Property.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select property')
+    tenant = forms.ModelChoiceField(queryset=Tenant.objects.none(), widget=forms.Select(attrs={'class': 'form-select'}), label='Select tenant (optional)', required=False)
 
     def __init__(self, landlord_user, *args, **kwargs):
         super(TransactionForm, self).__init__(*args, **kwargs)
@@ -293,9 +294,12 @@ class TransactionForm(forms.ModelForm):
         # Customize the queryset for the property field based on the landlord user
         self.fields['property'].queryset = Property.objects.filter(owned_by=landlord_user)
         
+        # Initialize tenant field to show all tenants for properties owned by this landlord
+        self.fields['tenant'].queryset = Tenant.objects.filter(property__owned_by=landlord_user)
+        
     class Meta:
         model = Transaction
-        fields = ['property', 'date', 'category', 'period', 'currency', 'amount', 'comment']
+        fields = ['property', 'tenant', 'date', 'category', 'period', 'currency', 'amount', 'comment']
         widgets = {
             'category': forms.Select(attrs={'class': 'form-select'}),
             'currency': forms.Select(attrs={'class': 'form-select'}),
@@ -311,6 +315,7 @@ class TransactionForm(forms.ModelForm):
             'comment': 'Comment (optional)',
             'date': 'Transaction date',
             'period': 'The month and year for this transaction',
+            'tenant': 'Select tenant (optional)',
         }
 
 class TenantVacateForm(forms.Form):

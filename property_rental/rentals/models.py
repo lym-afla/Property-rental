@@ -144,8 +144,14 @@ class Tenant(models.Model):
         # Get all properties associated with this tenant
         property = self.property
         
-        # Get all rent transactions for those properties
-        transactions = Transaction.objects.filter(property=property, category='rent')
+        # Get all rent transactions for this specific tenant
+        # Use Q object to handle both tenant-specific transactions and legacy transactions without tenant assigned
+        transactions = Transaction.objects.filter(
+            property=property, 
+            category='rent'
+        ).filter(
+            Q(tenant=self) | Q(tenant__isnull=True)
+        )
 
         if start_date is None:
             start_date = self.lease_start  # Default to self.lease_start if start_date is not provided
@@ -374,6 +380,7 @@ class Lease_rent(models.Model):
 class Transaction(models.Model):
     date = models.DateField(default=timezone.now)
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='transactions')
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='transactions', null=True, blank=True)
     category = models.CharField(max_length=20, choices=TRANSACTION_CATEGORIES, default='rent')
     period = models.CharField(max_length=20, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
@@ -388,15 +395,17 @@ class Transaction(models.Model):
     comment = models.TextField(max_length=250, blank=True, null=True)
     
     @classmethod
-    def financials(cls, end_date, target_currency=None, properties=None, start_date=None, transaction_type=None, category=None):
+    def financials(cls, end_date, target_currency=None, properties=None, tenants=None, start_date=None, transaction_type=None, category=None):
         """
         Calculate the sum of transactions for a specific period and type.
 
         Args:
             properties (database instances): Iterable selection of properties to check cash flows for.
+            tenants (database instances): Iterable selection of tenants to check cash flows for.
             start_date: Defines the start date for the obsevation period. All-time if not defined.
             end_date: Defines the end date for the obsevation period.
             transaction_type (str): 'income' or 'expense'.
+            category: Filter by transaction category.
 
         Returns:
             Decimal: The total sum of transactions.
@@ -408,6 +417,9 @@ class Transaction(models.Model):
         
         if properties is not None:
             queryset = queryset.filter(property__in=properties)
+        
+        if tenants is not None:
+            queryset = queryset.filter(tenant__in=tenants)
         
         # if properties is not None and len(properties) == 1:
         #     target_currency = properties[0].currency

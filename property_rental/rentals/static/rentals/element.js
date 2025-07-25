@@ -338,6 +338,7 @@ function preFillForm(type, elementId) {
                 break;
             case 'transaction':
                 chooseSelectedOption('property', data.property);
+                chooseSelectedOption('tenant', data.tenant);
                 document.getElementById('id_date').value = data.transaction_date;
                 chooseSelectedOption('category', data.category);
                 document.getElementById('id_period').value = data.period;
