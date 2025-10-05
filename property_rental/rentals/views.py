@@ -75,7 +75,9 @@ def index(request):
         debt = 0
         for property in properties:
             for tenant in property.tenants.all():
-                debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']
+                # Only include debt from active tenants (not vacated)
+                if tenant.lease_end is None or tenant.lease_end > effective_current_date:
+                    debt += tenant.debt(effective_current_date) * FX.get_rate(property.currency, currency_basis, effective_current_date)['FX']
         dashboard_card_props = [
             {
                 'logoLink': settings.STATIC_URL + 'rentals/img/houses.svg',
@@ -520,7 +522,11 @@ def handle_element(request, data_type, element_id):
                 # Check if the logged-in user is the landlord and tenant lives in landlord's property
                 if request.user.is_landlord and element.property.owned_by.user == request.user:
 
-                    lease_rent = round(element.lease_rent(effective_current_date), digits)
+                    lease_rent_value = element.lease_rent(effective_current_date)
+                    if isinstance(lease_rent_value, (int, float)):
+                        lease_rent = round(lease_rent_value, digits)
+                    else:
+                        lease_rent = lease_rent_value  # Keep as string if not numeric
 
                     element_currency = element.property.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
 

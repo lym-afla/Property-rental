@@ -156,8 +156,6 @@ class Tenant(models.Model):
         #     if self.lease_start:
         #         start_date = max(start_date, self.lease_start)
         # end_date = end_date if end_date is not None else effective_current_date
-        if self.lease_end:
-            end_date = min(end_date, self.lease_end)
 
         transactions = transactions.filter(date__range=(start_date, end_date))
 
@@ -177,26 +175,58 @@ class Tenant(models.Model):
         total_rent_due = 0
         
         # Calculate start date
-        start_date = self.lease_start
+        current_period_start = self.lease_start
 
         # Calculate the month's due date based on payday
         check_date = date.today() if as_of_date is None else as_of_date
-        latest_month_due = check_date - relativedelta(months=1) if self.payday > check_date.day else check_date
+        
+        # Calculate the latest due date up to the check_date
+        # If we haven't reached this month's payday yet, the latest due is last month
+        # If we have reached or passed this month's payday, the latest due is this month
+        if self.payday > check_date.day:
+            # Haven't reached this month's payday yet, so latest due is last month
+            latest_month_due = check_date.replace(day=self.payday) - relativedelta(months=1)
+        else:
+            # Have reached this month's payday, so this month's rent is due
+            latest_month_due = check_date.replace(day=self.payday)
+        
+        # For vacated tenants, don't calculate debt beyond vacation date
         if self.lease_end is not None:
             latest_month_due = min(latest_month_due, self.lease_end)
 
-        while start_date <= latest_month_due:
-            monthly_rate = self.rent_history.filter(date_rent_set__lte=start_date).order_by('-date_rent_set').first().rent or 0
-            total_rent_due += monthly_rate
-            start_date += relativedelta(months=1)
+        # Calculate total rent due by iterating through each rental period
+        while current_period_start <= latest_month_due:
+            # Calculate the due date for this rental period
+            # The due date is the payday of the month when this period started
+            if current_period_start.day <= self.payday:
+                # Period started before or on payday, so rent is due this month
+                period_due_date = current_period_start.replace(day=self.payday)
+            else:
+                # Period started after payday, so rent is due next month
+                period_due_date = (current_period_start.replace(day=self.payday) + relativedelta(months=1))
+            
+            # Only include this period if its due date has passed
+            if period_due_date <= check_date:
+                monthly_rate = self.rent_history.filter(date_rent_set__lte=current_period_start).order_by('-date_rent_set').first()
+                if monthly_rate:
+                    total_rent_due += monthly_rate.rent
+            
+            # Move to next rental period
+            current_period_start += relativedelta(months=1)
 
-        total_rent_due -= self.rent_total(end_date=latest_month_due, start_date=self.lease_start)
+        # Subtract actual rent payments made
+        total_rent_due -= self.rent_total(end_date=check_date, start_date=self.lease_start)
 
         return -total_rent_due
     
     # Extract lease rent for the specific date
     def lease_rent(self, as_of_date=None):
         as_of_date = as_of_date if as_of_date is not None else date.today()
+        
+        # If tenant has been vacated before the as_of_date, return no rent
+        if self.lease_end and self.lease_end < as_of_date:
+            return 'Tenant vacated'
+            
         rent_history = self.rent_history.filter(date_rent_set__lte=as_of_date).order_by('-date_rent_set')
         if rent_history.exists():
             return rent_history.first().rent

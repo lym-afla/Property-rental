@@ -52,21 +52,44 @@ def convert_period(string_date):
         return ''
     
 def is_yahoo_finance_available():
-    url = "https://finance.yahoo.com"  # Replace with the Yahoo Finance API endpoint if needed
+    """Check if Yahoo Finance is available by making a test request with proper headers"""
+    url = "https://finance.yahoo.com"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+    }
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return True
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         pass
     return False
 
 def update_FX_database(base_currency, target_currency, date, max_attempts=5):
+    """
+    Fetch FX rate from Yahoo Finance.
     
+    Note: Modern yfinance uses curl_cffi internally to handle headers and browser mimicking.
+    We let yfinance handle the session to avoid conflicts.
+    
+    Args:
+        base_currency: Base currency code (e.g., 'USD')
+        target_currency: Target currency code (e.g., 'EUR')
+        date: Date for which to fetch the rate
+        max_attempts: Number of attempts to try fetching data
+        
+    Returns:
+        dict with exchange_rate, actual_date, requested_date or None if failed
+    """
     if not is_yahoo_finance_available():
         raise ConnectionError("Yahoo Finance is not available")
 
-    # Define the currency pair
+    # Define the currency pair (Yahoo Finance format: XXXYYY=X)
     currency_pair = f"{target_currency}{base_currency}=X"
 
     # Initialize a counter for the number of attempts
@@ -74,15 +97,27 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
 
     while attempt < max_attempts:
         # Define the date for which you want the exchange rate
-        end_date = date - timedelta(days=attempt - 1)  # Go back in time for each attempt. Need to deduct 1 to get rate for exactly the date
+        end_date = date - timedelta(
+            days=attempt - 1
+        )  # Go back in time for each attempt. Need to deduct 1 to get rate for exactly the date
         start_date = end_date - timedelta(days=1)  # Go back one day to ensure the date is covered
-        
+
         # Fetch historical data for the currency pair within the date range
-        data = yf.Ticker(currency_pair)
-        # exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
         try:
-            exchange_rate_data = data.history(period="1d", start=start_date, end=end_date)
-        except:
+            # Let yfinance handle the session internally (uses curl_cffi for better browser mimicking)
+            ticker = yf.Ticker(currency_pair)
+            # Note: Only set start and end, not period (yfinance allows max 2 of period/start/end)
+            exchange_rate_data = ticker.history(
+                start=start_date.strftime('%Y-%m-%d'), 
+                end=end_date.strftime('%Y-%m-%d')
+            )
+            
+            # Add small delay to avoid rate limiting
+            import time
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error fetching exchange rate data for {currency_pair}: {e}")
             attempt += 1
             continue
 
@@ -91,16 +126,26 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
             exchange_rate = round(exchange_rate_data["Close"].iloc[0], 6)
             actual_date = exchange_rate_data.index[0].date()  # Extract the actual date
 
+            print(
+                f"Successfully fetched {currency_pair} rate for {actual_date}: {exchange_rate}"
+            )
+
             return {
-                'exchange_rate': exchange_rate,
-                'actual_date': actual_date,
-                'requested_date': date
+                "exchange_rate": exchange_rate,
+                "actual_date": actual_date,
+                "requested_date": date,
             }
 
         # Increment the attempt counter
         attempt += 1
+        print(
+            f"Attempt {attempt}/{max_attempts} failed for {currency_pair} on {date}"
+        )
 
     # If no data is found after max_attempts, return None or an appropriate error message
+    print(
+        f"Failed to fetch {currency_pair} after {max_attempts} attempts for date {date}"
+    )
     return None
 
 # Collect chart dates 

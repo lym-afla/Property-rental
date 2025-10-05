@@ -192,7 +192,12 @@ function fillRow(type, element) {
                 <td class="text-center">${formatNumberWithParentheses(element.currency, element.net_income_ytd)}</td>
             `;
         case 'tenant':
-            const currentRent = (element.lease_rent === 'No rent history for the Tenant') ? "–" : formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
+            let currentRent;
+            if (element.lease_rent === 'No rent history for the Tenant' || element.lease_rent === 'Tenant vacated') {
+                currentRent = "–";
+            } else {
+                currentRent = formatNumberWithParentheses(element.lease_native_currency, element.lease_rent);
+            }
             
             return `
                 <td class="tenantName"><a href="">${element.first_name}</a></td>
@@ -451,8 +456,15 @@ function load_element_details(type, elementId) {
                 // Populate the parameters in the dashboard cards
                 document.querySelector('#tenantPropertyCard .display-4').textContent = element.property;
                 document.querySelector('#tenantMovedInCard .display-4').textContent = formatDateToDdmmyy(element.renting_since);
-                document.querySelector('#tenantRentCard .display-4').textContent = 
-                    (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) ? formatNumberWithParentheses(element.rent_native_currency, element.rent_rate) : 'NA';
+                let rentDisplay;
+                if (element.rent_rate === 'Tenant vacated' || element.rent_rate === 'No rent history for the Tenant') {
+                    rentDisplay = 'NA';
+                } else if (typeof element.rent_rate === 'number' && !isNaN(element.rent_rate)) {
+                    rentDisplay = formatNumberWithParentheses(element.rent_native_currency, element.rent_rate);
+                } else {
+                    rentDisplay = 'NA';
+                }
+                document.querySelector('#tenantRentCard .display-4').textContent = rentDisplay;
                 document.querySelector('#tenantRevenueCard .display-4').textContent = 
                     (typeof element.all_time_rent === 'number' && !isNaN(element.all_time_rent)) ? formatNumberWithParentheses(element.rent_currency, element.all_time_rent) : 'NA';
                 
