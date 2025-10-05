@@ -28,4 +28,8 @@ urlpatterns = [
     path('get_chart_data', views.chart_data_request, name='chart_data_request'),
     path('properties/valuation/<int:property_id>', views.property_valuation, name='property_valuation'),
     path('update-fx/', views.update_fx_view, name='update_fx'),
+    
+    # Handle Chrome DevTools and well-known requests
+    path('.well-known/appspecific/com.chrome.devtools.json', views.chrome_devtools_config, name='chrome_devtools'),
+    path('.well-known/<path:path>', views.well_known_handler, name='well_known'),
 ]

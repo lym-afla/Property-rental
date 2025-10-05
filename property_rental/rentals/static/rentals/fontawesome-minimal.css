@@ -1,0 +1,45 @@
+/* Minimal Font Awesome CSS - Only icons actually used */
+@font-face {
+  font-family: "Font Awesome 5 Free";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/webfonts/fa-solid-900.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Font Awesome 5 Free";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/webfonts/fa-regular-400.woff2") format("woff2");
+}
+
+.fa {
+  font-family: "Font Awesome 5 Free";
+  font-weight: 900;
+  display: inline-block;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  line-height: 1;
+}
+
+/* Specific icons used in the app */
+.fa-user-circle:before {
+  content: "\f2bd";
+}
+
+.fa-circle-check:before,
+.green-circle::before {
+  content: "\f058";
+  color: green;
+  font-size: 18px;
+}
+
+.fa-circle-xmark:before,
+.red-circle::before {
+  content: "\f057";
+  color: red;
+  font-size: 18px;
+} 

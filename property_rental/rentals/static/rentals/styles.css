@@ -111,3 +111,57 @@ html, body {
   .loading-invisible {
     display: none !important;
   }
+
+/* Tenant Status Styles */
+.tenant-status-active {
+    color: #28a745;
+}
+
+.tenant-status-will-vacate {
+    color: #ffc107;
+}
+
+.tenant-status-vacated {
+    color: #dc3545;
+}
+
+/* Vacate Button Styles */
+.vacate-btn {
+    transition: all 0.3s ease;
+}
+
+.vacate-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Status badges in tenant details */
+.badge.bg-success {
+    background-color: #28a745 !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #212529;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+/* Vacate Modal Styles */
+#vacateModal .modal-header {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+#vacateModal .btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+#vacateModal .btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}

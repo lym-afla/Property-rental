@@ -150,17 +150,8 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
 
 # Collect chart dates 
 def chart_dates(start_date, end_date, freq):
-    
-    import pandas as pd
-    
-    # Create matching table for pandas
-    frequency = {
-        'D': 'B',
-        'W': 'W',
-        'M': 'M',
-        'Q': 'Q',
-        'Y': 'Y'
-    }
+    from datetime import date, timedelta
+    from dateutil.relativedelta import relativedelta
     
     # Convert the start_date and end_date strings to date objects
     if type(start_date) == str:
@@ -168,21 +159,67 @@ def chart_dates(start_date, end_date, freq):
     if type(end_date) == str:
         end_date = date.fromisoformat(end_date)
 
+    # Store original dates
+    original_start = start_date
+    original_end = end_date
+
     # If the frequency is yearly, adjust the end_date to the end of the current year
     if freq == 'Y':
         end_date = end_date.replace(month=12, day=31)
         start_date = start_date.replace(month=1, day=1)
-        # Keep one year if start and end within one calendar year
-        if end_date.year - start_date.year != 0:
-            start_date = date(start_date.year + 1, 1, 1)
 
     if freq == 'M':
-        # Adjust the end_date to the end of the month
-        end_date = end_date + relativedelta(months = 1)
-        start_date = start_date + relativedelta(months = 1)
+        # For monthly, adjust to next month start
+        end_date = end_date + relativedelta(months=1)
+        start_date = start_date + relativedelta(months=1)
 
-    # Get list of dates from pandas
-    return pd.date_range(start_date, end_date, freq=frequency[freq]).date
+    # Generate date range without pandas
+    dates = []
+    current_date = start_date
+    
+    if freq == 'D':  # Daily (business days)
+        while current_date <= end_date:
+            # Skip weekends (Monday=0, Sunday=6)
+            if current_date.weekday() < 5:  # Monday-Friday
+                dates.append(current_date)
+            current_date += timedelta(days=1)
+    
+    elif freq == 'W':  # Weekly - simplified to start from original date
+        current_date = original_start
+        while current_date <= original_end:
+            dates.append(current_date)
+            current_date += timedelta(weeks=1)
+    
+    elif freq == 'M':  # Monthly
+        # Simplified monthly: start from beginning of month after start_date
+        current_date = start_date.replace(day=1)
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += relativedelta(months=1)
+    
+    elif freq == 'Q':  # Quarterly - align to quarter boundaries
+        # Start from the first quarter that includes or follows the start date
+        current_date = original_start
+        # Move to the next quarter boundary
+        if current_date.month <= 3:
+            current_date = current_date.replace(month=3, day=31)
+        elif current_date.month <= 6:
+            current_date = current_date.replace(month=6, day=30)
+        elif current_date.month <= 9:
+            current_date = current_date.replace(month=9, day=30)
+        else:
+            current_date = current_date.replace(month=12, day=31)
+        
+        while current_date <= original_end:
+            dates.append(current_date)
+            current_date += relativedelta(months=3)
+    
+    elif freq == 'Y':  # Yearly
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += relativedelta(years=1)
+    
+    return dates
     
 # Create labels according to dates
 def chart_labels(dates, frequency):
