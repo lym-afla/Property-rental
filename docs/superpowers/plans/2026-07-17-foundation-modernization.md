@@ -888,7 +888,7 @@ git commit -m "refactor: extract financial aggregation into services.financials"
 - Modify: `property_rental/rentals/views.py:1066` — replace hardcoded `'M'`, `'2022-06-01'`, `'2023-09-15'`, `'USD'` with request/session-derived values.
 
 **Interfaces:**
-- Produces: `services.charts.get_chart_data(type, id, freq, start, end, currency, landlord)` returning the `{labels, datasets, currency}` dict.
+- Produces: `services.charts.get_chart_data(type, element_id, frequency, from_date, to_date, currency, properties=None)` returning the `{labels, datasets, currency}` dict. (Note: the 7th positional arg is `properties` — an iterable of `Property` instances, defaulting to `None`. The homePage branch at `views.py:889`/`:906` is gated on truthy `properties`, so callers exercising homePage must pass `[property]`, not `None`.)
 
 - [ ] **Step 1: Move `get_chart_data` verbatim into `services.charts`**
 
@@ -1309,6 +1309,6 @@ git tag phase-1-foundation
 - `services.fx.get_rate(from_currency, to_currency, as_of)` — defined Task 10, consumed Tasks 11, 17.
 - `services.fx.convert(amount, from_currency, to_currency, as_of)` — defined Task 10, consumed Task 11.
 - `services.financials.convert_transactions(qs, target_currency, as_of)` — defined Task 11, consumed Tasks 11, 12.
-- `services.charts.get_chart_data(type, id, freq, start, end, currency, landlord)` — defined Task 12, consumed Task 17.
+- `services.charts.get_chart_data(type, element_id, frequency, from_date, to_date, currency, properties=None)` — defined Task 12, consumed Task 17. (7th arg is `properties`, a Property iterable — see Task 12 note.)
 - `services.scheduler.debt(tenant, ...)`, `debt_advance_payment(tenant, ...)` — defined Task 13, consumed by `Tenant` model delegates.
 All consistent.
