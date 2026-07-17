@@ -614,6 +614,8 @@ def handle_element(request, data_type, element_id):
                 print(f'561. Printing data: {data}')
         return JsonResponse(data, status=200)
     elif request.method == 'DELETE':
+        if element.owned_by.user != request.user:
+            return JsonResponse({'error': 'Not authorized'}, status=403)
         element.delete()
         return JsonResponse({'message': f'{data_type} deleted successfully'}, status=200)
     elif request.method == 'PUT':
