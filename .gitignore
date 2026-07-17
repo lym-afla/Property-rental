@@ -2,9 +2,12 @@ property-venv
 property_rental/AW-rental
 
 property_rental/property_rental/__pycache__/
+property_rental/property_rental/settings/__pycache__/
 property_rental/rentals/__pycache__/
 property_rental/rentals/migrations/__pycache__/
 property_rental/rentals/templatetags/__pycache__/
+property_rental/rentals/tests/__pycache__/
+property_rental/.pytest_cache/
 
 property_rental/db.sqlite3
 
