@@ -51,7 +51,8 @@ property_rental/rentals/tests/
 ├── factories.py           # factory-boy: UserFactory, LandlordFactory, PropertyFactory, TenantFactory, TransactionFactory, FXFactory
 ├── test_security.py       # IDOR, missing-auth, global-state-removed
 ├── test_financials_char.py # characterization tests for debt/rent_total/financials/pnl
-├── test_fx_char.py        # characterization tests for FX.get_rate + cache
+├── test_fx_char.py        # characterization tests for FX.get_rate (pins pre-migration output)
+├── test_fx_migration.py   # wide→long schema migration: data preserved, get_rate output unchanged
 ├── test_charts_char.py    # characterization tests for get_chart_data
 ├── test_services.py       # unit tests for the new service modules
 └── test_api.py            # DRF endpoint happy-path + auth-failure tests
@@ -75,7 +76,7 @@ requirements-dev.txt       # pytest, pytest-django, factory-boy, coverage, psyco
 | `property_rental/property_rental/wsgi.py` | `DJANGO_SETTINGS_MODULE` defaults to `property_rental.settings.prod`. |
 | `.gitignore` | Remove lines 14-16 (test exclusions) and line 19 (settings exclusion). |
 | `property_rental/requirements.txt` | Add `psycopg[binary]`, `djangorestframework>=3.14`, confirm `networkx`, `yfinance`. |
-| `property_rental/rentals/models.py` | `FX.update_fx_rates/get_rate` → thin delegates to `services.fx`. `Tenant.debt/debt_advance_payment` → thin delegates to `services.scheduler`. `Transaction.financials` → delegates to `services.financials`. Add `User.effective_date` field + migration. Remove `FX.__tablename__`. |
+| `property_rental/rentals/models.py` | `FX` model migrated from wide (per-pair columns `EURUSD`/`GBPUSD`/`USDRUB`) to long format (`from_currency`, `to_currency`, `rate`, `date`). `FX.update_fx_rates/get_rate` → thin delegates to `services.fx`. `Tenant.debt/debt_advance_payment` → thin delegates to `services.scheduler`. `Transaction.financials` → delegates to `services.financials`. Add `User.effective_date` field + migration. Remove `FX.__tablename__`. |
 | `property_rental/rentals/views.py` | Replace inline business logic with service calls. Add `@login_required` to 6 views. Add ownership check to DELETE branch of `handle_element`. Add `case _:` default. Remove global-state handling for `effective_current_date`. Target: shed ≥300 lines. |
 | `property_rental/rentals/utils.py` | Remove `effective_current_date` global. Fix `calculate_from_date` `months=` bug. |
 | `property_rental/rentals/urls.py` | Remove `# TO BE DELETED` routes. Add `path('api/v1/', include('rentals.api.urls'))`. |
@@ -86,16 +87,17 @@ requirements-dev.txt       # pytest, pytest-django, factory-boy, coverage, psyco
 
 ## Task Ordering
 
-The tasks are sequenced so the characterization test net is in place *before* any refactor that could change behavior. Eight phases:
+The tasks are sequenced so the characterization test net is in place *before* any refactor that could change behavior. Nine phases:
 
 1. **Settings + gitignore + deps + CI scaffold** (Task 1) — makes tests trackable and runnable.
 2. **Characterization test capture** (Tasks 2-5) — pins every financial calc against the *current* codebase, green baseline. No production code changes.
 3. **Security fixes** (Tasks 6-8) — IDOR, auth, global-state removal. Each has an asserting test.
-4. **FX cache** (Task 9) — the big perf win, gated by the FX characterization test.
-5. **Service layer extraction** (Tasks 10-13) — mechanical moves of fx, financials, charts, scheduler. Characterization tests stay green throughout.
-6. **Postgres migration** (Task 14) — script + verification.
-7. **DRF API** (Tasks 15-17) — endpoints, serializers, per-user querysets.
-8. **Verification** (Task 18) — full definition-of-done check.
+4. **FX schema migration** (Task 9) — migrate the wide `FX` table (one column per pair: `EURUSD`/`GBPUSD`/`USDRUB`) to normalized long format (`from_currency`, `to_currency`, `rate`). Gated by the Task 4 FX characterization tests — must preserve every rate value and every `get_rate` output.
+5. **FX cache** (Task 10) — the big perf win, now trivial because the long schema eliminates field introspection.
+6. **Service layer extraction** (Tasks 11-14) — mechanical moves of fx, financials, charts, scheduler. Characterization tests stay green throughout.
+7. **Postgres migration** (Task 15) — script + verification.
+8. **DRF API** (Tasks 16-18) — endpoints, serializers, per-user querysets.
+9. **Verification** (Task 19) — full definition-of-done check.
 
 ---
 
@@ -604,7 +606,123 @@ git commit -m "fix: replace process-global as-of date with per-user User.effecti
 
 ---
 
-## Task 9: FX graph cache
+## Task 9: Migrate `FX` schema from wide (per-pair columns) to long format
+
+**Goal:** Replace the anti-pattern `FX` table (one `DecimalField` column per currency pair: `EURUSD`, `GBPUSD`, `USDRUB`) with the normalized long format (`from_currency`, `to_currency`, `rate`, `date`). Adding a new currency pair must become a new **row**, not a schema migration. The graph builder in `FX.get_rate` currently introspects `_meta.fields` and parses column names at runtime to discover edges — the long format eliminates that fragility entirely.
+
+This is gated by Task 4's `test_fx_char.py`: after the migration, every `FX.get_rate(...)` call must return the **exact same value** as before. The characterization tests are the proof that the migration is value-preserving.
+
+**Files:**
+- Modify: `property_rental/rentals/models.py` — redefine `FX` fields: drop `EURUSD`/`GBPUSD`/`USDRUB` columns, add `from_currency` (`CharField(max_length=3)`), `to_currency` (`CharField(max_length=3)`), `rate` (`DecimalField`). Keep `date`. Remove `FX.__tablename__ = 'FX'` (SQLAlchemy-ism).
+- Create: migration for the schema change + a `RunPython` data migration that backfills existing wide rows into long rows (see Step 3).
+- Modify: `property_rental/rentals/models.py` — rewrite `FX.get_rate` and `FX.update_fx_rates` to read the long-format columns (see Step 4). The field-introspection loop becomes a plain `for fx in FX.objects.filter(date__lte=as_of): g.add_edge(fx.from_currency, fx.to_currency, weight=fx.rate)`.
+- Modify: `property_rental/rentals/utils.py` — `update_FX_database()` (the yfinance fetcher) must write long-format rows.
+- Modify: `property_rental/rentals/tests/factories.py` — `FXFactory` produces long-format rows (`from_currency`, `to_currency`, `rate`, `date`).
+- Test: `property_rental/rentals/tests/test_fx_migration.py`
+
+**Interfaces:**
+- Consumes: the Task 4 FX characterization tests (`test_fx_char.py`), which pin `get_rate` output on the wide schema.
+- Produces: a long-format `FX` model whose `get_rate` returns identical values for the same logical rates. Tasks 10 (cache), 11 (services), and the DRF serializer all consume the long format.
+
+- [ ] **Step 1: Write a migration-correctness test**
+
+`rentals/tests/test_fx_migration.py`:
+```python
+from datetime import date
+from decimal import Decimal
+import pytest
+from rentals.models import FX
+
+@pytest.mark.django_db
+def test_fx_model_has_long_format_fields():
+    """Schema migration: FX must have from_currency/to_currency/rate, not per-pair columns."""
+    field_names = {f.name for f in FX._meta.get_fields()}
+    assert "from_currency" in field_names
+    assert "to_currency" in field_names
+    assert "rate" in field_names
+    assert "EURUSD" not in field_names
+    assert "GBPUSD" not in field_names
+    assert "USDRUB" not in field_names
+
+@pytest.mark.django_db
+def test_fx_get_rate_unchanged_after_migration():
+    """get_rate must return the same value as before the wide→long migration.
+    This re-asserts what test_fx_char.py pins, but against the long schema,
+    so a regression here proves the migration drifted."""
+    FX.objects.create(date=date(2024,1,15), from_currency="EUR", to_currency="USD", rate=Decimal("1.08"))
+    FX.objects.create(date=date(2024,1,15), from_currency="GBP", to_currency="USD", rate=Decimal("1.25"))
+    rate = FX.get_rate("EUR", "USD", as_of=date(2024,2,1))
+    assert rate == Decimal("1.08")  # adjust to whatever the real algorithm returns
+```
+(Adjust the final assertion's expected value to match what `test_fx_char.py` captured — the point is identical output, same algorithm.)
+
+- [ ] **Step 2: Run, confirm fails (still wide format)**
+
+Run: `pytest rentals/tests/test_fx_migration.py -v`
+Expected: FAIL — `from_currency`/`to_currency`/`rate` fields don't exist yet.
+
+- [ ] **Step 3: Schema + data migration**
+
+Add the new fields to the `FX` model in `models.py` (with `null=True, blank=True` initially so the data migration can populate them):
+```python
+class FX(models.Model):
+    date = models.DateField()
+    from_currency = models.CharField(max_length=3, null=True, blank=True)
+    to_currency = models.CharField(max_length=3, null=True, blank=True)
+    rate = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    # OLD columns kept temporarily for the data migration:
+    EURUSD = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    GBPUSD = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    USDRUB = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+```
+Generate the schema migration: `python manage.py makemigrations rentals`.
+
+Then write a **data migration** (`migrations/00XX_fx_wide_to_long.py`) with a `RunPython` that, for each existing FX row, emits one long row per non-null pair column:
+```python
+def forwards(apps, schema_editor):
+    FX = apps.get_model("rentals", "FX")
+    for fx in FX.objects.all():
+        for pair_col, base, quote in [("EURUSD","EUR","USD"), ("GBPUSD","GBP","USD"), ("USDRUB","USD","RUB")]:
+            rate = getattr(fx, pair_col)
+            if rate is not None:
+                FX.objects.create(date=fx.date, from_currency=base, to_currency=quote, rate=rate)
+        fx.delete()  # remove the old wide row
+```
+Run: `python manage.py migrate`.
+
+**Then** a follow-up migration drops the old columns and tightens the new ones to non-nullable (after confirming all rows are populated). Re-edit the model to remove `EURUSD`/`GBPUSD`/`USDRUB` and drop `null=True` from the new fields; `makemigrations` again; `migrate`.
+
+- [ ] **Step 4: Rewrite `FX.get_rate` and `FX.update_fx_rates` for long format**
+
+In `models.py`, `FX.get_rate`'s graph-build loop (the part that currently introspects `_meta.fields` and parses column names) becomes:
+```python
+g = nx.Graph()
+for fx in FX.objects.filter(date__lte=as_of):
+    g.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
+```
+The rest of the Bellman-Ford traversal stays verbatim — same algorithm, same return values.
+
+`FX.update_fx_rates` (and `utils.update_FX_database`) must write `FX(from_currency=..., to_currency=..., rate=..., date=...)` rows instead of setting pair columns. Trace every call site and update.
+
+- [ ] **Step 5: Update `FXFactory`**
+
+In `rentals/tests/factories.py`, redefine `FXFactory` to set `from_currency`/`to_currency`/`rate`/`date` (drop the pair-column attrs).
+
+- [ ] **Step 6: Run ALL characterization tests — they MUST stay green**
+
+Run: `pytest rentals/tests/test_fx_char.py rentals/tests/test_fx_migration.py rentals/tests/test_financials_char.py rentals/tests/test_charts_char.py -v`
+Expected: all green. If `test_fx_char.py` fails, the migration changed `get_rate` output — that's a regression; fix before proceeding.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "refactor: migrate FX table from wide (per-pair columns) to normalized long format"
+```
+
+---
+
+## Task 10: FX graph cache
 
 **Goal:** Build the networkx graph once per process (invalidated on `FX` save/delete) instead of per `get_rate` call. The biggest perf win in the phase. Gated by `test_fx_char.py` — output must not change.
 
@@ -714,7 +832,7 @@ git commit -m "perf: cache FX networkx graph; build once per as_of instead of pe
 
 ---
 
-## Task 10: Extract `services/financials.py`
+## Task 11: Extract `services/financials.py`
 
 **Goal:** Move `pnl_calc` and `Transaction.financials` aggregation into a service. Consolidate the four duplicated currency-conversion loops into one helper. **Characterization tests must stay green.**
 
@@ -762,7 +880,7 @@ git commit -m "refactor: extract financial aggregation into services.financials"
 
 ---
 
-## Task 11: Extract `services/charts.py` and fix `property_valuation` hardcoded params
+## Task 12: Extract `services/charts.py` and fix `property_valuation` hardcoded params
 
 **Files:**
 - Create: `property_rental/rentals/services/charts.py`
@@ -811,7 +929,7 @@ git commit -m "refactor: extract get_chart_data into services.charts; fix proper
 
 ---
 
-## Task 12: Extract `services/scheduler.py`
+## Task 13: Extract `services/scheduler.py`
 
 **Goal:** Move `Tenant.debt` and `Tenant.debt_advance_payment` verbatim into a service. **No dedup** — both move separately (Phase 4 unifies them). Char tests must stay green.
 
@@ -848,7 +966,7 @@ git commit -m "refactor: extract Tenant.debt/debt_advance_payment into services.
 
 ---
 
-## Task 13: Fix `calculate_from_date` YTD bug, add `case _:` default, remove dead code
+## Task 14: Fix `calculate_from_date` YTD bug, add `case _:` default, remove dead code
 
 **Files:**
 - Modify: `property_rental/rentals/utils.py:255` — `to_date.replace(months=1, day=1)` → `to_date + relativedelta(months=1)` then set day, or use `date(to_date.year, 1, 1)`.
@@ -886,7 +1004,7 @@ git commit -m "fix: YTD date calc crash; add default case to handle_element; rem
 
 ---
 
-## Task 14: Postgres migration script
+## Task 15: Postgres migration script
 
 **Files:**
 - Create: `property_rental/scripts/migrate_sqlite_to_postgres.py`
@@ -959,7 +1077,7 @@ git commit -m "feat: add verified SQLite->Postgres migration script"
 
 ---
 
-## Task 15: DRF serializers and permissions
+## Task 16: DRF serializers and permissions
 
 **Files:**
 - Create: `property_rental/rentals/api/__init__.py`, `serializers.py`, `permissions.py`
@@ -1009,7 +1127,7 @@ git commit -m "feat: add DRF serializers and IsOwnerOrReadOnly permission"
 
 ---
 
-## Task 16: DRF ViewSets and `/api/v1/` routing
+## Task 17: DRF ViewSets and `/api/v1/` routing
 
 **Files:**
 - Create: `property_rental/rentals/api/views.py`, `rentals/api/urls.py`
@@ -1071,7 +1189,7 @@ git commit -m "feat: add /api/v1/ DRF endpoints with per-user querysets and char
 
 ---
 
-## Task 17: CDN SRI hashes on template CDN tags
+## Task 18: CDN SRI hashes on template CDN tags
 
 **Files:**
 - Modify: `property_rental/rentals/templates/rentals/layout.html` (Bootstrap + Icons), `index.html`, `properties.html`, `tenants.html` (Chart.js + datalabels).
@@ -1097,7 +1215,7 @@ git commit -m "security: add SRI hashes and pin CDN versions"
 
 ---
 
-## Task 18: Definition-of-done verification
+## Task 19: Definition-of-done verification
 
 This task runs the full Phase-1 verification checklist from the spec §5. No code changes unless a check fails.
 
@@ -1170,26 +1288,27 @@ git tag phase-1-foundation
 | §4.1 SECRET_KEY/DEBUG/ALLOWED_HOSTS | Task 1 | ✅ |
 | §4.1 settings split | Task 1 | ✅ |
 | §4.1 password validators | Task 1 | ✅ |
-| §4.1 CDN SRI | Task 17 | ✅ |
-| §4.2 services: fx | Task 9 | ✅ |
-| §4.2 services: financials | Task 10 | ✅ |
-| §4.2 services: charts + property_valuation fix | Task 11 | ✅ |
-| §4.2 services: scheduler | Task 12 | ✅ |
-| §4.2 bug: `calculate_from_date` | Task 13 | ✅ |
-| §4.2 bug: `case _:` default | Task 13 | ✅ |
-| §4.3 Postgres migration | Task 14 | ✅ |
-| §4.4 DRF skeleton + chart-data endpoint | Tasks 15-16 | ✅ |
+| §4.1 CDN SRI | Task 18 | ✅ |
+| §4.2 FX schema wide→long (plan amendment) | Task 9 | ✅ |
+| §4.2 services: fx | Task 10 | ✅ |
+| §4.2 services: financials | Task 11 | ✅ |
+| §4.2 services: charts + property_valuation fix | Task 12 | ✅ |
+| §4.2 services: scheduler | Task 13 | ✅ |
+| §4.2 bug: `calculate_from_date` | Task 14 | ✅ |
+| §4.2 bug: `case _:` default | Task 14 | ✅ |
+| §4.3 Postgres migration | Task 15 | ✅ |
+| §4.4 DRF skeleton + chart-data endpoint | Tasks 16-17 | ✅ |
 | §4.5 test scaffold | Tasks 1-5 | ✅ |
 | §4.5 characterization tests | Tasks 3-5 | ✅ |
 | §4.5 CI | Task 1 | ✅ |
-| §5 verification | Task 18 | ✅ |
+| §5 verification | Task 19 | ✅ |
 
-**2. Placeholder scan:** No "TBD"/"TODO"/"implement later". Task 9 Step 3 says "moved verbatim" — that's intentional (the body is in `models.py:521-591`, not reproduced here to avoid drift; the instruction is explicit and bounded). Task 14's script is fully written.
+**2. Placeholder scan:** No "TBD"/"TODO"/"implement later". Task 10 Step 3 says "moved verbatim" — that's intentional (the body is in `models.py:521-591`, not reproduced here to avoid drift; the instruction is explicit and bounded). Task 15's script is fully written.
 
 **3. Type consistency:** Service function signatures consistent across tasks:
-- `services.fx.get_rate(from_currency, to_currency, as_of)` — defined Task 9, consumed Tasks 10, 16.
-- `services.fx.convert(amount, from_currency, to_currency, as_of)` — defined Task 9, consumed Task 10.
-- `services.financials.convert_transactions(qs, target_currency, as_of)` — defined Task 10, consumed Tasks 10, 11.
-- `services.charts.get_chart_data(type, id, freq, start, end, currency, landlord)` — defined Task 11, consumed Task 16.
-- `services.scheduler.debt(tenant, ...)`, `debt_advance_payment(tenant, ...)` — defined Task 12, consumed by `Tenant` model delegates.
+- `services.fx.get_rate(from_currency, to_currency, as_of)` — defined Task 10, consumed Tasks 11, 17.
+- `services.fx.convert(amount, from_currency, to_currency, as_of)` — defined Task 10, consumed Task 11.
+- `services.financials.convert_transactions(qs, target_currency, as_of)` — defined Task 11, consumed Tasks 11, 12.
+- `services.charts.get_chart_data(type, id, freq, start, end, currency, landlord)` — defined Task 12, consumed Task 17.
+- `services.scheduler.debt(tenant, ...)`, `debt_advance_payment(tenant, ...)` — defined Task 13, consumed by `Tenant` model delegates.
 All consistent.
