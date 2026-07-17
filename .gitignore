@@ -10,10 +10,4 @@ property_rental/db.sqlite3
 
 property_rental/staticfiles/
 
-# Test files and directories
-property_rental/tests/
-test_*.py
-testing.py
-
 property_rental/AW-rentals/
-property_rental/property_rental/settings.py

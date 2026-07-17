@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest>=7.4
+pytest-django>=4.7
+factory-boy>=3.3
+coverage>=7.3
+psycopg[binary]>=3.1
