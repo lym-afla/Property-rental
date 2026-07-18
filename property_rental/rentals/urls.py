@@ -24,7 +24,6 @@ urlpatterns = [
     # path('properties/<int:property_id>', views.property_details, name='property_details'), # TO BE DELETED
     path('new-form/<str:form_type>', views.new_form, name='new_form'),
     path('tenants/property-choices', views.property_choices, name='property_choices'),
-    path('update-date', views.update_date, name='update_date'),
     path('get_chart_data', views.chart_data_request, name='chart_data_request'),
     path('properties/valuation/<int:property_id>', views.property_valuation, name='property_valuation'),
     path('update-fx/', views.update_fx_view, name='update_fx'),

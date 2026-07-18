@@ -74,9 +74,10 @@ def test_landlord_cannot_delete_other_landlords_property_valuation(auth_client, 
 
 # URL names verified against rentals/urls.py. Note: the view function is named
 # ``update_fx_view`` but its URL name is ``update_fx`` (see urls.py).
-# ``new_form`` requires a ``form_type`` kwarg; ``update_date``/``chart_data_request``
-# are POST/GET endpoints respectively but the auth gate must trigger on the
-# incoming request regardless of method, so we hit them with their natural verb.
+# ``new_form`` requires a ``form_type`` kwarg; ``chart_data_request`` is a GET
+# endpoint but the auth gate must trigger on the incoming request regardless
+# of method, so we hit it with its natural verb. (Task 8 removed the
+# ``update_date`` endpoint entirely along with the per-request global.)
 
 AUTH_REQUIRED_URLS_GET = [
     "rentals:update_fx",
@@ -98,13 +99,6 @@ def test_anonymous_get_is_rejected(db, client, url_name):
         assert "/login" in resp.url or "/accounts/login" in resp.url, (
             f"{url_name} redirected to {resp.url!r}, expected a login URL"
         )
-
-
-def test_anonymous_post_update_date_rejected(db, client):
-    """Anonymous POST to update_date must be rejected (currently hits request.session)."""
-    url = reverse("rentals:update_date")
-    resp = client.post(url, data={}, content_type="application/json")
-    assert resp.status_code in (302, 401, 403)
 
 
 def test_anonymous_get_new_form_rejected(db, client):
@@ -150,3 +144,49 @@ def test_update_fx_view_only_processes_requesting_users_properties(db, landlord_
         f"other_landlord_user's property id {other_property.id} must NOT be touched."
     )
     assert other_property.id not in called_property_ids
+
+
+# ---------------------------------------------------------------------------
+# Task 8: per-user as-of date isolation
+# ---------------------------------------------------------------------------
+#
+# The process-global ``effective_current_date`` in ``rentals/utils`` was a
+# cross-user-bleed bug: one user mutating the as-of date changed it for every
+# concurrent user. Task 8 replaces it with a per-user ``User.effective_date``
+# field plus a ``get_effective_date(user)`` helper. These tests pin the
+# per-user isolation contract.
+
+def test_effective_date_is_per_user(db, landlord_user, other_landlord_user):
+    """Two users with different ``effective_date`` values must observe
+    different as-of dates from ``get_effective_date``.
+
+    Before Task 8 this was impossible because the date lived in a single
+    module global mutated per-request; any user's update bled into every
+    other user's view. With the per-user field each user sees their own
+    date.
+    """
+    from datetime import date
+    from rentals.utils import get_effective_date
+
+    landlord_user.effective_date = date(2024, 1, 1)
+    landlord_user.save()
+    other_landlord_user.effective_date = date(2025, 6, 1)
+    other_landlord_user.save()
+
+    assert get_effective_date(landlord_user) == date(2024, 1, 1)
+    assert get_effective_date(other_landlord_user) == date(2025, 6, 1)
+
+
+def test_get_effective_date_defaults_to_today_when_unset(db, landlord_user):
+    """A user with no ``effective_date`` falls back to ``date.today()``.
+
+    This preserves existing behavior for users created before the field
+    existed (and for the characterization tests, which run with an empty
+    ``effective_date``).
+    """
+    from datetime import date
+    from rentals.utils import get_effective_date
+
+    # User was created by the factory without setting effective_date.
+    assert landlord_user.effective_date is None
+    assert get_effective_date(landlord_user) == date.today()

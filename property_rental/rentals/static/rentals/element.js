@@ -109,7 +109,9 @@ function fetchTableData(type) {
         const tbody = document.querySelector(`#${type}Table tbody`);
         tbody.innerHTML = '';  // Clear the table body
 
-        document.getElementById('datePicker').value = data[0];
+        // NOTE: data[0] used to populate the navbar date picker
+        // (#datePicker), which Task 8 removed. We still skip it below as
+        // the server keeps it as the first element of the payload.
 
         // Need to skip the first element as effective date is passed
         let isFirstElement = true;
@@ -405,8 +407,9 @@ function load_element_details(type, elementId) {
     })
     .then(element => {
 
-        document.getElementById('datePicker').value = element.app_date;
-    
+        // NOTE: element.app_date used to populate the navbar date picker
+        // (#datePicker), which Task 8 removed.
+
         switch(type) {
             case 'property':
 

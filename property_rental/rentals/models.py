@@ -15,7 +15,7 @@ from .utils import update_FX_database
 class User(AbstractUser):
     is_landlord = models.BooleanField(default=False)
     is_tenant = models.BooleanField(default=False)
-    
+
     default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', blank=True, null=True)
     use_default_currency_for_all_data = models.BooleanField(default=False)
     chart_frequency = models.CharField(max_length=1, default='M')
@@ -27,7 +27,13 @@ class User(AbstractUser):
             'max_value': 'The value for digits must be less than or equal to 6.',
             }
         )
-    
+    # Per-user "as-of" date that drives every effective-date lookup in the
+    # app (replaces the former process-global ``effective_current_date`` in
+    # ``rentals.utils``). null=True so existing users and the migration do
+    # not break; ``get_effective_date(user)`` falls back to ``date.today()``
+    # when this is unset.
+    effective_date = models.DateField(null=True, blank=True)
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if self.is_landlord:

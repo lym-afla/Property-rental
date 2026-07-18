@@ -5,7 +5,7 @@ from django.db.models import Q
 
 from .models import User, Property, Tenant, Transaction, Property_capital_structure
 from .constants import CURRENCY_CHOICES
-from .utils import effective_current_date
+from .utils import get_effective_date
 
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -219,11 +219,16 @@ class TenantForm(forms.ModelForm):
         super(TenantForm, self).__init__(*args, **kwargs)
 
         if landlord_user:
+            # Resolve the as-of date per-user (the form is given the Landlord
+            # instance, whose related ``user`` carries ``effective_date``).
+            # Falls back to date.today() when unset — see get_effective_date.
+            effective_date = get_effective_date(landlord_user.user)
+
             # Customize the queryset for the property field based on the landlord user
             # Only show properties that have no tenants or tenants with expired leases
             queryset = Property.objects.filter(
-                Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_current_date),
-                Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
+                Q(tenants__isnull=True) | Q(tenants__lease_end__lte=effective_date),
+                Q(sold__isnull=True) | Q(sold__gte=effective_date),
                 owned_by=landlord_user,
             )
             

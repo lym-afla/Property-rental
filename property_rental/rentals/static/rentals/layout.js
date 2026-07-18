@@ -5,15 +5,10 @@ document.addEventListener('DOMContentLoaded', function() {
     actionButtons.forEach(button => {
         button.addEventListener('click', elementActionClickHandler);
     });
-    
+
     // Add a click event listener to the confirmation button to delete element
     const deleteButton = document.getElementById('confirmDeleteButton');
     deleteButton.addEventListener('click', deleteElementHandler);
-
-    // Run updateEffectiveDate only if not on Login or Register page
-    if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
-        updateEffectiveDate();
-    }
 });
 
 // Define a variable to track whether the form has been fetched
@@ -565,36 +560,10 @@ function deleteElementHandler(event) {
 }
 
 // Update effective date
-function updateEffectiveDate() {
-    // Get the elements
-    const datePicker = document.getElementById('datePicker');
-    const updateButton = document.getElementById('updateDate');
-
-    // Add an event listener to the "Update" button
-    updateButton.addEventListener('click', () => {
-        const selectedDate = datePicker.value;
-
-        const csrftoken = getCookie('csrftoken');
-        
-        // Send the selected date to the server using a fetch request
-        fetch('/update-date', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrftoken,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({selectedDate}),
-        })
-        .then(response => {
-            if (response.ok) {
-                // Reload the current page
-                window.location.href = window.location.pathname;
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    });
-
-}
+// NOTE: Task 8 removed the navbar date picker (the UI for the per-request
+// global effective_current_date mutation). As-of dates are now per-user
+// (User.effective_date) and edited through the profile page, so the
+// updateEffectiveDate() function and its DOM wiring are no longer needed.
 
 // Make the default selection of the respective currency option
 function chooseSelectedOption(option, choice) {

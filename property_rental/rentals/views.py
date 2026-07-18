@@ -7,7 +7,7 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponse, HttpResponseNotAllowed
 import json
 from rest_framework import serializers
-from datetime import date, datetime
+from datetime import date
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Q
 from dateutil.relativedelta import relativedelta
@@ -16,7 +16,7 @@ from django.db import models
 
 from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm, TenantVacateForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
-from .utils import get_currency_symbol, get_category_name, effective_current_date, convert_period, chart_dates, chart_labels, calculate_from_date
+from .utils import get_currency_symbol, get_category_name, get_effective_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
 
 # Using built-in serializers as the manual did not recognize currencies properly
@@ -59,11 +59,13 @@ class PropertyValuationSerializer(serializers.ModelSerializer):
 
 def index(request):
 
-    global effective_current_date
-
     if request.user.is_authenticated:
 
         currency_basis = request.session['default_currency']
+
+        # Resolve the as-of date per user (replaces the process-global
+        # effective_current_date; falls back to date.today() if unset).
+        effective_current_date = get_effective_date(request.user)
 
         landlord = Landlord.objects.get(user=request.user)
         properties = landlord.properties.filter(Q(sold__isnull=True) | Q(sold__gte=effective_current_date)).all()
@@ -124,7 +126,7 @@ def index(request):
                                     )
 
         digits = request.session['digits']
-        expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc(properties, currency_basis, True, digits)
+        expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc(properties, currency_basis, True, digits, as_of=effective_current_date)
 
         pnl = {
             'rent': {
@@ -178,7 +180,7 @@ def login_view(request):
             request.session['chart_settings'] = {
                 'frequency': user.chart_frequency,
                 'timeline': user.chart_timeline,
-                'To': str(effective_current_date),
+                'To': str(get_effective_date(user)),
             }
             request.session['default_currency'] = user.default_currency
             request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
@@ -210,7 +212,7 @@ def profile_page(request):
                 request.session['chart_settings'] = {
                     'frequency': user.chart_frequency,
                     'timeline': user.chart_timeline,
-                    'To': str(effective_current_date),
+                    'To': str(get_effective_date(user)),
                 }
                 request.session['default_currency'] = user.default_currency
                 request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
@@ -305,13 +307,14 @@ def new_form(request, form_type):
 @login_required
 def table_data(request, data_type):
 
-    global effective_current_date
-
     try:
         landlord = Landlord.objects.get(user=request.user)
         properties_owned_by_landlord = Property.objects.filter(owned_by=landlord)
     except Landlord.DoesNotExist:
         return JsonResponse({'error': 'Landlord does not exist.'}, status=400)
+
+    # Per-user as-of date (replaces the process-global).
+    effective_current_date = get_effective_date(request.user)
 
     data = [effective_current_date.strftime("%Y-%m-%d")]  # List to store elements data
     digits = request.session['digits']
@@ -428,7 +431,8 @@ def table_data(request, data_type):
 @login_required
 def handle_element(request, data_type, element_id):
 
-    global effective_current_date
+    # Per-user as-of date (replaces the process-global).
+    effective_current_date = get_effective_date(request.user)
 
     match data_type:
         case 'property':
@@ -462,7 +466,7 @@ def handle_element(request, data_type, element_id):
                     # Define the currency for calculations
                     element_currency = element.currency if request.session['default_currency_for_all_data'] == False else request.session['default_currency']
 
-                    expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc([element], element_currency, request.session['default_currency_for_all_data'], digits)
+                    expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc([element], element_currency, request.session['default_currency_for_all_data'], digits, as_of=effective_current_date)
 
                     # Get data for Payments schedule
                     # Create a list of month abbreviations for the six previous months
@@ -805,7 +809,8 @@ def vacate_tenant(request, tenant_id):
 @login_required
 def property_choices(request):
 
-    global  effective_current_date
+    # Per-user as-of date (replaces the process-global).
+    effective_current_date = get_effective_date(request.user)
 
     landlord = Landlord.objects.get(user=request.user)
     properties = Property.objects.filter(
@@ -822,30 +827,6 @@ def property_choices(request):
 
     return JsonResponse(data, safe=False)
 
-# Handling effective date update
-@login_required
-def update_date(request):
-
-    if request.method == 'POST':
-
-        data = json.loads(request.body)
-        selectedDate = data.get('selectedDate')
-        # Convert the selectedDate to a datetime variable
-        formatted_date = datetime.strptime(selectedDate, "%Y-%m-%d").date()
-
-        global effective_current_date
-        effective_current_date = formatted_date
-        print(f"update_date function -> effective_current_date: {effective_current_date}")
-        request.session['chart_settings']['To'] = str(effective_current_date)
-        print(f"update_date function -> chart_settings: {request.session['chart_settings']}")
-        request.session.save()
-
-        # # Update chart_settings['To'] with the new effective_current_date
-        # global_chart_settings['To'] = effective_current_date
-
-        # You may want to send a response with a success message
-        return JsonResponse({'message': 'Date updated successfully'})
-
 @login_required
 def chart_data_request(request):
     if request.method == 'GET':
@@ -859,7 +840,7 @@ def chart_data_request(request):
         if type == 'homePage':
             landlord = Landlord.objects.get(user=request.user)
             properties = Property.objects.filter(
-                Q(sold__isnull=True) | Q(sold__gte=effective_current_date),
+                Q(sold__isnull=True) | Q(sold__gte=get_effective_date(request.user)),
                 owned_by=landlord)
             if id != 'null':
                 properties = properties.filter(id=id)
@@ -1004,17 +985,24 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
 
 
 # Calculate pnl for given properties
-def pnl_calc(properties, target_currency, default_currency_for_all_data, digits):
+def pnl_calc(properties, target_currency, default_currency_for_all_data, digits, as_of=None):
+    # ``as_of`` is the per-user effective date that drives YTD/all-time
+    # windowing. Replaces the former read of the process-global
+    # ``effective_current_date``. Defaults to ``date.today()`` to keep the
+    # function callable without a request context (the characterization
+    # test passes a fixed date explicitly).
+    if as_of is None:
+        as_of = date.today()
 
-    current_year_start = effective_current_date.replace(month=1, day=1)
+    current_year_start = as_of.replace(month=1, day=1)
 
     # Filter transactions for the specified date range
     # filtered_transactions = element.transactions.filter(
-    #     Q(date__lte=effective_current_date) &
+    #     Q(date__lte=as_of) &
     #     Q(type='expense')
     # )
 
-    filtered_transactions = Transaction.objects.filter(property__in=properties, date__lte=effective_current_date, type='expense')
+    filtered_transactions = Transaction.objects.filter(property__in=properties, date__lte=as_of, type='expense')
 
     # Get a list of unique categories from the filtered transactions
     unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
@@ -1029,8 +1017,8 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data, digits)
     for category in unique_categories:
 
         cf_queryset = Transaction.objects.filter(property__in=properties, category=category)
-        queryset_ytd = cf_queryset.filter(date__range=(current_year_start, effective_current_date))
-        queryset_all_time = cf_queryset.filter(date__lte=effective_current_date)
+        queryset_ytd = cf_queryset.filter(date__range=(current_year_start, as_of))
+        queryset_all_time = cf_queryset.filter(date__lte=as_of)
         if not default_currency_for_all_data:
             cf_ytd = queryset_ytd.aggregate(Sum('amount'))['amount__sum'] or 0
             cf_all_time = queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0

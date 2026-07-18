@@ -19,8 +19,10 @@ of these, the test fails loudly.
 Conventions:
 * Every date and amount is hard-coded. No ``date.today()`` / ``random``
   in scenarios. ``pnl_calc`` is the one place that would normally be
-  non-deterministic (it reads the module-global ``effective_current_date``
-  in ``rentals.views``); we monkeypatch that global to a fixed date.
+  non-deterministic (it now takes the as-of date as an ``as_of`` keyword
+  argument — Task 8 removed the module-global ``effective_current_date``
+  it used to read); we pin it to a fixed date by passing ``as_of``
+  directly.
 * Same-currency paths skip FX entirely; the cross-currency scenario
   exercises the one FX pair that has a real column today (``GBPUSD``).
 """
@@ -241,15 +243,15 @@ def test_transaction_financials_aggregation(db):
 # ---------------------------------------------------------------------------
 # pnl_calc — module function in rentals.views
 #
-# NB: ``pnl_calc`` reads the module global ``effective_current_date``
-# (defined as ``date.today()`` in ``rentals.utils`` and re-imported into
-# ``rentals.views``). To keep this characterization test deterministic we
-# monkeypatch the ``views`` reference to a fixed date.
+# NB: ``pnl_calc`` takes the as-of date as an ``as_of`` keyword argument
+# (Task 8 replaced the read of the module-global ``effective_current_date``
+# with a per-user ``User.effective_date`` field and threaded the date
+# through as a parameter). The characterization test pins it to a fixed
+# date by passing ``as_of`` directly — no monkeypatch required.
 # ---------------------------------------------------------------------------
 
-def test_pnl_calc_portfolio(db, monkeypatch):
+def test_pnl_calc_portfolio(db):
     fixed_now = date(2024, 4, 15)
-    monkeypatch.setattr(views, "effective_current_date", fixed_now, raising=True)
 
     sc = build_financials_scenario()
     properties = [sc["property"]]
@@ -258,6 +260,7 @@ def test_pnl_calc_portfolio(db, monkeypatch):
         target_currency="USD",
         default_currency_for_all_data=False,
         digits=2,
+        as_of=fixed_now,
     )
     # Captured verbatim from the current code with effective_current_date
     # pinned to 2024-04-15. The 'rent' category is returned bare via

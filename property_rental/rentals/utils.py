@@ -6,17 +6,32 @@ import datetime
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES
 
-# Define the effective 'current' date for the application
-effective_current_date = date.today()
-
 # Define the currency of representation for aggregated data
 currency_basis = 'USD'
+
+# NOTE: The former process-global ``effective_current_date`` was removed in
+# Task 8 because it bled across users (any user's update mutated it for every
+# concurrent request). Per-user as-of dates now live on ``User.effective_date``
+# and are resolved via ``get_effective_date(user)`` below.
 
 # global_chart_settings = {
 #     'frequency': 'M',
 #     'timeline': '6m',
 #     'To': effective_current_date
 #     }
+
+
+def get_effective_date(user):
+    """Return the as-of date for ``user``.
+
+    Mirrors the legacy ``effective_current_date`` global but scoped per user:
+    each user's ``effective_date`` field drives their own view of the data,
+    so concurrent users no longer share a single mutable date. Falls back to
+    ``date.today()`` when the user has no ``effective_date`` set (None),
+    which preserves the pre-Task-8 default behavior for existing users and
+    for tests that do not pin a specific date.
+    """
+    return getattr(user, "effective_date", None) or date.today()
 
 def get_currency_symbol(currency_code):
     for code, symbol in CURRENCY_CHOICES:
