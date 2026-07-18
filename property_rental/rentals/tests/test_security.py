@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from unittest.mock import patch
 
 
 def test_landlord_cannot_delete_other_landlords_property(auth_client, sample_property, other_landlord_user):
@@ -65,3 +66,87 @@ def test_landlord_cannot_delete_other_landlords_property_valuation(auth_client, 
     assert resp.status_code == 403
     # The valuation row must survive the unauthorized delete.
     assert Property_capital_structure.objects.filter(pk=valuation.pk).exists()
+
+
+# ---------------------------------------------------------------------------
+# Task 7: unauthenticated access + update_fx_view scoping
+# ---------------------------------------------------------------------------
+
+# URL names verified against rentals/urls.py. Note: the view function is named
+# ``update_fx_view`` but its URL name is ``update_fx`` (see urls.py).
+# ``new_form`` requires a ``form_type`` kwarg; ``update_date``/``chart_data_request``
+# are POST/GET endpoints respectively but the auth gate must trigger on the
+# incoming request regardless of method, so we hit them with their natural verb.
+
+AUTH_REQUIRED_URLS_GET = [
+    "rentals:update_fx",
+    "rentals:fx_list",
+    "rentals:property_choices",
+    "rentals:chart_data_request",
+]
+
+
+@pytest.mark.parametrize("url_name", AUTH_REQUIRED_URLS_GET)
+def test_anonymous_get_is_rejected(db, client, url_name):
+    """Anonymous GET to a protected endpoint must redirect to login or 401/403."""
+    url = reverse(url_name)
+    resp = client.get(url)
+    assert resp.status_code in (302, 401, 403), (
+        f"{url_name} returned {resp.status_code} for anonymous GET; expected 302/401/403"
+    )
+    if resp.status_code == 302:
+        assert "/login" in resp.url or "/accounts/login" in resp.url, (
+            f"{url_name} redirected to {resp.url!r}, expected a login URL"
+        )
+
+
+def test_anonymous_post_update_date_rejected(db, client):
+    """Anonymous POST to update_date must be rejected (currently hits request.session)."""
+    url = reverse("rentals:update_date")
+    resp = client.post(url, data={}, content_type="application/json")
+    assert resp.status_code in (302, 401, 403)
+
+
+def test_anonymous_get_new_form_rejected(db, client):
+    """Anonymous GET to new_form must redirect to login (currently reads request.user)."""
+    url = reverse("rentals:new_form", kwargs={"form_type": "property"})
+    resp = client.get(url)
+    assert resp.status_code in (302, 401, 403)
+    if resp.status_code == 302:
+        assert "/login" in resp.url or "/accounts/login" in resp.url
+
+
+def test_update_fx_view_only_processes_requesting_users_properties(db, landlord_user, other_landlord_user):
+    """update_fx_view must scope its queryset to owned_by__user=request.user.
+
+    The view iterates properties and calls ``FX.update_fx_rates(property.id)`` for
+    each. We mock that classmethod (it would otherwise hit Yahoo Finance) and
+    assert it was invoked once per property OWNED BY THE LOGGED-IN USER and never
+    for ``other_landlord_user``'s property.
+    """
+    from django.test import Client
+    from rentals.models import Property
+    from rentals.tests.factories import PropertyFactory
+
+    # landlord_user already has a landlord row via the fixture; give them a
+    # property. other_landlord_user also has a property — that one must NOT be touched.
+    my_property = PropertyFactory(owned_by=landlord_user.landlord)
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+
+    client = Client()
+    client.force_login(landlord_user)
+
+    # Patch the network-touching classmethod at the source module so the view's
+    # ``FX.update_fx_rates(...)`` call resolves to the mock regardless of import style.
+    with patch("rentals.models.FX.update_fx_rates") as mock_update:
+        resp = client.get(reverse("rentals:update_fx"))
+
+    assert resp.status_code == 200
+    # The view must have considered exactly the user's own properties.
+    called_property_ids = {call.args[0] for call in mock_update.call_args_list}
+    assert called_property_ids == {my_property.id}, (
+        f"update_fx_view processed property ids {called_property_ids}; "
+        f"expected only {{{my_property.id}}} (requesting user's property). "
+        f"other_landlord_user's property id {other_property.id} must NOT be touched."
+    )
+    assert other_property.id not in called_property_ids

@@ -279,6 +279,7 @@ def transactions(request):
         return redirect('rentals:index')
 
 # Create form for adding new property
+@login_required
 def new_form(request, form_type):
 
     # Create an instance of the Form
@@ -801,6 +802,7 @@ def vacate_tenant(request, tenant_id):
         return JsonResponse({'error': 'Only POST method allowed'}, status=405)
 
 # Extract property choices for Tenant form
+@login_required
 def property_choices(request):
 
     global  effective_current_date
@@ -821,6 +823,7 @@ def property_choices(request):
     return JsonResponse(data, safe=False)
 
 # Handling effective date update
+@login_required
 def update_date(request):
 
     if request.method == 'POST':
@@ -843,6 +846,7 @@ def update_date(request):
         # You may want to send a response with a success message
         return JsonResponse({'message': 'Date updated successfully'})
 
+@login_required
 def chart_data_request(request):
     if request.method == 'GET':
         type = request.GET.get('type')
@@ -1074,6 +1078,7 @@ def property_valuation(request, property_id):
     return JsonResponse(data)
 
 # Compiling the table with FX data
+@login_required
 def fx_list(request):
     # Get all FX instances sorted by date
     fx_list = FX.objects.order_by('-date')
@@ -1100,10 +1105,12 @@ def fx_list(request):
     return render(request, 'rentals/fx_list.html', {'fx_entries': fx_entries})
 
 # View to update FX rates for a given property.
+@login_required
 def update_fx_view(request):
     try:
-        # Get all properties
-        all_properties = Property.objects.all()
+        # Scope to properties owned by the requesting user (avoids touching
+        # other users' data and limits external Yahoo Finance calls).
+        all_properties = Property.objects.filter(owned_by__user=request.user)
 
         # Loop through each property and update FX rates
         for property_instance in all_properties:
