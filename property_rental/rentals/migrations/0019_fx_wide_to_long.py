@@ -57,15 +57,6 @@ def forwards(apps, schema_editor):
     FX.objects.filter(id__in=[r["id"] for r in old_rows]).delete()
 
 
-def backwards(apps, schema_editor):
-    # No-op going backwards: re-deriving wide rows from long rows is
-    # lossy if extra pairs were added since. The forward migration is
-    # the source of truth. Django requires a ``reverse_code`` callable
-    # to mark the operation reversible; we pass ``migrations.RunPython.noop``
-    # at call time instead.
-    pass
-
-
 class Migration(migrations.Migration):
 
     dependencies = [

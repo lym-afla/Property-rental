@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import date
-from django.db.models import Q, F
+from django.db.models import Q
 from dateutil.relativedelta import relativedelta
 import networkx as nx
 from django.core.validators import MaxValueValidator
@@ -558,6 +558,11 @@ class FX(models.Model):
         g = nx.Graph()
         for fx in FX.objects.filter(date__lte=date):
             if fx.from_currency and fx.to_currency and fx.rate is not None:
+                # ``weight`` is stored on the edge for future use (e.g.
+                # rate-weighted path selection) but is NOT consulted
+                # below: ``nx.shortest_path`` is called without
+                # ``weight=``, so path selection uses hop-count, matching
+                # the wide-schema behavior.
                 g.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
 
         # Finding shortest path for cross-currency conversion using

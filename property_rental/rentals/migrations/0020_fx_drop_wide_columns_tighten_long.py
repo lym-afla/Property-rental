@@ -7,12 +7,13 @@ already been turned into one long row per non-null pair, and the
 original wide row deleted. The new fields can therefore be made
 non-nullable without data loss.
 
-We still guard the null->not-null transition with a RunPython that
-deletes any stray FX row whose new fields are null (defensive: if
-``0019`` skipped a row for any reason, this prevents the AlterField
-from failing on a NOT NULL constraint). The fields are also given a
-default of empty string / 0 so the migration is reversible on
-backends that re-populate.
+We still guard the null->not-null transition with a RunPython
+(``cleanup_null_long_rows``) that deletes any stray FX row whose new
+fields are null (defensive: if ``0019`` skipped a row for any reason,
+this prevents the AlterField below from failing on the NOT NULL
+constraint). The ``AlterField`` operations themselves set no
+``default`` — by the time they run, the backfill in ``0019`` has
+populated all remaining rows, so there are no rows left to default.
 """
 
 from django.db import migrations, models
