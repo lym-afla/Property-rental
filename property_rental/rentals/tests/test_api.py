@@ -417,7 +417,12 @@ def test_create_transaction_rejects_other_landlords_property(
     # matters is the cross-landlord write must NOT succeed.
     assert resp.status_code in (400, 404), resp.content
     from rentals.models import Transaction
-    assert not Transaction.objects.filter(comment__contains="Sneaky").exists()
+    # Assert no Transaction with the posted ``period``+``amount`` was
+    # persisted. (Previously this checked ``comment__contains="Sneaky"``
+    # but the payload never set ``comment`` — the assertion was vacuous.)
+    assert not Transaction.objects.filter(
+        period="2024-01", amount="1000.00"
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -526,3 +531,114 @@ def test_chart_data_endpoint_rejects_other_landlords_property(
         },
     )
     assert resp.status_code == 404, resp.content
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: PATCH partial-update and non-landlord Property create
+# ---------------------------------------------------------------------------
+#
+# These tests pin behavior that was previously broken:
+#
+# * PATCH (partial_update) on Tenant/Transaction used to 400 when an
+#   unchanged ownership FK (``property`` / ``tenant``) was omitted from
+#   the payload, because the ViewSet treated a missing FK as a missing
+#   value. The fix falls back to the existing instance value.
+# * POST /properties/ from a non-landlord authenticated user (e.g. a
+#   tenant-role user) used to raise ``Landlord.DoesNotExist`` (500). The
+#   fix wraps the lookup and returns 403.
+
+
+@pytest.mark.django_db
+def test_patch_tenant_without_property_succeeds(auth_client, sample_property):
+    """PATCH /tenants/<id>/ updating only ``phone`` -> 200, phone updated.
+
+    Regression for the partial-update bug: ``TenantViewSet._validate_and_save``
+    previously treated a missing ``property`` in ``validated_data`` (always
+    the case on PATCH when ``property`` is unchanged) as a missing required
+    field and raised 400. The fix falls back to the instance's existing
+    ``property``.
+    """
+    tenant = TenantFactory(
+        property=sample_property,
+        first_name="PatchMe",
+        last_name="Tenant",
+        phone="555-0000",
+    )
+    resp = auth_client.patch(
+        f"/api/v1/tenants/{tenant.id}/",
+        {"phone": "555-9999"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["phone"] == "555-9999"
+    tenant.refresh_from_db()
+    assert tenant.phone == "555-9999"
+    # ``property`` is unchanged.
+    assert tenant.property_id == sample_property.id
+
+
+@pytest.mark.django_db
+def test_patch_transaction_without_property_succeeds(auth_client, sample_property):
+    """PATCH /transactions/<id>/ updating only ``comment`` -> 200.
+
+    Regression for the partial-update bug on Transaction: same shape as
+    the Tenant case. ``property`` and ``tenant`` are both omitted from
+    the PATCH body; the ViewSet must fall back to the existing instance
+    values rather than raising 400.
+    """
+    txn = TransactionFactory(
+        property=sample_property,
+        amount=Decimal("1500.00"),
+        comment="Original",
+    )
+    resp = auth_client.patch(
+        f"/api/v1/transactions/{txn.id}/",
+        {"comment": "Updated comment"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["comment"] == "Updated comment"
+    txn.refresh_from_db()
+    assert txn.comment == "Updated comment"
+    # ``property`` is unchanged.
+    assert txn.property_id == sample_property.id
+
+
+@pytest.mark.django_db
+def test_property_create_rejects_non_landlord_with_403(db):
+    """POST /properties/ from a non-landlord user -> 403 (not 500).
+
+    Regression: ``PropertyViewSet._force_owner`` previously dereferenced
+    ``request.user.landlord`` unconditionally, which raises
+    ``Landlord.DoesNotExist`` (500) for an authenticated user with no
+    Landlord row (e.g. a tenant-role user, or any non-landlord account).
+    The fix catches that and raises ``PermissionDenied`` (403).
+
+    The payload includes a valid ``owned_by`` PK only to satisfy the
+    serializer's required-field check — what we are testing is that the
+    view layer (``_force_owner``) refuses the call before save, not the
+    serializer's input validation.
+    """
+    from rentals.tests.factories import UserFactory
+
+    non_landlord = UserFactory(is_landlord=False, is_tenant=False)
+    from rentals.models import Landlord
+    assert not Landlord.objects.filter(user=non_landlord).exists()
+
+    # Any landlord PK to pass serializer validation; the ViewSet must
+    # reject the request before save regardless of this value.
+    other_landlord = UserFactory(is_landlord=True).landlord
+
+    c = Client()
+    c.force_login(non_landlord)
+    payload = {
+        "owned_by": other_landlord.id,
+        "name": "Should Not Be Created",
+        "location": "Nowhere",
+        "num_bedrooms": 2,
+        "currency": "USD",
+    }
+    resp = c.post("/api/v1/properties/", payload, content_type="application/json")
+    assert resp.status_code == 403, resp.content
+    from rentals.models import Property
+    assert not Property.objects.filter(name="Should Not Be Created").exists()

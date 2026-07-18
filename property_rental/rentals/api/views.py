@@ -45,12 +45,12 @@ happens inside the view.
 
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from rentals.models import FX, Property, Tenant, Transaction
+from rentals.models import FX, Landlord, Property, Tenant, Transaction
 from rentals.services.charts import get_chart_data as _get_chart_data
 
 from .permissions import IsOwnerOrReadOnly
@@ -113,9 +113,15 @@ class PropertyViewSet(viewsets.ModelViewSet):
         """Persist a Property pinned to the requesting landlord.
 
         ``owned_by`` is read off the requester's Landlord, regardless of
-        what the client sent — this is the structural IDOR fix.
+        what the client sent — this is the structural IDOR fix. If the
+        authenticated user has no Landlord (e.g. a tenant-role user),
+        return 403 rather than letting the ``Landlord.DoesNotExist``
+        propagate as a 500.
         """
-        landlord = self.request.user.landlord
+        try:
+            landlord = self.request.user.landlord
+        except Landlord.DoesNotExist:
+            raise PermissionDenied("Only landlords can create properties.")
         serializer.save(owned_by=landlord)
 
     def perform_create(self, serializer):
@@ -149,16 +155,24 @@ class TenantViewSet(viewsets.ModelViewSet):
         another endpoint that path is also scoped). The critical check
         here is ``property`` — it determines which landlord the row is
         visible to.
+
+        On PATCH (partial update) the client may omit ``property`` because
+        it is unchanged. In that case fall back to the existing instance's
+        ``property`` — DRF's ``PrimaryKeyRelatedField`` resolves the FK to
+        a ``Property`` model instance, not an id, so ``property_obj`` is
+        the appropriate name. On create, ``property`` is required by the
+        serializer and will always be present in ``validated_data``.
         """
-        property_id = serializer.validated_data.get("property")
-        if property_id is None:
-            # ``property`` is non-nullable on the model; if it's missing
-            # the serializer will already have raised 400. Defensive raise
-            # here so the path never falls through to save.
+        property_obj = serializer.validated_data.get("property") or getattr(
+            serializer.instance, "property", None
+        )
+        if property_obj is None:
+            # Create path with a missing required field — the serializer
+            # should already have raised 400, but defend against fall-through.
             raise ValidationError({"property": "This field is required."})
         # Resolve via the user-scoped queryset — raises 404 if the
         # property belongs to another landlord (defeating enumeration).
-        _validate_property_owned_by(property_id.id, self.request.user)
+        _validate_property_owned_by(property_obj.id, self.request.user)
         serializer.save()
 
     def perform_create(self, serializer):
@@ -192,7 +206,13 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def _validate_and_save(self, serializer):
         # Validate ``property`` ownership via the scoped queryset (404).
-        property_obj = serializer.validated_data.get("property")
+        # On PATCH (partial update) the client may omit ``property``
+        # because it is unchanged; fall back to the existing instance.
+        # DRF's ``PrimaryKeyRelatedField`` resolves the FK to a model
+        # instance, not an id.
+        property_obj = serializer.validated_data.get("property") or getattr(
+            serializer.instance, "property", None
+        )
         if property_obj is None:
             raise ValidationError({"property": "This field is required."})
         _validate_property_owned_by(property_obj.id, self.request.user)
@@ -200,8 +220,15 @@ class TransactionViewSet(viewsets.ModelViewSet):
         # Validate ``tenant`` ownership if supplied. A client could point
         # a Transaction at their own property but another landlord's
         # tenant (the cross-tenant hijack the brief flags). Catch it here
-        # by re-using the user-scoped tenant queryset.
+        # by re-using the user-scoped tenant queryset. On PATCH, fall
+        # back to the existing instance's ``tenant`` so a partial update
+        # that omits ``tenant`` does not skip the check on a previously
+        # cross-tenant value.
         tenant_obj = serializer.validated_data.get("tenant")
+        if tenant_obj is None and serializer.instance is not None:
+            # ``tenant`` is nullable; only fall back when an instance
+            # already has one (so we re-validate the pre-existing link).
+            tenant_obj = getattr(serializer.instance, "tenant", None)
         if tenant_obj is not None:
             tenant_qs = Tenant.objects.filter(
                 id=tenant_obj.id, property__owned_by__user=self.request.user
