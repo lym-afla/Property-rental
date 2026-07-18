@@ -859,129 +859,26 @@ def chart_data_request(request):
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
+# Chart-dataset builder.
+#
+# Task 12: body moved verbatim into ``rentals.services.charts.get_chart_data``.
+# This shim is kept so existing callers in this module (``index``,
+# ``handle_element``, ``chart_data_request``, ``property_valuation``) and the
+# characterization test (``test_charts_char.py`` imports
+# ``rentals.views.get_chart_data``) don't need to change. Lazy import avoids a
+# module-load circular import (``services.charts`` imports ``rentals.models``
+# / ``rentals.utils`` lazily for the same reason ``services.financials`` does).
 def get_chart_data(type, element_id, frequency, from_date, to_date, currency, properties=None):
-
-    # Create an empty data dictionary
-    chart_data = {
-        'labels': [],
-        'datasets': [],
-    }
-
-    # Get the correct starting date for "All time" category
-    if type == 'tenant':
-        tenant = Tenant.objects.get(id=element_id)
-        if from_date == '1900-01-01':
-            from_date = tenant.property.activity_start_date() - relativedelta(months=1)
-    elif type == 'property':
-        # Get the property or return a 404 response if not found
-        property = get_object_or_404(Property, id=element_id)
-        if from_date == '1900-01-01':
-            from_date = property.activity_start_date() - relativedelta(months=1)
-    elif type == 'homePage' and properties:
-        if from_date == '1900-01-01':
-            from_date = Transaction.objects.filter(property__in=properties).order_by('date').first().date
-
-    # Create set of dates and labels for the chart
-    dates = chart_dates(from_date, to_date, frequency)
-    chart_data['labels']= chart_labels(dates, frequency)
-
-    time_delta = {
-        'M': 1,
-        'Q': 3,
-        'Y': 12
-        }
-
-    # Define currency
-    chart_data['currency'] = get_currency_symbol(currency)
-
-    if type == 'homePage' and properties:
-        # Filter transactions for the specified date range
-        filtered_transactions = Transaction.objects.filter(date__range=(from_date, to_date), property__in=properties)
-        # Get a list of unique categories from the filtered transactions
-        unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
-
-        for category in unique_categories:
-            single_dataset_data = {'label': category, 'data': []}  # Initialize for each category
-
-            for d in dates:
-                start_date = d - relativedelta(months = time_delta[frequency])
-                transactions = Transaction.financials(end_date = d, target_currency=currency, properties=properties, start_date=start_date, category=category)
-                single_dataset_data['data'].append(round(transactions, 0))
-
-            chart_data['datasets'].append(single_dataset_data)
-
-    if type == 'tenant':
-        single_dataset_data = {'data': []}
-
-        for d in dates:
-            # For monthly charts, we want to show rent payments for the specific month
-            # Calculate the start and end of the month for this date
-            if frequency == 'M':
-                # Get the start of the month
-                month_start = d.replace(day=1)
-                # Get the end of the month
-                if d.month == 12:
-                    month_end = d.replace(year=d.year + 1, month=1, day=1) - relativedelta(days=1)
-                else:
-                    month_end = d.replace(month=d.month + 1, day=1) - relativedelta(days=1)
-                
-                # Get rent transactions for this specific month only
-                rent_transactions = Transaction.objects.filter(
-                    property=tenant.property,
-                    tenant=tenant,
-                    category='rent',
-                    date__range=(month_start, month_end)
-                )
-                
-                # Calculate total for this month with currency conversion if needed
-                if currency == None or tenant.property.currency == currency:
-                    month_total = rent_transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
-                else:
-                    month_total = 0
-                    for transaction in rent_transactions:
-                        fx_rate = FX.get_rate(transaction.currency, currency, transaction.date)['FX']
-                        month_total += transaction.amount * fx_rate
-                        
-                single_dataset_data['data'].append(round(month_total, 0))
-            else:
-                # For non-monthly frequencies, use rent_total with include_post_vacation=True
-                if frequency == 'Y':
-                    # For yearly, use calendar year (Jan 1 to Dec 31)
-                    year_start = d.replace(month=1, day=1)
-                    year_end = d.replace(month=12, day=31)
-                    total_rent = tenant.rent_total(end_date=year_end, start_date=year_start, target_currency=currency, include_post_vacation=True)
-                else:
-                    # For quarterly, use rolling period
-                    start_date = d - relativedelta(months = time_delta[frequency])
-                    total_rent = tenant.rent_total(end_date=d, start_date=start_date, target_currency=currency, include_post_vacation=True)
-                single_dataset_data['data'].append(round(total_rent, 0))
-
-        chart_data['datasets'].append(single_dataset_data)
-
-    if type == 'property':
-
-        # Initializing dataset for Chart.js
-        datasets = [
-            {
-                'label': 'Debt',
-                'data': [],
-            },
-            {
-                'label': 'Equity',
-                'data': [],
-            },
-        ]
-
-        for d in dates:
-            start_date = d - relativedelta(months = time_delta[frequency])
-            value, debt = property.property_value(d)
-            datasets[0]['data'].append(round(debt / 1000, 0))
-            datasets[1]['data'].append(round((value - debt) / 1000, 0))
-
-        chart_data['datasets'] = datasets
-        chart_data['currency'] += 'k'
-
-    return chart_data
+    from rentals.services.charts import get_chart_data as _get_chart_data
+    return _get_chart_data(
+        type,
+        element_id,
+        frequency,
+        from_date,
+        to_date,
+        currency,
+        properties=properties,
+    )
 
 
 # Calculate pnl for given properties.
@@ -1016,7 +913,17 @@ def property_valuation(request, property_id):
     data['chart_settings']['From'] = from_date
     # data['chart_data'] = get_chart_data('tenant', element.id, chart_settings['frequency'], from_date, chart_settings['To'], element_currency)
 
-    data['chart_data'] = get_chart_data('property', property_id, 'M', '2022-06-01', '2023-09-15', 'USD', None)
+    # Task 12: chart params come from request.GET (per-request) with the
+    # session's chart_settings as the fallback. Previously these were
+    # hardcoded to freq='M', start='2022-06-01', end='2023-09-15',
+    # currency='USD' — a bug that pinned every property valuation chart
+    # to the same window regardless of the user's session settings.
+    settings = chart_settings
+    freq = request.GET.get("freq", settings.get("frequency", "M"))
+    start = request.GET.get("start", settings.get("From"))
+    end = request.GET.get("end", settings.get("To"))
+    currency = request.GET.get("currency", settings.get("currency", "USD"))
+    data['chart_data'] = get_chart_data("property", property_id, freq, start, end, currency, None)
     print(f'property_valuation function; data: {data}')
     return JsonResponse(data)
 
