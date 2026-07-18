@@ -113,3 +113,21 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Django REST Framework (Task 16)
+#
+# SessionAuthentication is the natural fit for the existing template-rendered
+# app: the React frontend will share the same session cookie the login view
+# already sets, so no token infrastructure is needed in Phase 1.
+# IsAuthenticated is the safe default for a multi-tenant app where every
+# record is private to its landlord; per-view/object permissions
+# (``rentals.api.permissions.IsOwnerOrReadOnly``) further scope writes.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
