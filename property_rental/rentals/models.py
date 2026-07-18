@@ -5,11 +5,17 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import date
 from django.db.models import Q
 from dateutil.relativedelta import relativedelta
-import networkx as nx
+# networkx was previously imported here for the FX graph build in
+# ``FX.get_rate``. Task 10 moved the graph code into
+# ``rentals.services.fx``; this module no longer references ``nx``
+# directly. Kept the comment instead of the import to make the move
+# discoverable.
 from django.core.validators import MaxValueValidator
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
-from .utils import update_FX_database
+# ``update_FX_database`` was imported here for ``FX.update_fx_rates``.
+# Task 10 moved that body into ``rentals.services.fx``; the yfinance
+# helper is now imported locally inside ``services.fx.update_rates``.
 
 # Amending default AbstractUser to differentiate between Landlord and Tenant
 class User(AbstractUser):
@@ -479,148 +485,51 @@ class Transaction(models.Model):
 class FX(models.Model):
     # Long format (Task 9): one row per (date, currency pair). Adding a
     # new currency pair is now a row insert, not a schema migration. The
-    # graph builder in ``get_rate`` reads ``from_currency``/``to_currency``
-    # directly instead of introspecting ``_meta.fields``.
+    # graph builder in ``services.fx.get_rate`` reads
+    # ``from_currency``/``to_currency`` directly instead of introspecting
+    # ``_meta.fields``.
+    #
+    # Task 10: the graph-build + Bellman-Ford traversal lives in
+    # ``rentals.services.fx`` so it can be cached at module scope. This
+    # model is now a thin delegate: ``get_rate`` / ``update_fx_rates``
+    # forward to the service, and ``save`` / ``delete`` invalidate the
+    # service's cache so an FX write can never leave the graph stale.
     date = models.DateField()
     from_currency = models.CharField(max_length=3)
     to_currency = models.CharField(max_length=3)
     rate = models.DecimalField(max_digits=20, decimal_places=10)
 
+    def save(self, *args, **kwargs):
+        # Invalidate the FX graph cache on every write so the next
+        # ``get_rate`` rebuilds with the new row. Lazy import avoids a
+        # module-load circular import with ``rentals.services.fx``.
+        super().save(*args, **kwargs)
+        from rentals.services import fx as fx_service
+        fx_service.invalidate_cache()
+
+    def delete(self, *args, **kwargs):
+        # Same cache-invalidation contract as ``save``: a deleted row
+        # must force a rebuild on the next ``get_rate``.
+        super().delete(*args, **kwargs)
+        from rentals.services import fx as fx_service
+        fx_service.invalidate_cache()
+
     @classmethod
     def update_fx_rates(cls, property_id):
-        # Long format: the pairs that need to be fetched are no longer
-        # discovered by introspecting ``_meta.fields``. They are still
-        # hard-coded here (the same three pairs as before) — Task 10/11
-        # can revisit. The pair list mirrors the legacy per-pair columns
-        # (EURUSD, GBPUSD, USDRUB) so behavior is unchanged.
-        currency_pairs = [("EUR", "USD"), ("GBP", "USD"), ("USD", "RUB")]
-
-        # Get the specific property
-        property_instance = Property.objects.get(id=property_id)
-
-        # Scan Transaction instances in the database to collect dates
-        transaction_dates = property_instance.transactions.values_list('date', flat=True)
-
-        print(f"Checking FX rates for {len(transaction_dates)} dates")
-        count = 0
-        for date in transaction_dates:
-            count += 1
-            print(f'{count} of {len(transaction_dates)}')
-            for source, target in currency_pairs:
-                # Check if a long-format FX rate already exists for the
-                # (date, pair) combination.
-                existing_rate = cls.objects.filter(
-                    date=date,
-                    from_currency=source,
-                    to_currency=target,
-                ).first()
-
-                if existing_rate is None or existing_rate.rate is None:
-                    # Fetch the FX rate for the date.
-                    rate_data = update_FX_database(source, target, date)
-
-                    if rate_data is not None:
-                        # Upsert a long-format FX row.
-                        cls.objects.update_or_create(
-                            date=rate_data['requested_date'],
-                            from_currency=source,
-                            to_currency=target,
-                            defaults={'rate': rate_data['exchange_rate']},
-                        )
-                        print(f'{source}{target} for {rate_data["requested_date"]} is updated')
-                    else:
-                        raise Exception(f'{source}{target} for {date} is NOT updated. Yahoo Finance is not responding correctly')
-                else:
-                    print(f'{source}{target} for {date} already exists')
+        # Delegate to ``services.fx.update_rates`` (body moved there
+        # verbatim in Task 10). Kept as a classmethod so existing
+        # callers (views, tests) don't need to change.
+        from rentals.services.fx import update_rates
+        return update_rates(property_id)
 
     # Get FX quote for date
     @classmethod
-    def get_rate(cls, source, target, date):
-        fx_rate = 1
-        dates_async = False
-        dates_list = []
-
-        if source == target:
-            return {
-                'FX': fx_rate,
-                'conversions': 0,
-                'dates_async': dates_async,
-                'FX dates used': dates_list
-            }
-
-        # Build the currency graph directly from the long-format rows.
-        # Each FX row defines one undirected edge between its
-        # ``from_currency`` and ``to_currency`` at its ``date``. We only
-        # consider rows on or before ``date`` (same ``date__lte`` filter
-        # as the wide schema). Edge direction is irrelevant because the
-        # old code built an undirected ``nx.Graph``; only the pair's
-        # membership and stored weight matter.
-        g = nx.Graph()
-        for fx in FX.objects.filter(date__lte=date):
-            if fx.from_currency and fx.to_currency and fx.rate is not None:
-                # ``weight`` is stored on the edge for future use (e.g.
-                # rate-weighted path selection) but is NOT consulted
-                # below: ``nx.shortest_path`` is called without
-                # ``weight=``, so path selection uses hop-count, matching
-                # the wide-schema behavior.
-                g.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
-
-        # Finding shortest path for cross-currency conversion using
-        # "Bellman-Ford" algorithm. Behavior preserved verbatim from the
-        # wide schema: raises ``networkx.exception.NodeNotFound`` if the
-        # source or target is not in the graph.
-        cross_currency = nx.shortest_path(g, source, target, method='bellman-ford')
-
-        # Walk each hop in the chosen path and multiply / divide by the
-        # most recent (date__lte=date) FX rate for that pair.
-        for i in range(1, len(cross_currency)):
-            i_source = cross_currency[i - 1]
-            i_target = cross_currency[i]
-
-            # Latest long-format row for the (i_source, i_target) pair on
-            # or before ``date``. The pair direction in the row may be
-            # either way around (long format is logically undirected
-            # because the old graph was), so we accept both orderings.
-            fx_call = (
-                FX.objects.filter(
-                    date__lte=date,
-                    rate__isnull=False,
-                )
-                .filter(
-                    Q(from_currency=i_source, to_currency=i_target)
-                    | Q(from_currency=i_target, to_currency=i_source)
-                )
-                .order_by('-date')
-                .first()
-            )
-
-            if not fx_call:
-                raise ValueError(
-                    f"FX rate for {i_source} to {i_target} not found."
-                )
-
-            # If the stored row is in the i_source->i_target direction we
-            # multiply (same as ``element.find(i_source) == 0`` in the
-            # old code); otherwise we divide.
-            if fx_call.from_currency == i_source and fx_call.to_currency == i_target:
-                fx_rate *= fx_call.rate
-            else:
-                fx_rate /= fx_call.rate
-
-            dates_list.append(fx_call.date)
-            dates_async = (dates_list[0] != fx_call.date) or dates_async
-
-        # Final result adjustment: multiply to get the final FX rate.
-        # PRESERVED QUIRK: this tail inversion is unconditional and is
-        # what ``test_fx_char.py`` pins (e.g. stored EURUSD=1.10 returns
-        # 0.909091 here). Do NOT remove without updating the
-        # characterization tests.
-        fx_rate = round(1 / fx_rate, 6)
-
-        return {
-            'FX': fx_rate,
-            'conversions': len(cross_currency) - 1,
-            'dates_async': dates_async,
-            'dates': dates_list
-        }
+    def get_rate(cls, from_currency, to_currency, as_of):
+        # Delegate to ``services.fx.get_rate`` — the body (Bellman-Ford
+        # traversal, the unconditional tail inversion quirk, and the
+        # dict return shape) moved there verbatim in Task 10. The char
+        # tests in ``test_fx_char.py`` / ``test_fx_migration.py`` pin
+        # the output values byte-for-byte; the cache is transparent.
+        from rentals.services.fx import get_rate as _get_rate
+        return _get_rate(from_currency, to_currency, as_of)
                 
