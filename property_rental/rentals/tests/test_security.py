@@ -190,3 +190,35 @@ def test_get_effective_date_defaults_to_today_when_unset(db, landlord_user):
     # User was created by the factory without setting effective_date.
     assert landlord_user.effective_date is None
     assert get_effective_date(landlord_user) == date.today()
+
+
+# ---------------------------------------------------------------------------
+# Task 14: handle_element must reject unknown data_type with 400 (not 500)
+# ---------------------------------------------------------------------------
+#
+# The outer ``match data_type:`` in ``handle_element`` had no ``case _:``
+# default. An unknown ``data_type`` (typo, attacker probe, stale client)
+# fell through with ``element`` unbound, and the next reference to
+# ``element`` raised ``NameError`` → Django returned a 500. The fix adds
+# an explicit ``case _:`` returning 400. Note this is a sibling guard to
+# the existing default in ``handle_data`` (the bulk-data view) — the two
+# outer matches are independent and Task 14 only adds the missing one in
+# ``handle_element``.
+
+
+def test_handle_element_unknown_data_type_returns_400(auth_client):
+    """GET to handle_element with an unrecognized ``data_type`` must
+    return 400, not 500.
+
+    Regression guard: before Task 14 the unknown-type branch fell through
+    the outer ``match`` with ``element`` unbound, raising ``NameError``
+    on the next reference and surfacing as a 500 to the client.
+    """
+    url = reverse(
+        "rentals:handle_element",
+        kwargs={"data_type": "unknown_type", "element_id": 1},
+    )
+    resp = auth_client.get(url)
+    assert resp.status_code == 400, (
+        f"unknown data_type expected 400; got {resp.status_code}"
+    )

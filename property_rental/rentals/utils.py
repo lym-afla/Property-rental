@@ -267,7 +267,7 @@ def calculate_from_date(to_date, timeline):
         to_date = datetime.datetime.strptime(to_date, "%Y-%m-%d").date()  # Convert 'to' date to datetime.date
 
     if timeline == 'YTD':
-        from_date = to_date.replace(months=1, day=1)
+        from_date = date(to_date.year, 1, 1)
     elif timeline == '3m':
         from_date = to_date - relativedelta(months=3)
     elif timeline == '6m':

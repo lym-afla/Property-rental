@@ -455,6 +455,8 @@ def handle_element(request, data_type, element_id):
                 element = Property_capital_structure.objects.get(id=element_id)
             except Property_capital_structure.DoesNotExist:
                 return JsonResponse({'error': 'Property valuation entry not found'}, status=404)
+        case _:
+            return JsonResponse({'error': f'Unknown data type: {data_type}'}, status=400)
 
     if request.method == 'GET':
         digits = request.session['digits']
