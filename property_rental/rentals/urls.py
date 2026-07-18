@@ -1,9 +1,14 @@
-from django.urls import path
+from django.urls import include, path
 from .import views
 
 app_name = 'rentals' # Optional, but useful for namespacing
 
 urlpatterns = [
+    # Task 17: DRF /api/v1/ namespace. Mounted under ``rentals.urls`` (which
+    # the project urls.py mounts at the empty prefix), so the full path is
+    # ``/api/v1/properties/`` etc. The router + ChartDataView live in
+    # ``rentals.api.urls`` to keep the API surface self-contained.
+    path('api/v1/', include('rentals.api.urls')),
     path('', views.index, name='index'),
     path('register/', views.register, name='register'),
     path('login/', views.login_view, name='login'),

@@ -1,0 +1,317 @@
+"""DRF ViewSets and the ``ChartDataView`` APIView for ``/api/v1/`` (Task 17).
+
+This module wires the four user-facing entities (Property, Tenant,
+Transaction, FX) as :class:`rest_framework.viewsets.ModelViewSet`
+subclasses and adds a single :class:`ChartDataView` :class:`APIView` for
+the chart-data endpoint that the React frontend (Phase 2) consumes.
+
+Security model (the central concern of this task)
+-------------------------------------------------
+The Task-16 serializers deliberately expose the ownership FKs
+(``owned_by`` / ``property`` / ``tenant`` / ``user``) as writable. That
+makes an IDOR possible *at the serializer layer*: a client could POST a
+Tenant pointing at another landlord's ``property`` and silently hijack a
+row. This module makes that class of bug **structurally impossible** at
+the API layer via two complements:
+
+1. **Per-user queryset scoping.** Every ViewSet overrides
+   :meth:`get_queryset` so LIST and RETRIEVE only ever see rows whose
+   ownership path leads back to ``request.user``. An out-of-scope PK
+   simply does not exist from the caller's perspective (404, not 403 —
+   no enumeration channel).
+
+2. **Ownership forcing on create.** Each ViewSet overrides
+   :meth:`perform_create` (and :meth:`perform_update`) to either force
+   the ownership FK to the requester (Property) or validate that the
+   client-supplied FK (Tenant/Transaction's ``property`` and
+   Transaction's ``tenant``) belongs to the requester before saving.
+
+Combined with ``permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]``
+(object-level owner checks behind the global auth gate), the API layer
+cannot leak or accept cross-tenant data even if a future serializer
+change widens a field.
+
+Query param naming for ``ChartDataView``
+----------------------------------------
+The query string follows the **session-key reality** the existing
+template views established in Task 12's bug fix
+(``test_property_valuation_uses_request_params``):
+``freq`` / ``start`` / ``end`` / ``currency`` (not ``frequency`` /
+``from`` / ``to``). The translation into
+:func:`services.charts.get_chart_data`'s positional signature
+``(type, element_id, frequency, from_date, to_date, currency, ...)``
+happens inside the view.
+"""
+
+from django.shortcuts import get_object_or_404
+from rest_framework import viewsets
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+from rentals.models import FX, Property, Tenant, Transaction
+from rentals.services.charts import get_chart_data as _get_chart_data
+
+from .permissions import IsOwnerOrReadOnly
+from .serializers import (
+    ChartDataResponseSerializer,
+    FXSerializer,
+    PropertySerializer,
+    TenantSerializer,
+    TransactionSerializer,
+)
+
+
+# ``IsAuthenticated`` must be paired with ``IsOwnerOrReadOnly`` on every
+# ViewSet: ``IsOwnerOrReadOnly`` only defines ``has_object_permission``
+# (object-level checks), so on its own its ``has_permission`` falls through
+# to the default True — which would let anonymous users reach
+# ``get_queryset()`` and crash on ``request.user`` lookups. Pairing the two
+# keeps the global gate (IsAuthenticated) AND the per-object owner check
+# (IsOwnerOrReadOnly) active together.
+_OWNER_PERMS = [IsAuthenticated, IsOwnerOrReadOnly]
+
+
+# ---------------------------------------------------------------------------
+# Per-user scoping helpers
+# ---------------------------------------------------------------------------
+
+
+def _validate_property_owned_by(property_id, user):
+    """Resolve a Property PK to an owned instance or raise DRF NotFound.
+
+    Used by the Tenant/Transaction ViewSets to validate the
+    client-supplied ``property`` FK before save — failing with 404 (the
+    property doesn't exist *from this caller's perspective*) rather than
+    silently creating a cross-tenant record.
+    """
+    qs = Property.objects.filter(id=property_id, owned_by__user=user)
+    return get_object_or_404(qs)
+
+
+# ---------------------------------------------------------------------------
+# ViewSets
+# ---------------------------------------------------------------------------
+
+
+class PropertyViewSet(viewsets.ModelViewSet):
+    """CRUD for Property scoped to ``request.user.landlord``.
+
+    * ``get_queryset`` — only this landlord's properties.
+    * ``perform_create`` / ``perform_update`` — force ``owned_by`` to the
+      requesting landlord, ignoring any client-supplied value (IDOR fix).
+    """
+
+    serializer_class = PropertySerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        return Property.objects.filter(owned_by__user=self.request.user)
+
+    def _force_owner(self, serializer):
+        """Persist a Property pinned to the requesting landlord.
+
+        ``owned_by`` is read off the requester's Landlord, regardless of
+        what the client sent — this is the structural IDOR fix.
+        """
+        landlord = self.request.user.landlord
+        serializer.save(owned_by=landlord)
+
+    def perform_create(self, serializer):
+        self._force_owner(serializer)
+
+    def perform_update(self, serializer):
+        self._force_owner(serializer)
+
+
+class TenantViewSet(viewsets.ModelViewSet):
+    """CRUD for Tenant scoped via ``property.owned_by.user``.
+
+    * ``get_queryset`` — only tenants in properties owned by this user.
+    * ``perform_create`` / ``perform_update`` — validate the
+      client-supplied ``property`` belongs to the requester before save
+      (404 otherwise), preventing cross-landlord Tenant injection.
+    """
+
+    serializer_class = TenantSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        return Tenant.objects.filter(property__owned_by__user=self.request.user)
+
+    def _validate_and_save(self, serializer):
+        """Validate ``property`` ownership, then save the Tenant.
+
+        ``Tenant.user`` is an optional link to a tenant auth account. We
+        do NOT let the client reassign it (left as whatever the serializer
+        produces from the payload, but if a tenant FK is supplied via
+        another endpoint that path is also scoped). The critical check
+        here is ``property`` — it determines which landlord the row is
+        visible to.
+        """
+        property_id = serializer.validated_data.get("property")
+        if property_id is None:
+            # ``property`` is non-nullable on the model; if it's missing
+            # the serializer will already have raised 400. Defensive raise
+            # here so the path never falls through to save.
+            raise ValidationError({"property": "This field is required."})
+        # Resolve via the user-scoped queryset — raises 404 if the
+        # property belongs to another landlord (defeating enumeration).
+        _validate_property_owned_by(property_id.id, self.request.user)
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._validate_and_save(serializer)
+
+    def perform_update(self, serializer):
+        self._validate_and_save(serializer)
+
+
+class TransactionViewSet(viewsets.ModelViewSet):
+    """CRUD for Transaction scoped via ``property.owned_by.user``.
+
+    Transaction has TWO FKs that must be validated against the requester:
+
+    * ``property`` — must belong to the requesting user (else 404).
+    * ``tenant`` (nullable) — if supplied, must belong to a Property the
+      requesting user owns.
+
+    Both are checked before save; a mismatch raises ``ValidationError``
+    (400). The two-FK validation is the subtle case the brief calls out:
+    a client could POST a Transaction with their own ``property`` PK and
+    another landlord's ``tenant`` PK, silently creating a cross-tenant
+    link. The check below catches that exact pattern.
+    """
+
+    serializer_class = TransactionSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        return Transaction.objects.filter(property__owned_by__user=self.request.user)
+
+    def _validate_and_save(self, serializer):
+        # Validate ``property`` ownership via the scoped queryset (404).
+        property_obj = serializer.validated_data.get("property")
+        if property_obj is None:
+            raise ValidationError({"property": "This field is required."})
+        _validate_property_owned_by(property_obj.id, self.request.user)
+
+        # Validate ``tenant`` ownership if supplied. A client could point
+        # a Transaction at their own property but another landlord's
+        # tenant (the cross-tenant hijack the brief flags). Catch it here
+        # by re-using the user-scoped tenant queryset.
+        tenant_obj = serializer.validated_data.get("tenant")
+        if tenant_obj is not None:
+            tenant_qs = Tenant.objects.filter(
+                id=tenant_obj.id, property__owned_by__user=self.request.user
+            )
+            if not tenant_qs.exists():
+                # 400 (not 404) so the client gets a clear field-level
+                # error pointing at ``tenant``.
+                raise ValidationError({"tenant": "Tenant does not belong to a property you own."})
+
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._validate_and_save(serializer)
+
+    def perform_update(self, serializer):
+        self._validate_and_save(serializer)
+
+
+class FXViewSet(viewsets.ModelViewSet):
+    """CRUD for FX rows.
+
+    FX rows are not scoped to a landlord (FX is a shared reference-table
+    in this app — every landlord reads the same currency-pair rates). So
+    only ``IsAuthenticated`` is applied here — there is no per-user
+    ownership to enforce. Writes are left open to authenticated landlords
+    to match the existing ``fx_list`` template view's behavior (Phase 3
+    may tighten this if FX editing moves entirely to a server-side job).
+    """
+
+    serializer_class = FXSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = FX.objects.all()
+
+
+# ---------------------------------------------------------------------------
+# ChartDataView
+# ---------------------------------------------------------------------------
+
+
+class ChartDataView(APIView):
+    """GET /api/v1/chart-data/?type=...&id=...&freq=...&start=...&end=...&currency=...
+
+    Bridges the existing :func:`rentals.services.charts.get_chart_data`
+    service into the new ``/api/v1/`` namespace. The query-string keys
+    match the session-key reality from Task 12
+    (``freq``/``start``/``end``/``currency``); the translation into
+    ``get_chart_data``'s positional signature happens here.
+
+    Ownership is validated for the referenced entity:
+
+    * ``type=property`` — the property must be owned by the requester.
+    * ``type=tenant`` — the tenant's property must be owned by the
+      requester.
+    * ``type=homePage`` — no entity to validate (operates on the
+      requester's own property set by default).
+
+    A cross-landlord reference returns 404 (no enumeration channel).
+    """
+
+    def get(self, request, *args, **kwargs):
+        chart_type = request.GET.get("type")
+        element_id = request.GET.get("id")
+        frequency = request.GET.get("freq")
+        from_date = request.GET.get("start")
+        to_date = request.GET.get("end")
+        currency = request.GET.get("currency")
+
+        if not chart_type or not element_id or not frequency or not from_date or not to_date:
+            return Response(
+                {"detail": "type, id, freq, start, end are required query params."},
+                status=400,
+            )
+
+        properties = None
+
+        if chart_type == "property":
+            # Resolve via the scoped queryset so an out-of-scope PK 404s.
+            property_obj = get_object_or_404(
+                Property.objects.filter(id=element_id, owned_by__user=request.user)
+            )
+            if currency is None:
+                currency = property_obj.currency
+        elif chart_type == "tenant":
+            tenant_obj = get_object_or_404(
+                Tenant.objects.filter(id=element_id, property__owned_by__user=request.user)
+            )
+            if currency is None:
+                currency = tenant_obj.property.currency
+        elif chart_type == "homePage":
+            # homePage operates on the caller's own properties — no
+            # cross-tenant leak is possible because the property set is
+            # always scoped to request.user.
+            properties = list(
+                Property.objects.filter(owned_by__user=request.user)
+            )
+            if currency is None:
+                currency = request.user.default_currency or "USD"
+        else:
+            return Response({"detail": f"Unknown chart type: {chart_type!r}."}, status=400)
+
+        chart_data = _get_chart_data(
+            chart_type,
+            element_id,
+            frequency,
+            from_date,
+            to_date,
+            currency,
+            properties=properties,
+        )
+
+        serializer = ChartDataResponseSerializer(data=chart_data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)

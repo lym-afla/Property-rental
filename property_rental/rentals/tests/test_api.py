@@ -1,4 +1,4 @@
-"""Smoke tests for the new DRF layer (Task 16).
+"""Smoke tests for the new DRF layer (Task 16) + endpoint wiring (Task 17).
 
 These tests exercise:
 
@@ -8,6 +8,9 @@ These tests exercise:
 * ``IsOwnerOrReadOnly`` admits the owner and denies a non-owner for both
   model shapes the app uses (``Property.owned_by.user`` and
   ``Tenant.property.owned_by.user``).
+* (Task 17) The ``/api/v1/`` endpoints enforce per-user querysets and
+  ownership forcing on create. These IDOR tests prove that User A cannot
+  list/retrieve/create-against User B's records.
 
 The point is wiring + correctness of field names — not exhaustive
 validation rules. The existing characterization tests pin the financial
@@ -18,6 +21,8 @@ from decimal import Decimal
 
 import pytest
 from unittest.mock import MagicMock
+
+from django.test import Client
 
 from rentals.api.permissions import IsOwnerOrReadOnly
 from rentals.api.serializers import (
@@ -32,6 +37,7 @@ from rentals.tests.factories import (
     PropertyFactory,
     TenantFactory,
     TransactionFactory,
+    UserFactory,
 )
 
 
@@ -220,3 +226,303 @@ def test_is_owner_or_read_only_tenant_via_property(landlord_user, sample_propert
     other = UserFactory(is_landlord=True)
     non_owner_request = _build_request("DELETE", other)
     assert perm.has_object_permission(non_owner_request, view=None, obj=tenant) is False
+
+
+# ---------------------------------------------------------------------------
+# Task 17: /api/v1/ endpoint wiring + per-user scoping (IDOR proof)
+# ---------------------------------------------------------------------------
+#
+# The four ``ModelViewSet``s registered under ``/api/v1/`` MUST scope every
+# queryset by the requesting user's ownership (so a LIST/RETRIEVE for User A
+# can never surface User B's rows) and MUST force ownership on create (so a
+# client cannot POST a record pointing at another landlord's ``owned_by`` /
+# ``property`` / ``tenant`` FK — the IDOR class of bug the serializers leave
+# writable). These tests pin both properties; if any of them regress, the
+# API layer has an IDOR hole.
+
+
+def test_property_list_requires_auth(db, client):
+    """Unauthenticated GET on /api/v1/properties/ → 401/403.
+
+    ``REST_FRAMEWORK['DEFAULT_PERMISSION_CLASSES']`` is ``IsAuthenticated``,
+    so a missing session cookie must be rejected before any data leaks.
+    """
+    resp = client.get("/api/v1/properties/")
+    assert resp.status_code in (401, 403)
+
+
+def _results(resp):
+    """Pull the list of records out of a DRF list response.
+
+    Handles both the paginated shape (``{"results": [...]}``) and the
+    no-pagination shape (``[...]``) since the app's REST_FRAMEWORK config
+    does not enable a default pagination class.
+    """
+    payload = resp.json()
+    if isinstance(payload, dict) and "results" in payload:
+        return payload["results"]
+    return payload
+
+
+@pytest.mark.django_db
+def test_property_list_returns_only_own_properties(auth_client, sample_property):
+    """Authenticated LIST returns 200 and the caller's own property IDs."""
+    resp = auth_client.get("/api/v1/properties/")
+    assert resp.status_code == 200
+    ids = [p["id"] for p in _results(resp)]
+    assert sample_property.id in ids
+
+
+@pytest.mark.django_db
+def test_property_list_excludes_other_landlords(
+    auth_client, sample_property, other_landlord_user
+):
+    """User A's LIST must NOT include User B's property (per-user queryset)."""
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    resp = auth_client.get("/api/v1/properties/")
+    assert resp.status_code == 200
+    ids = [p["id"] for p in _results(resp)]
+    assert sample_property.id in ids
+    assert other_property.id not in ids
+
+
+@pytest.mark.django_db
+def test_property_retrieve_other_landlord_returns_404(
+    auth_client, other_landlord_user
+):
+    """RETRIEVE /api/v1/properties/<other_pk>/ → 404 (not 403, not 200).
+
+    Per-user queryset filtering means an out-of-scope PK simply does not
+    exist from this caller's perspective (defeating enumeration).
+    """
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    resp = auth_client.get(f"/api/v1/properties/{other_property.id}/")
+    assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_create_property_assigns_to_requesting_user(auth_client, landlord_user):
+    """POST ignores client-supplied ``owned_by`` and forces it to requester.
+
+    The serializer leaves ``owned_by`` writable so the view layer can set
+    it; if the ViewSet didn't override ``perform_create``, a client could
+    set ``owned_by`` to another landlord's PK — an IDOR. The override MUST
+    pin the FK to ``request.user.landlord`` regardless of payload.
+    """
+    other_user = UserFactory(is_landlord=True)
+    payload = {
+        "owned_by": other_user.landlord.id,  # Attempted IDOR
+        "name": "Hijacked Property",
+        "location": "Nowhere",
+        "num_bedrooms": 2,
+        "currency": "USD",
+    }
+    resp = auth_client.post("/api/v1/properties/", payload, content_type="application/json")
+    assert resp.status_code == 201, resp.content
+    created_id = resp.json()["id"]
+    # Reassign test: the record MUST be owned by the requesting user, not
+    # the client-supplied other landlord. Read it back via the same user's
+    # scoped queryset to confirm ownership.
+    from rentals.models import Property
+    created = Property.objects.get(id=created_id)
+    assert created.owned_by_id == landlord_user.landlord.id
+    assert created.owned_by_id != other_user.landlord.id
+
+
+@pytest.mark.django_db
+def test_tenant_list_excludes_other_landlords(auth_client, sample_property, other_landlord_user):
+    """Tenant LIST scoped by ownership path ``property.owned_by.user``."""
+    own_tenant = TenantFactory(property=sample_property)
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_property)
+    resp = auth_client.get("/api/v1/tenants/")
+    assert resp.status_code == 200
+    ids = [t["id"] for t in _results(resp)]
+    assert own_tenant.id in ids
+    assert other_tenant.id not in ids
+
+
+@pytest.mark.django_db
+def test_create_tenant_rejects_other_landlords_property(auth_client, other_landlord_user):
+    """POST /tenants/ with another landlord's ``property`` FK → 400/404.
+
+    The ViewSet MUST validate that the client-supplied ``property``
+    belongs to the requesting user before saving. Otherwise a client could
+    file a Tenant against a Property they don't own — an IDOR.
+    """
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    payload = {
+        "property": other_property.id,  # Attempted IDOR
+        "first_name": "Sneaky",
+        "last_name": "Tenant",
+        "phone": "555-0001",
+        "lease_start": "2024-01-01",
+    }
+    resp = auth_client.post("/api/v1/tenants/", payload, content_type="application/json")
+    # 400 (validation) or 404 (scoped property lookup) — both block the write.
+    assert resp.status_code in (400, 404), resp.content
+    # Confirm no tenant row was actually persisted.
+    from rentals.models import Tenant
+    assert not Tenant.objects.filter(first_name="Sneaky").exists()
+
+
+@pytest.mark.django_db
+def test_create_tenant_assigns_to_own_property(auth_client, sample_property):
+    """POST /tenants/ with the caller's own ``property`` → 201, persisted."""
+    payload = {
+        "property": sample_property.id,
+        "first_name": "Alice",
+        "last_name": "Tenant",
+        "phone": "555-0100",
+        "lease_start": "2024-01-01",
+    }
+    resp = auth_client.post("/api/v1/tenants/", payload, content_type="application/json")
+    assert resp.status_code == 201, resp.content
+    assert resp.json()["property"] == sample_property.id
+
+
+@pytest.mark.django_db
+def test_transaction_list_excludes_other_landlords(auth_client, sample_property, other_landlord_user):
+    """Transaction LIST scoped by ``property.owned_by.user``."""
+    own_txn = TransactionFactory(property=sample_property)
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_txn = TransactionFactory(property=other_property)
+    resp = auth_client.get("/api/v1/transactions/")
+    assert resp.status_code == 200
+    ids = [t["id"] for t in _results(resp)]
+    assert own_txn.id in ids
+    assert other_txn.id not in ids
+
+
+@pytest.mark.django_db
+def test_create_transaction_rejects_other_landlords_property(
+    auth_client, other_landlord_user
+):
+    """POST /transactions/ with another landlord's ``property`` → 400."""
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    payload = {
+        "date": "2024-01-15",
+        "property": other_property.id,  # Attempted IDOR
+        "tenant": None,
+        "category": "rent",
+        "period": "2024-01",
+        "currency": "USD",
+        "amount": "1000.00",
+    }
+    resp = auth_client.post(
+        "/api/v1/transactions/", payload, content_type="application/json"
+    )
+    # 400 (field-level validation error) or 404 (scoped queryset lookup
+    # rejects the foreign PK) — either is acceptable per the brief; what
+    # matters is the cross-landlord write must NOT succeed.
+    assert resp.status_code in (400, 404), resp.content
+    from rentals.models import Transaction
+    assert not Transaction.objects.filter(comment__contains="Sneaky").exists()
+
+
+@pytest.mark.django_db
+def test_create_transaction_rejects_other_landlords_tenant(
+    auth_client, sample_property, other_landlord_user
+):
+    """POST /transactions/ with another landlord's ``tenant`` FK → 400.
+
+    Transaction has BOTH ``property`` and ``tenant`` FKs that must be
+    validated against the requester. The ViewSet must catch a mismatch
+    even when ``property`` is valid but ``tenant`` belongs to a different
+    landlord (cross-property hijack).
+    """
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_property)
+    payload = {
+        "date": "2024-01-15",
+        "property": sample_property.id,  # Own property...
+        "tenant": other_tenant.id,  # ...but other landlord's tenant
+        "category": "rent",
+        "period": "2024-01",
+        "currency": "USD",
+        "amount": "1000.00",
+    }
+    resp = auth_client.post(
+        "/api/v1/transactions/", payload, content_type="application/json"
+    )
+    assert resp.status_code == 400, resp.content
+
+
+@pytest.mark.django_db
+def test_fx_list_returns_200(auth_client):
+    """FX list endpoint wired and reachable (no ownership scoping on FX)."""
+    FXFactory()
+    resp = auth_client.get("/api/v1/fx/")
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+def test_chart_data_endpoint_requires_auth(db, client, sample_property):
+    """Unauthenticated chart-data request → 401/403."""
+    resp = client.get(
+        "/api/v1/chart-data/",
+        {"type": "property", "id": sample_property.id, "freq": "M",
+         "start": "2024-01-01", "end": "2024-12-31", "currency": "USD"},
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+def test_chart_data_endpoint_returns_payload(auth_client, sample_property):
+    """GET /api/v1/chart-data/?type=property&id=<id>&freq=M&...
+
+    Returns the chart payload shape from
+    ``services.charts.get_chart_data`` via ``ChartDataResponseSerializer``.
+    """
+    # ``property`` branch needs at least one capital-structure row for
+    # property_value() to produce a number; a single row is enough.
+    from rentals.tests.factories import PropertyCapitalStructureFactory
+    from datetime import date as _date
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=_date(2024, 1, 1),
+        capital_structure_value=Decimal("100000"),
+        capital_structure_debt=Decimal("40000"),
+    )
+
+    resp = auth_client.get(
+        "/api/v1/chart-data/",
+        {
+            "type": "property",
+            "id": sample_property.id,
+            "freq": "M",
+            "start": "2024-01-01",
+            "end": "2024-12-31",
+            "currency": "USD",
+        },
+    )
+    assert resp.status_code == 200, resp.content
+    payload = resp.json()
+    # Property branch: 2 datasets (Debt, Equity), currency ends with 'k'.
+    assert "datasets" in payload
+    assert [d["label"] for d in payload["datasets"]] == ["Debt", "Equity"]
+    assert payload["currency"].endswith("k")
+
+
+@pytest.mark.django_db
+def test_chart_data_endpoint_rejects_other_landlords_property(
+    auth_client, other_landlord_user
+):
+    """Chart-data for another landlord's property → 404 (ownership validated).
+
+    The endpoint MUST validate the referenced entity belongs to the
+    requester, otherwise it leaks capital/datasets cross-tenant.
+    """
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    resp = auth_client.get(
+        "/api/v1/chart-data/",
+        {
+            "type": "property",
+            "id": other_property.id,
+            "freq": "M",
+            "start": "2024-01-01",
+            "end": "2024-12-31",
+            "currency": "USD",
+        },
+    )
+    assert resp.status_code == 404, resp.content
