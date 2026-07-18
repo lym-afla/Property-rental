@@ -379,3 +379,142 @@ def test_handle_element_unknown_data_type_returns_400(auth_client):
     assert resp.status_code == 400, (
         f"unknown data_type expected 400; got {resp.status_code}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 15: effective_date exposed via the profile settings form
+# ---------------------------------------------------------------------------
+#
+# Task 8 added the per-user ``User.effective_date`` field and removed the
+# navbar date picker, but added no replacement UI — users lost the ability
+# to change their as-of date. Task 15 wires the field into the existing
+# ``UserSettingsForm`` on the profile page. These tests pin the POST flow:
+# the form must persist ``effective_date`` to the ``User`` row, and a blank
+# submission must clear it so ``get_effective_date`` falls back to today
+# (preserving the "leave blank to always use today" help text contract).
+#
+# The settings form has other required fields (default_currency,
+# chart_frequency, chart_timeline, digits); every POST below includes
+# valid values for them so form validation passes and the effective_date
+# field is what's under test.
+
+def _settings_post_data(**overrides):
+    """Minimal valid POST body for ``UserSettingsForm``.
+
+    Mirrors the model defaults (USD / Monthly / 6m / 0 digits). Tests
+    override individual fields (typically ``effective_date``).
+    """
+    data = {
+        "default_currency": "USD",
+        "chart_frequency": "M",
+        "chart_timeline": "6m",
+        "digits": "0",
+    }
+    data.update(overrides)
+    return data
+
+
+def test_user_can_set_effective_date_via_profile(db, landlord_user):
+    """POSTing ``effective_date`` to profile_page must persist it on the User.
+
+    Restores the as-of-date UI that Task 8 removed: the settings form now
+    carries the field, the view's existing ``settings_form.save()`` writes
+    it to the User row, and a follow-up ``get_effective_date(user)`` reads
+    the saved value back.
+    """
+    from datetime import date
+    from django.test import Client
+    from rentals.models import User
+    from rentals.utils import get_effective_date
+
+    client = Client()
+    client.force_login(landlord_user)
+
+    url = reverse("rentals:profile_page")
+    resp = client.post(
+        url,
+        data=_settings_post_data(
+            effective_date="2024-06-15",
+            settings_form_submit="1",
+        ),
+    )
+    assert resp.status_code == 200, f"profile POST failed: {resp.status_code} {resp.content!r}"
+
+    landlord_user.refresh_from_db()
+    assert landlord_user.effective_date == date(2024, 6, 15), (
+        f"effective_date not persisted; got {landlord_user.effective_date!r}"
+    )
+    # And the helper reads back the saved value (not today).
+    assert get_effective_date(landlord_user) == date(2024, 6, 15)
+
+
+def test_blank_effective_date_defaults_to_today(db, landlord_user):
+    """A blank ``effective_date`` submission must clear the field so
+    ``get_effective_date`` falls back to ``date.today()``.
+
+    This is the "leave blank to always use today" contract from the
+    field's help text. A user who previously set a date must be able to
+    clear it by submitting an empty value.
+    """
+    from datetime import date
+    from django.test import Client
+    from rentals.utils import get_effective_date
+
+    # Pre-seed a non-today date so clearing is observable.
+    landlord_user.effective_date = date(2020, 1, 1)
+    landlord_user.save()
+
+    client = Client()
+    client.force_login(landlord_user)
+
+    url = reverse("rentals:profile_page")
+    resp = client.post(
+        url,
+        data=_settings_post_data(
+            effective_date="",
+            settings_form_submit="1",
+        ),
+    )
+    assert resp.status_code == 200, f"profile POST failed: {resp.status_code} {resp.content!r}"
+
+    landlord_user.refresh_from_db()
+    assert landlord_user.effective_date is None, (
+        f"blank effective_date should clear the field; got {landlord_user.effective_date!r}"
+    )
+    assert get_effective_date(landlord_user) == date.today()
+
+
+def test_effective_date_field_present_on_profile_form(db):
+    """``UserSettingsForm`` must declare the ``effective_date`` field so it
+    renders on the profile page and is saved by ``settings_form.save()``.
+
+    Regression guard for Task 15: the navbar date picker was removed in
+    Task 8 with no replacement; this asserts the replacement exists in the
+    form (the field is declared, bound to the User model, optional, and
+    renders a native date input). Asserting on the form class rather than
+    the rendered HTML avoids a Django/Python 3.14 test-client interaction
+    (``store_rendered_templates`` calls ``copy(context)`` which fails on
+    3.14 for any template-rendering view) that is unrelated to this task.
+    """
+    from rentals.forms import UserSettingsForm
+    from django.forms.widgets import DateInput
+
+    form = UserSettingsForm()
+    assert "effective_date" in form.fields, (
+        "UserSettingsForm must include effective_date so it renders on the profile page"
+    )
+    field = form.fields["effective_date"]
+    assert field.required is False, (
+        "effective_date must be optional (blank means 'use today' via get_effective_date)"
+    )
+    widget = field.widget
+    assert isinstance(widget, DateInput), (
+        f"effective_date widget must be a DateInput for a native date picker; got {type(widget).__name__}"
+    )
+    assert widget.input_type == "date", (
+        f"effective_date widget must render type='date'; got input_type={widget.input_type!r}"
+    )
+    # And it's bound to the User model so save() persists it.
+    assert "effective_date" in UserSettingsForm._meta.fields, (
+        "effective_date must be in UserSettingsForm.Meta.fields so ModelForm.save() persists it"
+    )

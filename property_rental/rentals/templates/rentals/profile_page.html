@@ -47,6 +47,9 @@
                     <div class="col-md-9">
                         <div class="form-check">
                             {{ field }}
+                            {% if field.help_text %}
+                                <small id="{{ field.id_for_label }}_help" class="form-text text-muted">{{ field.help_text }}</small>
+                            {% endif %}
                             <div id="{{ field.id_for_label }}_error" class="invalid-feedback form-error">Test</div>
                         </div>
                     </div>

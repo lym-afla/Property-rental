@@ -95,10 +95,16 @@ class UserSettingsForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={'class': 'form-control'}),
         label='Digits for tables'
     )
-    
+    effective_date = forms.DateField(
+        widget=DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        label='As-of date',
+        help_text='The date used for all financial calculations. Leave blank to always use today.',
+        required=False,
+    )
+
     class Meta:
         model = User
-        fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline', 'digits']
+        fields = ['default_currency', 'use_default_currency_for_all_data', 'chart_frequency', 'chart_timeline', 'digits', 'effective_date']
         widgets = {
             # 'chart_frequency': forms.Select(attrs={'class': 'form-select'}),
         #     'chart_timeline': forms.Select(attrs={'class': 'form-select'})
