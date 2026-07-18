@@ -11,11 +11,18 @@ After Task 10, the graph is built at most once per ``as_of`` date and
 cached at module scope in ``rentals.services.fx``. ``FX.save`` /
 ``FX.delete`` invalidate the cache so it can never go stale.
 
-The one test here is the cache-correctness gate: build the graph at
-most once across multiple ``get_rate`` calls with the same ``as_of``.
-The char tests (``test_fx_char.py``, ``test_fx_migration.py``) are the
-behavioral safety net — they pin ``get_rate``'s output values, so the
-cache must be transparent.
+Task 11 introduced ``rentals/services/financials.py`` — the
+financial-aggregation service. ``Transaction.financials`` and
+``views.pnl_calc`` are now thin delegates; the duplicated
+currency-conversion loop that lived in ``Transaction.financials`` is
+replaced by the canonical ``convert_transactions`` helper.
+
+The behavioral safety net for both is the char tests
+(``test_fx_char.py``, ``test_fx_migration.py``,
+``test_financials_char.py``, ``test_charts_char.py``) which pin the
+output values byte-for-byte. The unit tests here cover the
+service-specific contracts (cache correctness, FX short-circuit) that
+the char tests only cover indirectly.
 """
 
 from datetime import date
@@ -132,4 +139,70 @@ def test_fx_graph_cache_invalidated_on_delete():
     assert spy.call_count == 1, (
         f"expected exactly one rebuild after delete-then-get_rate; "
         f"got {spy.call_count}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# convert_transactions (Task 11) — canonical FX-conversion helper
+# ---------------------------------------------------------------------------
+#
+# The char tests cover the consolidated FX loop indirectly via
+# ``Transaction.financials`` (test_financials_char.py) and the chart
+# builder (test_charts_char.py). The unit test here covers the
+# service-level contract the char tests only cover incidentally:
+# same-currency rows MUST skip FX entirely (no graph lookup, no
+# ``get_rate`` call). The spy asserts the short-circuit holds even when
+# an FX row for the currency pair exists in the DB — the contract is
+# per-row, not per-DB-state.
+
+
+@pytest.mark.django_db
+def test_convert_transactions_same_currency_skips_fx(sample_property):
+    """``convert_transactions`` must skip FX entirely for same-currency rows.
+
+    Two USD transactions on a USD target. The canonical helper must:
+    1. Return ``amount_1 + amount_2`` (a plain sum, no rate applied).
+    2. NOT touch the FX graph — ``services.fx.get_rate`` must not be
+       called. Spied at the ``services.fx.get_rate`` boundary so a
+       future regression that swaps the short-circuit for an unconditional
+       ``get_rate`` call (which would still return ``{'FX': 1}`` for
+       ``source == target`` and accidentally pass the value check) is
+       caught.
+    """
+    from datetime import date as _date
+    from unittest.mock import patch as _patch
+
+    from rentals.services import financials as financials_service
+    from rentals.services import fx as fx_service
+    from rentals.tests.factories import TransactionFactory
+
+    txns = [
+        TransactionFactory(
+            property=sample_property,
+            amount=Decimal("100.00"),
+            currency="USD",
+            date=_date(2024, 1, 15),
+        ),
+        TransactionFactory(
+            property=sample_property,
+            amount=Decimal("200.00"),
+            currency="USD",
+            date=_date(2024, 2, 15),
+        ),
+    ]
+
+    # Spy on the FX graph lookup. ``convert_transactions`` -> ``fx.convert``
+    # -> ``fx.get_rate`` only when currencies differ; same-currency rows
+    # short-circuit in ``fx.convert`` before ``get_rate`` is touched.
+    with _patch.object(fx_service, "get_rate", wraps=fx_service.get_rate) as spy:
+        total = financials_service.convert_transactions(
+            txns, "USD", _date(2024, 3, 1)
+        )
+
+    # Plain sum, no rate applied (the short-circuit returns the amount
+    # unchanged, so the result keeps the Decimal type from the field).
+    assert total == Decimal("300.00")
+    assert spy.call_count == 0, (
+        f"same-currency rows must skip FX; get_rate was called "
+        f"{spy.call_count} time(s)"
     )

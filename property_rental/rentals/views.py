@@ -984,69 +984,24 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
     return chart_data
 
 
-# Calculate pnl for given properties
+# Calculate pnl for given properties.
+#
+# Task 11: body moved verbatim into ``rentals.services.financials.pnl_calc``.
+# This shim kept so existing callers in this module (``index``,
+# ``handle_element``) and the characterization test
+# (``test_pnl_calc_portfolio`` calls ``views.pnl_calc``) don't need to
+# change. Lazy import avoids a module-load circular import
+# (``services.financials`` imports ``rentals.models`` / ``rentals.utils``
+# lazily for the same reason).
 def pnl_calc(properties, target_currency, default_currency_for_all_data, digits, as_of=None):
-    # ``as_of`` is the per-user effective date that drives YTD/all-time
-    # windowing. Replaces the former read of the process-global
-    # ``effective_current_date``. Defaults to ``date.today()`` to keep the
-    # function callable without a request context (the characterization
-    # test passes a fixed date explicitly).
-    if as_of is None:
-        as_of = date.today()
-
-    current_year_start = as_of.replace(month=1, day=1)
-
-    # Filter transactions for the specified date range
-    # filtered_transactions = element.transactions.filter(
-    #     Q(date__lte=as_of) &
-    #     Q(type='expense')
-    # )
-
-    filtered_transactions = Transaction.objects.filter(property__in=properties, date__lte=as_of, type='expense')
-
-    # Get a list of unique categories from the filtered transactions
-    unique_categories = list(filtered_transactions.values_list('category', flat=True).distinct()) or []
-    # Initialize the expenses dictionary with unique categories
-    expenses = {get_category_name(category): {'ytd': 0, 'all_time': 0} for category in unique_categories}
-    # Add the 'total' key to the expenses dictionary
-    expenses['total'] = {'ytd': 0, 'all_time': 0}
-
-    # Adding rent category to collect in one for loop
-    unique_categories.insert(0, 'rent')
-
-    for category in unique_categories:
-
-        cf_queryset = Transaction.objects.filter(property__in=properties, category=category)
-        queryset_ytd = cf_queryset.filter(date__range=(current_year_start, as_of))
-        queryset_all_time = cf_queryset.filter(date__lte=as_of)
-        if not default_currency_for_all_data:
-            cf_ytd = queryset_ytd.aggregate(Sum('amount'))['amount__sum'] or 0
-            cf_all_time = queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0
-        else:
-            queryset_ytd = queryset_ytd.values('date', 'currency', 'amount').all()
-            cf_ytd = 0
-            for transaction in queryset_ytd:
-                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
-                cf_ytd += transaction['amount'] * fx_rate
-
-            queryset_all_time = queryset_all_time.values('date', 'currency', 'amount').all()
-            cf_all_time = 0
-            for transaction in queryset_all_time:
-                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
-                cf_all_time += transaction['amount'] * fx_rate
-
-        if category == 'rent':
-            rent_ytd = cf_ytd
-            rent_all_time = cf_all_time
-        else:
-            category_name = get_category_name(category)
-            expenses[category_name]['ytd'] = round(float(cf_ytd), digits)
-            expenses[category_name]['all_time'] = round(float(cf_all_time), digits)
-
-            expenses['total']['ytd'] += cf_ytd
-            expenses['total']['all_time'] += cf_all_time
-
-    return expenses, rent_ytd, rent_all_time, unique_categories
+    from rentals.services.financials import pnl_calc as _pnl_calc
+    return _pnl_calc(
+        properties,
+        target_currency,
+        default_currency_for_all_data,
+        digits,
+        as_of=as_of,
+    )
 
 # Fetching data for property valuation
 def property_valuation(request, property_id):

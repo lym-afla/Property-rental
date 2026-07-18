@@ -413,59 +413,27 @@ class Transaction(models.Model):
     
     @classmethod
     def financials(cls, end_date, target_currency=None, properties=None, tenants=None, start_date=None, transaction_type=None, category=None):
+        """Delegate to ``services.financials.aggregate`` (Task 11).
+
+        Body moved verbatim into ``rentals.services.financials.aggregate``;
+        the inline FX-conversion loop is replaced there by the canonical
+        ``convert_transactions`` helper. Characterization tests in
+        ``test_financials_char.py`` and ``test_charts_char.py`` pin the
+        output byte-for-byte. Lazy import avoids a module-load circular
+        import (``services.financials`` imports ``rentals.models``
+        lazily for the same reason).
         """
-        Calculate the sum of transactions for a specific period and type.
-
-        Args:
-            properties (database instances): Iterable selection of properties to check cash flows for.
-            tenants (database instances): Iterable selection of tenants to check cash flows for.
-            start_date: Defines the start date for the obsevation period. All-time if not defined.
-            end_date: Defines the end date for the obsevation period.
-            transaction_type (str): 'income' or 'expense'.
-            category: Filter by transaction category.
-
-        Returns:
-            Decimal: The total sum of transactions.
-        """
-        
-        FX_conversion_required = True
-        
-        queryset = cls.objects.filter(date__lte=end_date)
-        
-        if properties is not None:
-            queryset = queryset.filter(property__in=properties)
-        
-        if tenants is not None:
-            queryset = queryset.filter(tenant__in=tenants)
-        
-        # if properties is not None and len(properties) == 1:
-        #     target_currency = properties[0].currency
-        #     FX_conversion_required = False
-        # else:
-        if target_currency is None:
-            raise ValueError('Target currency is not defined')
-        
-        if start_date:
-            queryset = queryset.filter(date__range=(start_date, end_date))
-            
-        if transaction_type:
-            queryset = queryset.filter(type=transaction_type)
-            
-        if category:
-            queryset = queryset.filter(category=category)
-        
-        transactions = queryset.values('date', 'currency', 'amount').all()
-        
-        total_amount = 0
-        for transaction in transactions:
-            
-            if FX_conversion_required:
-                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
-            else:
-                fx_rate = 1
-            total_amount += transaction['amount'] * fx_rate
-
-        return total_amount
+        from rentals.services.financials import aggregate
+        return aggregate(
+            cls,
+            end_date=end_date,
+            target_currency=target_currency,
+            properties=properties,
+            tenants=tenants,
+            start_date=start_date,
+            transaction_type=transaction_type,
+            category=category,
+        )
     
     def __str__(self):
         return self.property.name + ": " + self.category
