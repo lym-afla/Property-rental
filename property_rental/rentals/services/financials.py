@@ -68,7 +68,7 @@ Known latent bugs pinned by Task 3 char tests (NOT fixed here):
 
 from datetime import date
 
-from django.db.models import Q, Sum
+from django.db.models import Sum
 
 # ``Transaction``, ``FX``, ``get_category_name`` are imported lazily
 # inside the functions that need them. Importing at module scope would
