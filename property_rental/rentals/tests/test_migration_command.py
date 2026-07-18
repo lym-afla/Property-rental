@@ -255,5 +255,15 @@ def test_dry_run_smoke_against_project_db(capsys):
     call_command("migrate_sqlite_to_postgres", dry_run=True)
     out = capsys.readouterr().out
     # Every model should at least be mentioned, even if its count is 0.
-    for name in ("User", "FX", "Property"):
+    # Covers all 8 rentals tables — the dry-run iterates MODELS in full.
+    for name in (
+        "User",
+        "Landlord",
+        "Property",
+        "Property_capital_structure",
+        "Tenant",
+        "Lease_rent",
+        "Transaction",
+        "FX",
+    ):
         assert name in out

@@ -33,12 +33,10 @@ without a live Postgres connection.
 from __future__ import annotations
 
 import sqlite3
-from typing import Iterable
 
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
 
 from rentals.models import (
     FX,
@@ -142,13 +140,10 @@ class Command(BaseCommand):
                     f"Truncate the destination table and re-run."
                 )
 
-            # Build model instances from the raw rows. Filter by ``cols``
-            # in case the SQLite schema has extra legacy columns the
-            # current model no longer knows about.
-            objs = [
-                model(**{k: v for k, v in r.items() if k in cols})
-                for r in rows
-            ]
+            # Build model instances from the raw rows. ``read_sqlite_rows``
+            # already returns dicts keyed only by the current model's Python
+            # attribute names, so no extra filtering is needed here.
+            objs = [model(**r) for r in rows]
             for i in range(0, len(objs), BATCH_SIZE):
                 model.objects.using("default").bulk_create(
                     objs[i : i + BATCH_SIZE], batch_size=BATCH_SIZE
@@ -157,7 +152,7 @@ class Command(BaseCommand):
             after = model.objects.using("default").count()
             summary[model.__name__] = (before, after)
 
-        verify_counts(summary, abort=CommandError, logger=self.stdout)
+        verify_counts(summary, abort=CommandError)
 
         self.stdout.write(self.style.SUCCESS("Migration OK. Row counts:"))
         for name, (b, a) in summary.items():
