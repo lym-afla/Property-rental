@@ -630,6 +630,16 @@ def handle_element(request, data_type, element_id):
         element.delete()
         return JsonResponse({'message': f'{data_type} deleted successfully'}, status=200)
     elif request.method == 'PUT':
+        # Ownership check (final-review fix): mirror the DELETE branch's
+        # per-data_type ownership check BEFORE any mutation. Without this,
+        # any authenticated landlord could PUT to another landlord's
+        # /handling/<data_type>/<id> and mutate their records (IDOR).
+        if data_type == 'property':
+            owner_user = element.owned_by.user
+        else:  # tenant, transaction, propertyValuation all route through .property.owned_by
+            owner_user = element.property.owned_by.user
+        if owner_user != request.user:
+            return JsonResponse({'error': 'Not authorized'}, status=403)
         try:
             json_data = json.loads(request.body)
             match data_type:
@@ -903,6 +913,7 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data, digits,
     )
 
 # Fetching data for property valuation
+@login_required
 def property_valuation(request, property_id):
 
     chart_settings = request.session['chart_settings']

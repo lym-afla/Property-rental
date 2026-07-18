@@ -365,6 +365,11 @@ def test_property_valuation_uses_request_params(db):
     sc = build_chart_scenario()
 
     c = Client()
+    # Authenticate as the property's owning landlord. Before the
+    # final-review fix ``property_valuation`` had no ``@login_required``,
+    # so this test could hit it anonymously; now the auth gate fires
+    # first, so we must be logged in to reach the chart-param logic.
+    c.force_login(sc["landlord"].user)
     # Seed the session the way the login view does (``views.login_user``
     # sets ``chart_settings`` with ``frequency`` / ``timeline`` / ``To``).
     # The window below (2025-01-01..2025-12-31) deliberately differs from

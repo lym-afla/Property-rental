@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from django.urls import reverse
 from unittest.mock import patch
@@ -69,6 +71,142 @@ def test_landlord_cannot_delete_other_landlords_property_valuation(auth_client, 
 
 
 # ---------------------------------------------------------------------------
+# Final review: PUT IDOR in handle_element (mirrors Task 6 DELETE pattern)
+# ---------------------------------------------------------------------------
+#
+# Before this fix the PUT branch of ``handle_element`` performed NO ownership
+# check at all: any authenticated landlord could PUT to
+# ``/handling/<data_type>/<other_landlords_id>`` and mutate another
+# landlord's records. The DELETE branch (Task 6) and GET branch already
+# scoped to the requesting user; PUT did not. Each test builds an entity
+# owned by ``landlord_user``, PUTs as ``other_landlord_user``, and asserts
+# 403 + the original record survives unchanged.
+
+def _put_as_other(url, payload, other_landlord_user):
+    """Helper: PUT ``payload`` to ``url`` authenticated as
+    ``other_landlord_user``. Returns the response."""
+    from django.test import Client
+
+    other_client = Client()
+    other_client.force_login(other_landlord_user)
+    return other_client.put(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+
+def test_landlord_cannot_put_other_landlords_property(sample_property, other_landlord_user):
+    # sample_property is owned by landlord_user; other_landlord_user must
+    # not be able to rename (or otherwise mutate) it via PUT.
+    from rentals.models import Property
+
+    original_name = sample_property.name
+    url = reverse(
+        "rentals:handle_element",
+        kwargs={"data_type": "property", "element_id": sample_property.id},
+    )
+    resp = _put_as_other(
+        url,
+        {
+            "name": "Hijacked Name",
+            "location": sample_property.location,
+            "num_bedrooms": sample_property.num_bedrooms,
+            "currency": sample_property.currency,
+        },
+        other_landlord_user,
+    )
+    assert resp.status_code == 403
+    sample_property.refresh_from_db()
+    assert sample_property.name == original_name, "PUT mutated a property the caller does not own"
+
+
+def test_landlord_cannot_put_other_landlords_tenant(sample_property, other_landlord_user):
+    # Tenant lives in sample_property, owned by landlord_user.
+    from rentals.models import Tenant
+    from rentals.tests.factories import TenantFactory
+
+    tenant = TenantFactory(property=sample_property)
+    original_first_name = tenant.first_name
+    url = reverse(
+        "rentals:handle_element",
+        kwargs={"data_type": "tenant", "element_id": tenant.id},
+    )
+    resp = _put_as_other(
+        url,
+        {
+            "first_name": "Hijacked",
+            "last_name": tenant.last_name,
+            "phone": tenant.phone,
+            "property": sample_property.id,
+            "lease_start": tenant.lease_start.isoformat(),
+        },
+        other_landlord_user,
+    )
+    assert resp.status_code == 403
+    tenant.refresh_from_db()
+    assert tenant.first_name == original_first_name, "PUT mutated a tenant the caller does not own"
+
+
+def test_landlord_cannot_put_other_landlords_transaction(sample_property, other_landlord_user):
+    # Transaction is booked against sample_property, owned by landlord_user.
+    from rentals.models import Transaction
+    from rentals.tests.factories import TransactionFactory
+
+    transaction = TransactionFactory(property=sample_property, category="rent")
+    original_comment = transaction.comment
+    url = reverse(
+        "rentals:handle_element",
+        kwargs={"data_type": "transaction", "element_id": transaction.id},
+    )
+    resp = _put_as_other(
+        url,
+        {
+            "property": sample_property.id,
+            "category": "rent",
+            "amount": "9999.00",
+            "currency": transaction.currency,
+            "date": transaction.date.isoformat(),
+            "comment": "hijacked-by-other-landlord",
+            "period": transaction.period,
+        },
+        other_landlord_user,
+    )
+    assert resp.status_code == 403
+    transaction.refresh_from_db()
+    assert transaction.comment == original_comment, "PUT mutated a transaction the caller does not own"
+
+
+def test_landlord_cannot_put_other_landlords_property_valuation(sample_property, other_landlord_user):
+    # propertyValuation (Property_capital_structure) is attached to
+    # sample_property, owned by landlord_user.
+    from rentals.models import Property_capital_structure
+    from rentals.tests.factories import PropertyCapitalStructureFactory
+
+    valuation = PropertyCapitalStructureFactory(property=sample_property)
+    original_value = valuation.capital_structure_value
+    url = reverse(
+        "rentals:handle_element",
+        kwargs={"data_type": "propertyValuation", "element_id": valuation.id},
+    )
+    resp = _put_as_other(
+        url,
+        {
+            "property": sample_property.id,
+            "capital_structure_date": valuation.capital_structure_date.isoformat(),
+            "capital_structure_value": "9999999",
+            "capital_structure_debt": "0",
+        },
+        other_landlord_user,
+    )
+    assert resp.status_code == 403
+    valuation.refresh_from_db()
+    assert valuation.capital_structure_value == original_value, (
+        "PUT mutated a property valuation the caller does not own"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Task 7: unauthenticated access + update_fx_view scoping
 # ---------------------------------------------------------------------------
 
@@ -106,6 +244,25 @@ def test_anonymous_get_new_form_rejected(db, client):
     url = reverse("rentals:new_form", kwargs={"form_type": "property"})
     resp = client.get(url)
     assert resp.status_code in (302, 401, 403)
+    if resp.status_code == 302:
+        assert "/login" in resp.url or "/accounts/login" in resp.url
+
+
+def test_anonymous_property_valuation_rejected(db, client):
+    """Anonymous GET to property_valuation must redirect to login or 401/403.
+
+    Regression guard: before this fix the view had no ``@login_required``
+    and unconditionally read ``request.session['chart_settings']``, which
+    is unset for an anonymous session → KeyError → 500. The fix adds
+    ``@login_required`` so Django's auth gate fires first.
+    """
+    url = reverse("rentals:property_valuation", kwargs={"property_id": 1})
+    resp = client.get(url)
+    assert resp.status_code in (302, 401, 403), (
+        f"property_valuation returned {resp.status_code} for anonymous GET; "
+        f"expected 302/401/403 (before the fix this was a 500 KeyError on "
+        f"request.session['chart_settings'])"
+    )
     if resp.status_code == 302:
         assert "/login" in resp.url or "/accounts/login" in resp.url
 
