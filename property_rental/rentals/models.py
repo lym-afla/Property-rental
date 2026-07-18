@@ -477,20 +477,23 @@ class Transaction(models.Model):
         
 # Table with FX data
 class FX(models.Model):
-    __tablename__ = 'FX'
-    
+    # Long format (Task 9): one row per (date, currency pair). Adding a
+    # new currency pair is now a row insert, not a schema migration. The
+    # graph builder in ``get_rate`` reads ``from_currency``/``to_currency``
+    # directly instead of introspecting ``_meta.fields``.
     date = models.DateField()
-    EURUSD = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
-    GBPUSD = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
-    USDRUB = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
-    
+    from_currency = models.CharField(max_length=3)
+    to_currency = models.CharField(max_length=3)
+    rate = models.DecimalField(max_digits=20, decimal_places=10)
+
     @classmethod
     def update_fx_rates(cls, property_id):
-        # Get FX model variables, except 'date'
-        fx_variables = [field for field in cls._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
-
-        # Extract source and target currencies
-        currency_pairs = [(field.name[:3], field.name[3:]) for field in fx_variables]
+        # Long format: the pairs that need to be fetched are no longer
+        # discovered by introspecting ``_meta.fields``. They are still
+        # hard-coded here (the same three pairs as before) — Task 10/11
+        # can revisit. The pair list mirrors the legacy per-pair columns
+        # (EURUSD, GBPUSD, USDRUB) so behavior is unchanged.
+        currency_pairs = [("EUR", "USD"), ("GBP", "USD"), ("USD", "RUB")]
 
         # Get the specific property
         property_instance = Property.objects.get(id=property_id)
@@ -502,26 +505,34 @@ class FX(models.Model):
         count = 0
         for date in transaction_dates:
             count += 1
-            print(f'{count} of {len(transaction_dates)}')    
+            print(f'{count} of {len(transaction_dates)}')
             for source, target in currency_pairs:
-                # Check if an FX rate exists for the date and currency pair
-                existing_rate = cls.objects.filter(date=date).values(f'{source}{target}').first()
+                # Check if a long-format FX rate already exists for the
+                # (date, pair) combination.
+                existing_rate = cls.objects.filter(
+                    date=date,
+                    from_currency=source,
+                    to_currency=target,
+                ).first()
 
-                if existing_rate is None or existing_rate[f'{source}{target}'] is None:
-                    # Get the FX rate for the date
+                if existing_rate is None or existing_rate.rate is None:
+                    # Fetch the FX rate for the date.
                     rate_data = update_FX_database(source, target, date)
 
                     if rate_data is not None:
-                        # Update or create an FX instance with the new rate
-                        fx_instance, created = cls.objects.get_or_create(date=rate_data['requested_date'])
-                        setattr(fx_instance, f'{source}{target}', rate_data['exchange_rate'])
-                        fx_instance.save()
+                        # Upsert a long-format FX row.
+                        cls.objects.update_or_create(
+                            date=rate_data['requested_date'],
+                            from_currency=source,
+                            to_currency=target,
+                            defaults={'rate': rate_data['exchange_rate']},
+                        )
                         print(f'{source}{target} for {rate_data["requested_date"]} is updated')
                     else:
-                        raise Exception(f'{source}{target} for {rate_data["requested_date"]} is NOT updated. Yahoo Finance is not responding correctly')
+                        raise Exception(f'{source}{target} for {date} is NOT updated. Yahoo Finance is not responding correctly')
                 else:
                     print(f'{source}{target} for {date} already exists')
-                    
+
     # Get FX quote for date
     @classmethod
     def get_rate(cls, source, target, date):
@@ -537,58 +548,70 @@ class FX(models.Model):
                 'FX dates used': dates_list
             }
 
-        # Get all existing pairs
-        pairs_list = [field.name for field in FX._meta.get_fields() if (field.name != 'date' and field.name != 'id')]
-        
-        # Create undirected graph with currencies, import networkx library working with graphs
-        G = nx.Graph()
-        for entry in pairs_list:
-            G.add_nodes_from([entry[:3], entry[3:]])
-            G.add_edge(entry[:3], entry[3:])
+        # Build the currency graph directly from the long-format rows.
+        # Each FX row defines one undirected edge between its
+        # ``from_currency`` and ``to_currency`` at its ``date``. We only
+        # consider rows on or before ``date`` (same ``date__lte`` filter
+        # as the wide schema). Edge direction is irrelevant because the
+        # old code built an undirected ``nx.Graph``; only the pair's
+        # membership and stored weight matter.
+        g = nx.Graph()
+        for fx in FX.objects.filter(date__lte=date):
+            if fx.from_currency and fx.to_currency and fx.rate is not None:
+                g.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
 
-        # Finding shortest path for cross-currency conversion using "Bellman-Ford" algorithm
-        cross_currency = nx.shortest_path(G, source, target, method='bellman-ford')
+        # Finding shortest path for cross-currency conversion using
+        # "Bellman-Ford" algorithm. Behavior preserved verbatim from the
+        # wide schema: raises ``networkx.exception.NodeNotFound`` if the
+        # source or target is not in the graph.
+        cross_currency = nx.shortest_path(g, source, target, method='bellman-ford')
 
+        # Walk each hop in the chosen path and multiply / divide by the
+        # most recent (date__lte=date) FX rate for that pair.
         for i in range(1, len(cross_currency)):
             i_source = cross_currency[i - 1]
             i_target = cross_currency[i]
-            
-            for element in pairs_list:
-                if i_source in element and i_target in element:
 
-                    # Determine the correct field name for the FX pair
-                    fx_field = f'{i_source}{i_target}' if element.find(i_source) == 0 else f'{i_target}{i_source}'
+            # Latest long-format row for the (i_source, i_target) pair on
+            # or before ``date``. The pair direction in the row may be
+            # either way around (long format is logically undirected
+            # because the old graph was), so we accept both orderings.
+            fx_call = (
+                FX.objects.filter(
+                    date__lte=date,
+                    rate__isnull=False,
+                )
+                .filter(
+                    Q(from_currency=i_source, to_currency=i_target)
+                    | Q(from_currency=i_target, to_currency=i_source)
+                )
+                .order_by('-date')
+                .first()
+            )
 
-                    
-                    # print("FX.get_rate. Inputs:", date, element, i_source, i_target)
-                    # print("FX.get_rate. Database call:", cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first())
-                    try:
-                        # fx_call = cls.objects.filter(date__lte=date).values('date', quote=F(f'{i_source}{i_target}')).order_by("-date").first()
-                        fx_call = cls.objects.filter(
-                            date__lte=date
-                            ).exclude(**{fx_field: None}).values('date', quote=F(fx_field)).order_by("-date").first()
-                        
-                        if not fx_call:
-                            raise ValueError(f"FX rate for {i_source} to {i_target} not found.")
-                        
-                    
-                        # Update fx_rate based on the direction of the conversion
-                        if element.find(i_source) == 0:
-                            fx_rate *= fx_call['quote']
-                        else:
-                            fx_rate /= fx_call['quote']
+            if not fx_call:
+                raise ValueError(
+                    f"FX rate for {i_source} to {i_target} not found."
+                )
 
-                        dates_list.append(fx_call['date'])
-                        dates_async = (dates_list[0] != fx_call['date']) or dates_async
-    
-                    except Exception as e:
-                        raise ValueError(f"Error fetching FX rate for {i_source} to {i_target}: {str(e)}")
-                                        
-                    break
-        
-        # Final result adjustment: multiply to get the final FX rate
+            # If the stored row is in the i_source->i_target direction we
+            # multiply (same as ``element.find(i_source) == 0`` in the
+            # old code); otherwise we divide.
+            if fx_call.from_currency == i_source and fx_call.to_currency == i_target:
+                fx_rate *= fx_call.rate
+            else:
+                fx_rate /= fx_call.rate
+
+            dates_list.append(fx_call.date)
+            dates_async = (dates_list[0] != fx_call.date) or dates_async
+
+        # Final result adjustment: multiply to get the final FX rate.
+        # PRESERVED QUIRK: this tail inversion is unconditional and is
+        # what ``test_fx_char.py`` pins (e.g. stored EURUSD=1.10 returns
+        # 0.909091 here). Do NOT remove without updating the
+        # characterization tests.
         fx_rate = round(1 / fx_rate, 6)
-                
+
         return {
             'FX': fx_rate,
             'conversions': len(cross_currency) - 1,

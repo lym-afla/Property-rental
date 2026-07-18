@@ -1068,7 +1068,10 @@ def property_valuation(request, property_id):
 # Compiling the table with FX data
 @login_required
 def fx_list(request):
-    # Get all FX instances sorted by date
+    # Long-format FX rows (Task 9): one row per (date, currency pair).
+    # The wide-format code used to invert each per-pair column in place
+    # before rendering; with one pair per row the inversion is just a
+    # row-level field swap.
     fx_list = FX.objects.order_by('-date')
 
     # Paginate the FX instances
@@ -1084,11 +1087,12 @@ def fx_list(request):
         # If page is out of range (e.g. 9999), deliver last page of results.
         fx_entries = paginator.page(paginator.num_pages)
 
-        # Invert the values
+    # Invert the displayed rate (preserves the legacy wide-format view
+    # behavior, which rendered the reciprocal of the stored column).
     for fx_entry in fx_entries:
-        fx_entry.EURUSD = 1 / fx_entry.EURUSD if fx_entry.EURUSD else None
-        fx_entry.GBPUSD = 1 / fx_entry.GBPUSD if fx_entry.GBPUSD else None
-        fx_entry.USDRUB = 1 / fx_entry.USDRUB if fx_entry.USDRUB else None
+        fx_entry.display_rate = (
+            1 / fx_entry.rate if fx_entry.rate else None
+        )
 
     return render(request, 'rentals/fx_list.html', {'fx_entries': fx_entries})
 

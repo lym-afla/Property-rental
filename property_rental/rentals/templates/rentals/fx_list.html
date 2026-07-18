@@ -33,18 +33,18 @@
             <thead>
                 <tr>
                     <th>Date</th>
-                    <th class="text-center">EURUSD</th>
-                    <th class="text-center">GBPUSD</th>
-                    <th class="text-center">USDRUB</th>
+                    <th class="text-center">From</th>
+                    <th class="text-center">To</th>
+                    <th class="text-center">Rate</th>
                 </tr>
             </thead>
             <tbody>
                 {% for fx_entry in fx_entries %}
                     <tr>
                         <td>{{ fx_entry.date }}</td>
-                        <td class="text-center">{{ fx_entry.EURUSD|default_if_none:''|floatformat:4 }}</td>
-                        <td class="text-center">{{ fx_entry.GBPUSD|default_if_none:''|floatformat:4 }}</td>
-                        <td class="text-center">{{ fx_entry.USDRUB|default_if_none:''|floatformat:2 }}</td>
+                        <td class="text-center">{{ fx_entry.from_currency }}</td>
+                        <td class="text-center">{{ fx_entry.to_currency }}</td>
+                        <td class="text-center">{{ fx_entry.display_rate|default_if_none:''|floatformat:4 }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

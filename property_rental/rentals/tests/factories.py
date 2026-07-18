@@ -10,9 +10,11 @@ are intentionally left **unset** so callers must provide them:
 * ``Transaction.amount`` (and ``category``/``currency``/``date`` already
   have model defaults, but the brief asks us not to bake financial values
   into the factory — they remain overridable via the model default).
-* ``FX`` rate fields (``EURUSD``/``GBPUSD``/``USDRUB`` are nullable in the
-  model, so callers provide whichever pair they need; only ``date`` is
-  required).
+* ``FX`` is now in long format (Task 9): one row per (date, currency
+  pair). ``from_currency`` / ``to_currency`` / ``rate`` are required by
+  the model; the factory gives them sensible defaults so callers can
+  call ``FXFactory()`` standalone, while characterization tests override
+  the specific pair + rate they need.
 * ``Tenant.lease_end`` is nullable and left to the caller.
 * ``Lease_rent.rent`` / ``Lease_rent.date_rent_set`` are required by the
   model — they get defaults here since the factory must persist on its
@@ -22,6 +24,7 @@ FKs are wired via :class:`factory.SubFactory`.
 """
 
 from datetime import date
+from decimal import Decimal
 
 import factory
 
@@ -143,8 +146,12 @@ class FXFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = FX
 
-    # date is the only required field (null=False, no default).
-    # The per-pair rate columns (EURUSD/GBPUSD/USDRUB) are nullable; the
-    # characterization tests set the specific pair they need, so we leave
-    # them unset here.
+    # Long format (Task 9): one row per (date, currency pair). All four
+    # fields are required by the model. Defaults are chosen so the
+    # factory persists standalone; characterization tests override the
+    # specific pair + rate they need (e.g. ``FXFactory(from_currency='GBP',
+    # to_currency='USD', rate=Decimal('1.25'))``).
     date = date(2023, 1, 1)
+    from_currency = "EUR"
+    to_currency = "USD"
+    rate = Decimal("1.00")

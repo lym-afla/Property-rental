@@ -108,8 +108,12 @@ def build_cross_currency_scenario():
         payday=1,
     )
 
-    # Fixed GBPUSD rate for the conversion window.
-    FXFactory(date=date(2024, 1, 1), GBPUSD=Decimal("1.25"))
+    # Fixed GBP->USD rate for the conversion window (long format, Task 9:
+    # one row per currency pair instead of a per-pair column).
+    FXFactory(
+        date=date(2024, 1, 1),
+        from_currency="GBP", to_currency="USD", rate=Decimal("1.25"),
+    )
 
     # Two GBP rent transactions of GBP 100 each.
     TransactionFactory(
