@@ -8,6 +8,9 @@ property_rental/rentals/migrations/__pycache__/
 property_rental/rentals/services/__pycache__/
 property_rental/rentals/templatetags/__pycache__/
 property_rental/rentals/tests/__pycache__/
+property_rental/rentals/management/__pycache__/
+property_rental/rentals/management/commands/__pycache__/
+property_rental/scripts/__pycache__/
 property_rental/.pytest_cache/
 
 property_rental/db.sqlite3
