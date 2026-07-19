@@ -43,8 +43,13 @@ template views established in Task 12's bug fix
 happens inside the view.
 """
 
+from datetime import date
+
+from dateutil.parser import parse as parse_date
+
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -91,6 +96,22 @@ def _validate_property_owned_by(property_id, user):
     return get_object_or_404(qs)
 
 
+def _parse_as_of(query_params):
+    """Pull ``as_of`` from the query string and return a ``date``.
+
+    Accepts ``YYYY-MM-DD`` (or anything ``dateutil`` can parse). Falls
+    back to ``date.today()`` when the param is missing or unparseable.
+    Used by the ``with_stats`` actions below.
+    """
+    as_of_str = query_params.get("as_of")
+    if not as_of_str:
+        return date.today()
+    try:
+        return parse_date(as_of_str).date()
+    except (ValueError, TypeError, OverflowError):
+        return date.today()
+
+
 # ---------------------------------------------------------------------------
 # ViewSets
 # ---------------------------------------------------------------------------
@@ -130,6 +151,99 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._force_owner(serializer)
+
+    @action(detail=False, methods=["get"])
+    def with_stats(self, request):
+        """GET /api/v1/properties/with_stats/?as_of=YYYY-MM-DD&currency=USD
+
+        Returns this landlord's properties augmented with per-property
+        P&L aggregates (income / expense / net, both all-time and
+        year-to-date) in ``currency`` as of ``as_of``. The aggregates
+        are computed by the financial-aggregation service
+        (:func:`rentals.services.financials.aggregate`) via the
+        :meth:`Transaction.financials` delegate — same code path the
+        legacy ``table_data`` view used, so the math is identical.
+
+        Returned shape (one entry per owned property)::
+
+            {
+              ...PropertySerializer fields,
+              "gross_income_all_time": float,
+              "expenses_all_time": float,        # always <= 0
+              "net_income_all_time": float,      # income + expense
+              "gross_income_ytd": float,
+              "expenses_ytd": float,
+              "net_income_ytd": float,
+              "currency": "USD"
+            }
+
+        Expenses carry their negative sign through from the underlying
+        ``Transaction.amount`` (income positive, expense negative on
+        save) — ``net = income + expense`` is therefore income minus
+        the absolute expense, matching what the legacy
+        ``handle_element`` view rendered.
+        """
+        # Lazy import: ``services.financials`` references ``rentals.models``
+        # lazily at call time but avoids an import-time cycle by deferring
+        # the model import — this side of the boundary imports cleanly at
+        # module load, but the lazy pattern matches the rest of the API
+        # layer (and is cheaper to reason about if the services module's
+        # import graph changes later).
+        from rentals.services.financials import aggregate
+
+        as_of = _parse_as_of(request.query_params)
+        currency = request.query_params.get("currency", "USD")
+        year_start = date(as_of.year, 1, 1)
+        year_end = date(as_of.year, 12, 31)
+
+        properties = self.get_queryset()
+        result = []
+        for prop in properties:
+            gross_income_all = aggregate(
+                Transaction,
+                end_date=as_of,
+                target_currency=currency,
+                properties=[prop],
+                transaction_type="income",
+            )
+            expenses_all = aggregate(
+                Transaction,
+                end_date=as_of,
+                target_currency=currency,
+                properties=[prop],
+                transaction_type="expense",
+            )
+            gross_income_ytd = aggregate(
+                Transaction,
+                end_date=year_end,
+                start_date=year_start,
+                target_currency=currency,
+                properties=[prop],
+                transaction_type="income",
+            )
+            expenses_ytd = aggregate(
+                Transaction,
+                end_date=year_end,
+                start_date=year_start,
+                target_currency=currency,
+                properties=[prop],
+                transaction_type="expense",
+            )
+
+            data = PropertySerializer(prop).data
+            data.update(
+                {
+                    "gross_income_all_time": float(gross_income_all),
+                    "expenses_all_time": float(expenses_all),
+                    "net_income_all_time": float(gross_income_all + expenses_all),
+                    "gross_income_ytd": float(gross_income_ytd),
+                    "expenses_ytd": float(expenses_ytd),
+                    "net_income_ytd": float(gross_income_ytd + expenses_ytd),
+                    "currency": currency,
+                }
+            )
+            result.append(data)
+        return Response(result)
 
 
 class TenantViewSet(viewsets.ModelViewSet):
@@ -181,6 +295,97 @@ class TenantViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
+
+    @action(detail=False, methods=["get"])
+    def with_stats(self, request):
+        """GET /api/v1/tenants/with_stats/?as_of=YYYY-MM-DD&currency=USD
+
+        Returns this landlord's tenants augmented with per-tenant rent
+        aggregates:
+
+        * ``rent_rate`` — the tenant's current monthly lease rent as of
+          ``as_of`` (or the string status ``"Tenant vacated"`` /
+          ``"No rent history for the Tenant"`` from
+          :meth:`Tenant.lease_rent`).
+        * ``revenue_all_time`` — total rent collected for this tenant
+          (lease-start through ``as_of``, including post-vacation
+          payments).
+        * ``revenue_ytd`` — same, year-to-date window.
+        * ``debt`` — :meth:`Tenant.debt` (paid - due; negative => the
+          tenant is in arrears) as of ``as_of``.
+
+        All monetary aggregates are FX-converted into ``currency`` via
+        :meth:`Tenant.rent_total` (which itself delegates to
+        :func:`rentals.services.financials.convert_transactions` when the
+        tenant's property currency differs). ``debt`` is computed in the
+        tenant's property currency and converted via the FX service at
+        the request date.
+
+        Returned shape (one entry per owned tenant)::
+
+            {
+              ...TenantSerializer fields,
+              "rent_rate": float | str,
+              "revenue_all_time": float,
+              "revenue_ytd": float,
+              "debt": float,
+              "currency": "USD"
+            }
+        """
+        # Lazy import matches PropertyViewSet.with_stats.
+        from rentals.services import fx as fx_service
+
+        as_of = _parse_as_of(request.query_params)
+        currency = request.query_params.get("currency", "USD")
+        year_start = date(as_of.year, 1, 1)
+        year_end = date(as_of.year, 12, 31)
+
+        tenants = self.get_queryset()
+        result = []
+        for tenant in tenants:
+            lease_rent = tenant.lease_rent(as_of)
+            revenue_all_time = tenant.rent_total(
+                as_of,
+                target_currency=currency,
+                include_post_vacation=True,
+            )
+            revenue_ytd = tenant.rent_total(
+                start_date=year_start,
+                end_date=year_end,
+                target_currency=currency,
+                include_post_vacation=True,
+            )
+            debt_value = tenant.debt(as_of)
+            # ``debt`` is denominated in the tenant's property currency
+            # (rent_total inside ``scheduler.debt`` short-circuits to
+            # face value when ``target_currency`` is None — the property
+            # currency path). Convert into the requested currency here
+            # so the field matches the revenue fields.
+            debt_converted = fx_service.convert(
+                debt_value,
+                tenant.property.currency,
+                currency,
+                as_of,
+            )
+
+            rent_rate = (
+                lease_rent
+                if isinstance(lease_rent, str)
+                else float(lease_rent)
+            )
+
+            data = TenantSerializer(tenant).data
+            data.update(
+                {
+                    "rent_rate": rent_rate,
+                    "revenue_all_time": float(revenue_all_time),
+                    "revenue_ytd": float(revenue_ytd),
+                    "debt": float(debt_converted),
+                    "currency": currency,
+                }
+            )
+            result.append(data)
+        return Response(result)
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
