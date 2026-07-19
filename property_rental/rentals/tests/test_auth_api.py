@@ -124,3 +124,28 @@ def test_register_rejects_weak_password(db):
     }, content_type="application/json")
     assert resp.status_code == 400
     assert "password" in resp.json()
+
+
+# --- CSRF cookie endpoint (Task 13) -----------------------------------------
+
+@pytest.mark.django_db
+def test_csrf_endpoint_sets_cookie(db):
+    """``GET /api/v1/auth/csrf/`` must stamp the ``csrftoken`` cookie.
+
+    Django's ``CsrfViewMiddleware`` only sets the cookie on HTML responses;
+    the SPA only receives JSON, so without this endpoint the SPA's first
+    mutation is rejected with 403. The ``@ensure_csrf_cookie`` decorator on
+    ``CsrfView`` forces the cookie onto the JSON response.
+    """
+    c = Client()
+    resp = c.get("/api/v1/auth/csrf/")
+    assert resp.status_code == 200
+    # The cookie must be present on the response.
+    assert "csrftoken" in resp.cookies, (
+        "CsrfView must set the csrftoken cookie via @ensure_csrf_cookie"
+    )
+    # And the cookie value must be non-empty (a blank value would not be
+    # usable as the X-CSRFToken header for subsequent mutations).
+    assert resp.cookies["csrftoken"].value, (
+        "csrftoken cookie value must be non-empty"
+    )

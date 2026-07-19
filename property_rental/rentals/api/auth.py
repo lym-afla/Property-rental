@@ -19,6 +19,8 @@ settings drive the same attributes the SPA fetch needs (``SameSite``,
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -129,3 +131,28 @@ class RegisterView(APIView):
         user.save()  # Phase 1: User.save() auto-creates a Landlord when is_landlord=True
         login(request, user)
         return Response({"user": UserSerializer(user).data}, status=status.HTTP_201_CREATED)
+
+
+class CsrfView(APIView):
+    """Set the ``csrftoken`` cookie so the SPA can make authenticated mutations.
+
+    Django's ``CsrfViewMiddleware`` only stamps the ``csrftoken`` cookie onto
+    responses that render a template (i.e. the legacy server-rendered pages).
+    The SPA consumes only JSON, so without this endpoint the browser never
+    receives a ``csrftoken`` cookie and the first ``POST`` (e.g. logout) is
+    rejected by CSRF with HTTP 403. The SPA's :class:`SessionProvider` calls
+    this endpoint on boot — fire-and-forget; the response body is irrelevant,
+    the ``Set-Cookie`` header is what matters.
+
+    ``authentication_classes = []`` + ``AllowAny`` so the cookie is issued
+    before the user has logged in (the cookie value is independent of the
+    session). The ``@ensure_csrf_cookie`` decorator is what actually forces
+    the middleware to set the cookie for a non-HTML response.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @method_decorator(ensure_csrf_cookie)
+    def get(self, request: Request) -> Response:
+        return Response({"detail": "CSRF cookie set"}, status=status.HTTP_200_OK)

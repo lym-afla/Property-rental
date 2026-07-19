@@ -1,6 +1,5 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -15,7 +14,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import models
 
-from .forms import CustomUserCreationForm, PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm, TenantVacateForm
+from .forms import PropertyForm, TenantForm, TransactionForm, UserProfileForm, UserSettingsForm, PropertyValuationForm, CustomPasswordChangeForm, TenantVacateForm
 from .models import Property, Landlord, Tenant, Transaction, Lease_rent, FX, Property_capital_structure
 from .utils import get_currency_symbol, get_category_name, get_effective_date, convert_period, chart_dates, chart_labels, calculate_from_date
 from .constants import INCOME_CATEGORIES
@@ -153,49 +152,14 @@ def index(request):
             'pnl': pnl,
         })
     else:
-        return redirect('rentals:login')
-
-# Register new user
-def register(request):
-
-    if request.method == 'POST':
-        form = CustomUserCreationForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('rentals:login')
-    else:
-        form = CustomUserCreationForm()
-
-    return render(request, 'rentals/register.html', {'form': form})
-
-# Login existing user
-def login_view(request):
-
-    if request.method == 'POST':
-        form = AuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-
-            # Store user-specific settings in the session
-            request.session['chart_settings'] = {
-                'frequency': user.chart_frequency,
-                'timeline': user.chart_timeline,
-                'To': str(get_effective_date(user)),
-            }
-            request.session['default_currency'] = user.default_currency
-            request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
-            request.session['digits'] = user.digits
-
-            return redirect('rentals:index')
-    else:
-        form = AuthenticationForm()
-
-    return render(request, 'rentals/login.html', {'form': form})
+        # Task 13: the legacy ``/login/`` template route was deleted; the
+        # SPA catch-all (``SpaView``) now serves the shell at ``/login/``,
+        # and React Router renders the LoginPage client-side.
+        return redirect('/login/')
 
 def logout_view(request):
     logout(request)
-    return redirect('rentals:login')
+    return redirect('rentals:index')
 
 @login_required
 def profile_page(request):

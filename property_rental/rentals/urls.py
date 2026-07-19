@@ -11,8 +11,6 @@ urlpatterns = [
     # ``rentals.api.urls`` to keep the API surface self-contained.
     path('api/v1/', include('rentals.api.urls')),
     path('', views.index, name='index'),
-    path('register/', views.register, name='register'),
-    path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('properties/', views.properties, name='properties'),
     path('tenants/', views.tenants, name='tenants'),

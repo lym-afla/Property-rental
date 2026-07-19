@@ -23,7 +23,7 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .auth import LoginView, LogoutView, MeView, RegisterView
+from .auth import CsrfView, LoginView, LogoutView, MeView, RegisterView
 from .views import (
     ChartDataView,
     FXViewSet,
@@ -50,6 +50,10 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view()),
     path("auth/me/", MeView.as_view()),
     path("auth/register/", RegisterView.as_view()),
+    # Task 13: stamps the ``csrftoken`` cookie on a GET so the SPA can
+    # issue authenticated mutations (logout, etc.). The SPA's
+    # SessionProvider hits this once on app boot.
+    path("auth/csrf/", CsrfView.as_view()),
     path("chart-data/", ChartDataView.as_view()),
 ]
 urlpatterns += router.urls

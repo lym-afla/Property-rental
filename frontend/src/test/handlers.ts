@@ -5,6 +5,12 @@ import { fixtureUser } from '@/__fixtures__/user'
 // Default MSW handlers — auth endpoints only for now (Task 10).
 // Extended per test via `server.use(...)` in Tasks 11 and 12.
 const defaultHandlers = [
+  // Task 13: SPA calls this on boot via SessionProvider to prime the
+  // csrftoken cookie. Default to a 200 so the request doesn't show up as
+  // an unhandled MSW warning in every test.
+  http.get('/api/v1/auth/csrf/', () =>
+    HttpResponse.json({ detail: 'CSRF cookie set' }),
+  ),
   http.get('/api/v1/auth/me/', () => HttpResponse.json({ user: fixtureUser })),
   http.post('/api/v1/auth/login/', async ({ request }) => {
     const body = (await request.json()) as { username: string; password: string }
