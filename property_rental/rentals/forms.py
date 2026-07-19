@@ -7,29 +7,6 @@ from .models import User, Property, Tenant, Transaction, Property_capital_struct
 from .constants import CURRENCY_CHOICES
 from .utils import get_effective_date
 
-class CustomUserCreationForm(UserCreationForm):
-    email = forms.EmailField(required=True)
-    # user_type = forms.ChoiceField(choices=[("landlord", "Landlord"), ("tenant", "Tenant")])
-
-    class Meta:
-        model = User
-        fields = ('username', 'email', 'password1', 'password2')
-
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.email = self.cleaned_data["email"]
-
-        # user_type = self.cleaned_data.get("user_type")
-        user_type = 'landlord'
-        if user_type == 'landlord':
-            user.is_landlord = True
-        elif user_type == 'tenant':
-            user.is_tenant = True
-
-        if commit:
-            user.save()
-        return user
-        
 class UserProfileForm(forms.ModelForm):
     class Meta:
         model = User
