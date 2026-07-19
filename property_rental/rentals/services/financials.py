@@ -89,10 +89,11 @@ from django.db.models import Sum
 #     (``property.currency == target_currency`` rather than per-row
 #     ``transaction.currency == target_currency``) so consolidating it
 #     is NOT a mechanical change. Left for a later task.
-#   * ``pnl_calc`` (views.py) — also UNCHANGED here; ``pnl_calc`` has
-#     the additional ``default_currency_for_all_data`` gate that
-#     switches between ``aggregate(Sum)`` and the FX loop, so it is
-#     moved verbatim rather than consolidated.
+#   * ``pnl_calc`` (views.py) — consolidated in Task 3 (2026-07-19) into
+#     ``convert_transactions`` calls (the two per-category FX loops under
+#     the ``default_currency_for_all_data=True`` branch). The gate itself
+#     is preserved: when ``default_currency_for_all_data`` is False the
+#     ``aggregate(Sum)`` path still runs unchanged (no FX).
 #
 # The contract: given an iterable of objects with ``.amount``, ``.currency``
 # and ``.date`` attributes, return the sum of (amount converted to
@@ -207,15 +208,14 @@ def aggregate(cls, end_date, target_currency=None, properties=None,
 #
 # Moved verbatim from ``rentals/views.py`` (Task 8-era signature with the
 # ``as_of`` kwarg). The two inline FX loops (YTD and all-time windows
-# under the ``default_currency_for_all_data`` branch) are NOT consolidated
-# into ``convert_transactions`` in this task: the surrounding code reads
-# ``queryset.values('date', 'currency', 'amount')`` and the loop body
-# accumulates into a per-category variable that feeds the mixed-type
-# contract pinned by ``test_pnl_calc_portfolio``. Consolidating would
-# require dropping the ``.values()`` projection and changing the
-# accumulation style — that is a behavior-risking change, not a
-# mechanical one, so the loops are moved verbatim. A later task can
-# consolidate once the per-category mixed-type bug is resolved.
+# under the ``default_currency_for_all_data`` branch) WERE consolidated
+# into ``convert_transactions`` calls in Task 3 (2026-07-19). The mixed-
+# type contract pinned by ``test_pnl_calc_portfolio`` is preserved:
+# per-category values are still ``float`` (via ``round(float(...),
+# digits)``) and the ``total`` sub-dict still accumulates raw ``Decimal``
+# (``convert_transactions`` returns ``Decimal`` for non-empty iterables,
+# ``int 0`` for empty ones — matching the old ``cf_ytd = 0``
+# initializer).
 def pnl_calc(properties, target_currency, default_currency_for_all_data,
              digits, as_of=None):
     """Calculate P&L for given properties.
@@ -224,11 +224,12 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
     pass ``as_of`` explicitly (Task 8 removed the module-global
     ``effective_current_date`` the function used to read).
     """
-    # ``Transaction``, ``FX``, ``get_category_name`` are imported lazily
-    # to avoid a module-load circular import (models imports constants
-    # that utils also imports; views imports models; this service is
-    # imported by both).
-    from rentals.models import FX, Transaction
+    # ``Transaction``, ``get_category_name`` are imported lazily to avoid a
+    # module-load circular import (models imports constants that utils also
+    # imports; views imports models; this service is imported by both).
+    # ``FX`` is no longer referenced here as of Task 3 (the inline FX loops
+    # were consolidated into ``convert_transactions`` -> ``services.fx``).
+    from rentals.models import Transaction
     from rentals.utils import get_category_name
 
     # ``as_of`` is the per-user effective date that drives YTD/all-time
@@ -281,29 +282,27 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
                 queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0
             )
         else:
-            queryset_ytd = queryset_ytd.values(
-                'date', 'currency', 'amount'
-            ).all()
-            cf_ytd = 0
-            for transaction in queryset_ytd:
-                fx_rate = FX.get_rate(
-                    transaction['currency'],
-                    target_currency,
-                    transaction['date'],
-                )['FX']
-                cf_ytd += transaction['amount'] * fx_rate
-
-            queryset_all_time = queryset_all_time.values(
-                'date', 'currency', 'amount'
-            ).all()
-            cf_all_time = 0
-            for transaction in queryset_all_time:
-                fx_rate = FX.get_rate(
-                    transaction['currency'],
-                    target_currency,
-                    transaction['date'],
-                )['FX']
-                cf_all_time += transaction['amount'] * fx_rate
+            # Inline FX loops consolidated into ``convert_transactions``
+            # (Plan B Task 3, 2026-07-19). The old body iterated
+            # ``queryset.values('date', 'currency', 'amount')`` dicts and
+            # accumulated ``transaction['amount'] * FX.get_rate(...)['FX']``;
+            # ``convert_transactions`` reads the same fields as model
+            # attributes and applies the identical per-row conversion via
+            # ``services.fx.convert`` (which short-circuits to ``amount``
+            # when the currencies match, identical to the loop's first hop).
+            #
+            # Mixed-types pin (NOT a bug to fix): ``convert_transactions``
+            # returns a ``Decimal`` (or ``int`` 0 for an empty iterable,
+            # matching the old ``cf_ytd = 0`` initializer). The
+            # per-category values are still cast to ``float`` via the
+            # ``round(float(cf_ytd), digits)`` assignment below; the
+            # ``total`` sub-dict still accumulates the raw ``Decimal``.
+            cf_ytd = convert_transactions(
+                queryset_ytd.all(), target_currency, as_of
+            )
+            cf_all_time = convert_transactions(
+                queryset_all_time.all(), target_currency, as_of
+            )
 
         if category == 'rent':
             rent_ytd = cf_ytd
