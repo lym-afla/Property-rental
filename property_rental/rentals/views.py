@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse, HttpResponseNotAllowed
+from django.views.generic import TemplateView
 import json
 from rest_framework import serializers
 from datetime import date
@@ -998,3 +999,21 @@ def chrome_devtools_config(request):
 def well_known_handler(request, path):
     """Handle .well-known requests to prevent 404 errors in logs"""
     return HttpResponse("", status=204)  # No Content
+
+
+# Task 6: SPA catch-all.
+#
+# Serves ``spa_index.html`` (the React shell rendered through django-vite)
+# for any URL not claimed by the API, admin, or template-rendered routes
+# wired earlier in ``rentals/urls.py``. The React Router handles client-
+# side routing; we deliberately do NOT enforce auth here — protected
+# pages get a 401 from the API on first fetch and the SPA redirects.
+class SpaView(TemplateView):
+    """Serves the built React SPA. Falls through to index.html for client-side routing."""
+
+    template_name = 'spa_index.html'
+
+    def get(self, request, *args, **kwargs):
+        # Optionally check auth here for protected routes — but the SPA
+        # handles that client-side via API 401s.
+        return super().get(request, *args, **kwargs)

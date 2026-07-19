@@ -1,5 +1,6 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 from .import views
+from .views import SpaView
 
 app_name = 'rentals' # Optional, but useful for namespacing
 
@@ -19,7 +20,7 @@ urlpatterns = [
     path('profile/', views.profile_page, name='profile_page'),
     path('edit-profile/', views.edit_profile, name='edit_profile'),
     path('fx/', views.fx_list, name='fx_list'),
-    
+
     # API methods
     path('table-data/<str:data_type>', views.table_data, name='table_data'),
     # path('properties/table-data', views.get_properties, name='get_properties'), # TO BE DELETED
@@ -32,8 +33,25 @@ urlpatterns = [
     path('get_chart_data', views.chart_data_request, name='chart_data_request'),
     path('properties/valuation/<int:property_id>', views.property_valuation, name='property_valuation'),
     path('update-fx/', views.update_fx_view, name='update_fx'),
-    
+
     # Handle Chrome DevTools and well-known requests
     path('.well-known/appspecific/com.chrome.devtools.json', views.chrome_devtools_config, name='chrome_devtools'),
     path('.well-known/<path:path>', views.well_known_handler, name='well_known'),
+]
+
+# Task 6: SPA catch-all (MUST be appended LAST).
+#
+# Django matches ``urlpatterns`` in order, so every route above (the
+# /api/v1/ include, /admin/ mounted in property_rental/urls.py, /static/
+# served by django.contrib.staticfiles, plus the template-rendered pages
+# like /login/, /register/, /properties/) takes precedence. Only paths no
+# other route claimed fall through to ``SpaView`` so React Router can
+# resolve them client-side.
+#
+# The ``re_path`` matches any multi-segment path ending in ``/``; the
+# bare ``path('')`` covers the root. Together they implement a true
+# catch-all without shadowing the API/admin/static routes above.
+urlpatterns += [
+    path('', SpaView.as_view()),
+    re_path(r'^.*/$', SpaView.as_view()),
 ]

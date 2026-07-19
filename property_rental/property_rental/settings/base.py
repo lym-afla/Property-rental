@@ -16,12 +16,21 @@ import os
 # three levels to reach the project root (the dir containing manage.py).
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Task 6: frontend dist path (only present after `npm run build`). Used
+# in TEMPLATES.DIRS below so a fresh clone — where the SPA hasn't been
+# built yet — doesn't break Django startup.
+FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
+
 
 # Application definition
-
+#
+# Task 6: ``django_vite`` MUST come before ``django.contrib.staticfiles``
+# so its template tags load correctly. It provides the ``vite_hmr_client``
+# and ``vite_asset`` tags used by ``spa_index.html``.
 INSTALLED_APPS = [
     'rentals',
     'rest_framework',
+    'django_vite',
 
     'django.contrib.admin',
     'django.contrib.auth',
@@ -47,7 +56,11 @@ ROOT_URLCONF = 'property_rental.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Task 6: include ``frontend/dist`` (Vite's default build output)
+        # if it exists, so a built SPA can be served directly from the
+        # filesystem. Falls back to an empty list on a fresh clone —
+        # django-vite + APP_DIRS handles the rest.
+        'DIRS': [str(FRONTEND_DIST)] if FRONTEND_DIST.exists() else [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -130,4 +143,36 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+}
+
+
+# django-vite (Task 6)
+#
+# django-vite generates <script>/<link> tags for the React bundle. In dev
+# it points at the Vite dev server (:5173); in prod it reads the manifest
+# written by `vite build` (outDir = rentals/static/frontend, see
+# frontend/vite.config.ts). ``dev_mode`` is overridden per-environment
+# below — defaults here match prod (manifest-driven) so a misconfigured
+# env fails closed rather than silently calling the dev server.
+#
+# - ``static_url_prefix='frontend'`` matches the Vite ``base`` of
+#   ``/static/frontend/``. django-vite joins this prefix onto STATIC_URL
+#   when building both dev URLs (``http://127.0.0.1:5173/static/frontend/
+#   src/main.tsx`` — Vite serves it because base matches) and prod URLs
+#   (``/static/frontend/assets/index-<hash>.js`` — Django staticfiles
+#   serves it from ``rentals/static/frontend/``).
+# - ``manifest_path`` points at the file written by ``vite build``
+#   (``manifest: 'manifest.json'`` inside outDir). Without this,
+#   django-vite looks in STATIC_ROOT which we don't populate during local
+#   dev/test.
+DJANGO_VITE = {
+    "default": {
+        # overridden to True in dev.py
+        "dev_mode": False,
+        "dev_server_protocol": "http",
+        "dev_server_host": "127.0.0.1",
+        "dev_server_port": 5173,
+        "manifest_path": str(BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"),
+        "static_url_prefix": "frontend",
+    },
 }
