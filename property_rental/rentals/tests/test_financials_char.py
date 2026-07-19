@@ -215,12 +215,17 @@ def test_tenant_rent_total_cross_currency(db):
         start_date=sc["tenant"].lease_start,
         target_currency="USD",
     )
-    # Two GBP 100 rent payments on a GBP property, summed to USD. The
-    # current FX.get_rate('GBP', 'USD', date) returns 0.8 (the inverse of
-    # the stored GBPUSD=1.25 — ``round(1 / 1.25, 6)`` at the tail of
-    # get_rate). 100.00 * 0.800000 * 2 = 160.00000000 (the 8 decimals
-    # come from amount(2dp) * rate(6dp)).
-    EXPECTED = Decimal("160.00000000")
+    # Two GBP 100 rent payments on a GBP property, summed to USD. With the
+    # FX inversion bug fixed (Plan B Task 1, 2026-07-19),
+    # FX.get_rate('GBP', 'USD', date) now returns the stored GBPUSD=1.25
+    # (the hop is source-first, so it multiplies; previously the tail
+    # inversion ``round(1/1.25, 6)`` returned 0.800000). So
+    # 100.00 * 1.2500000000 * 2 = 250.000000000000 (the 12 decimals come
+    # from amount(2dp) * rate(10dp) summed across 2 rows).
+    # Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    # Previous value was Decimal('160.00000000') — based on the reciprocal
+    # rate 0.800000.
+    EXPECTED = Decimal("250.000000000000")
     assert actual == EXPECTED
 
 

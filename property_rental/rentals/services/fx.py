@@ -9,11 +9,12 @@ deleted (the cache key is the ``as_of`` date).
 
 Public surface (the bits ``FX`` model and callers reach for):
 
-* ``get_rate(from_currency, to_currency, as_of)`` — moved verbatim from
-  ``FX.get_rate`` (Bellman-Ford shortest-path traversal, the tail
-  inversion quirk, and the dict return shape are all preserved).
+* ``get_rate(from_currency, to_currency, as_of)`` — moved from
+  ``FX.get_rate`` (Bellman-Ford shortest-path traversal and the dict
+  return shape are preserved; the unconditional tail inversion that
+  lived there in Phase 1 was REMOVED in Plan B Task 1, 2026-07-19).
   Characterization tests in ``test_fx_char.py`` /
-  ``test_fx_migration.py`` pin these values byte-for-byte.
+  ``test_fx_migration.py`` pin the now-correct values.
 * ``convert(amount, from_currency, to_currency, as_of)`` — convenience
   wrapper that returns the input unchanged when the currencies match
   and otherwise multiplies by ``get_rate(...)['FX']``.
@@ -28,13 +29,14 @@ Public surface (the bits ``FX`` model and callers reach for):
 Behavior preservation
 ---------------------
 The body of ``get_rate`` below is the body of the old
-``FX.get_rate`` (Task 9 long-schema version) with ONE change: the
-inline ``nx.Graph()`` build loop is replaced by ``_get_graph(as_of)``.
-The Bellman-Ford traversal, the per-hop ``date__lte`` rate lookup, the
-multiplication / division per row direction, the unconditional tail
-inversion (``round(1 / fx_rate, 6)``), and the dict return shape are
-all preserved verbatim. Do not "improve" any of them —
-``test_fx_char.py`` and ``test_fx_migration.py`` will flag a change.
+``FX.get_rate`` (Task 9 long-schema version) with TWO changes: the
+inline ``nx.Graph()`` build loop is replaced by ``_get_graph(as_of)``,
+and the tail inversion (``fx_rate = round(1 / fx_rate, 6)``) was
+REMOVED in Plan B Task 1 (2026-07-19). The Bellman-Ford traversal, the
+per-hop ``date__lte`` rate lookup, the multiplication / division per
+row direction, and the dict return shape are preserved verbatim. Do
+not "improve" any of them — ``test_fx_char.py`` and
+``test_fx_migration.py`` will flag a change.
 """
 
 import networkx as nx
@@ -117,12 +119,20 @@ def get_rate(from_currency, to_currency, as_of):
     """Resolve an FX rate between two currencies as of ``as_of``.
 
     Body moved VERBATIM from ``FX.get_rate`` (Task 9 long-schema
-    version). The only change is the graph build: the old method built
-    ``nx.Graph()`` inline; this service function calls
-    ``_get_graph(as_of)`` to hit the cache. The Bellman-Ford traversal,
-    per-hop rate lookup, multiplication / division logic, the
-    unconditional tail inversion, and the dict return shape are
-    unchanged.
+    version) with TWO deliberate changes:
+
+    1. The graph build: the old method built ``nx.Graph()`` inline;
+       this service function calls ``_get_graph(as_of)`` to hit the
+       cache.
+    2. The tail inversion (``fx_rate = round(1 / fx_rate, 6)``) was
+       REMOVED in Plan B Task 1 (2026-07-19). It was a latent bug that
+       unconditionally returned the reciprocal of the accumulated path
+       rate. The double-cancel in the chart math hid it in production,
+       but the new Currency Exposure chart (Plan C) would have exposed
+       it, and the reciprocal is just wrong.
+
+    The Bellman-Ford traversal, per-hop rate lookup, multiply / divide
+    logic, and the dict return shape are otherwise unchanged.
 
     Pinned by ``test_fx_char.py`` and ``test_fx_migration.py`` — any
     drift in the output will fail those tests.
@@ -194,13 +204,11 @@ def get_rate(from_currency, to_currency, as_of):
         dates_list.append(fx_call.date)
         dates_async = (dates_list[0] != fx_call.date) or dates_async
 
-    # Final result adjustment: multiply to get the final FX rate.
-    # PRESERVED QUIRK: this tail inversion is unconditional and is
-    # what ``test_fx_char.py`` pins (e.g. stored EURUSD=1.10 returns
-    # 0.909091 here). Do NOT remove without updating the
-    # characterization tests.
-    fx_rate = round(1 / fx_rate, 6)
-
+    # FX inversion bug fixed 2026-07-19: was ``fx_rate = round(1 / fx_rate, 6)``
+    # here, which UNCONDITIONALLY inverted every rate (stored EURUSD=1.10 was
+    # returned as 0.909091). The bug was hidden in production because the chart
+    # math used the rate twice (canceling the inversion), but the new Currency
+    # Exposure chart (Plan C) would have surfaced it. Removed in Plan B Task 1.
     return {
         'FX': fx_rate,
         'conversions': len(cross_currency) - 1,

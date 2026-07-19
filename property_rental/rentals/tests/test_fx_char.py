@@ -18,21 +18,20 @@ Approach (golden master): build a tiny deterministic FX dataset, call
 code returns. Expected values were captured by running the test with
 placeholders and reading the assertion-failure output.
 
-PINNED QUIRK — the tail inversion
----------------------------------
-The last line of ``get_rate`` is ``fx_rate = round(1 / fx_rate, 6)``. It
-UNCONDITIONALLY inverts whatever ``fx_rate`` was accumulated to. So:
+PINNED QUIRK — the tail inversion (FIXED in Plan B Task 1)
+----------------------------------------------------------
+The last line of ``get_rate`` used to be ``fx_rate = round(1 / fx_rate, 6)``.
+It UNCONDITIONALLY inverted whatever ``fx_rate`` was accumulated to. So:
 
-* Stored ``EURUSD = 1.10`` → ``get_rate('EUR', 'USD', _)['FX']`` returns
-  ``0.909091`` (the reciprocal), not ``1.100000``.
-* Stored ``EURUSD = 1.10`` → ``get_rate('USD', 'EUR', _)['FX']`` returns
-  ``1.100000`` (because the hop divides by 1.10, and the tail inverts
-  back).
+* Stored ``EURUSD = 1.10`` → ``get_rate('EUR', 'USD', _)['FX']`` returned
+  ``0.909091`` (the reciprocal), not ``1.10``.
+* Stored ``EURUSD = 1.10`` → ``get_rate('USD', 'EUR', _)['FX']`` returned
+  ``1.100000`` (because the hop divided by 1.10, and the tail inverted back).
 
-This is a latent bug: the function effectively swaps "direct" and
-"reverse" semantics. We PIN IT VERBATIM here — do not "fix" it in this
-test. Task 9 will decide whether to preserve or correct the behavior;
-until then this characterization is the safety net.
+Plan B Task 1 (2026-07-19) removed the tail inversion. The values below
+were re-pinned to the now-correct outputs. Previous values were
+reciprocals due to the ``round(1 / fx_rate, 6)`` bug. Golden values
+updated 2026-07-19 for FX inversion fix (Plan B Task 1).
 """
 
 from datetime import date
@@ -91,10 +90,14 @@ def build_fx_graph():
 def test_get_rate_direct(db):
     as_of = build_fx_graph()
     result = FX.get_rate("EUR", "USD", as_of)
-    # PINNED QUIRK: stored EUR->USD=1.10, but get_rate returns the
-    # reciprocal (round(1/1.10, 6) = 0.909091) because of the tail
-    # inversion. See module docstring.
-    assert result["FX"] == Decimal("0.909091")
+    # Stored EUR->USD=1.10, hop is source-first (row stored as EUR->USD),
+    # so it multiplies: 1 * 1.10 = 1.10. The FX.rate DecimalField has
+    # decimal_places=10, so the stored value comes back as
+    # 1.1000000000 and the product is 1.1000000000.
+    # Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    # Previous value was Decimal('0.909091') — the reciprocal, pinned while
+    # the round(1/fx_rate, 6) tail inversion bug was still in get_rate.
+    assert result["FX"] == Decimal("1.1000000000")
     assert result["conversions"] == 1
 
 
@@ -105,10 +108,13 @@ def test_get_rate_direct(db):
 def test_get_rate_reverse(db):
     as_of = build_fx_graph()
     result = FX.get_rate("USD", "EUR", as_of)
-    # PINNED QUIRK: the hop computes 1 / 1.10, then the tail inversion
-    # flips it back to 1.100000. So the "reverse" pair actually returns
-    # the stored value. See module docstring.
-    assert result["FX"] == Decimal("1.100000")
+    # The hop is reverse of the stored row (row is EUR->USD, query is
+    # USD->EUR), so it divides: 1 / 1.10 = 0.9090909090909090909090909091
+    # (full Decimal precision since no round() is applied anymore).
+    # Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    # Previous value was Decimal('1.100000') — the hop divided by 1.10 and
+    # the round(1/fx_rate, 6) tail inversion bug flipped it back.
+    assert result["FX"] == Decimal("0.9090909090909090909090909091")
     assert result["conversions"] == 1
 
 
@@ -122,9 +128,12 @@ def test_get_rate_two_hop(db):
     # Path is EUR -> USD -> RUB. The EUR->USD hop is source-first (row
     # stored as EUR->USD), so it multiplies by 1.10. The USD->RUB hop is
     # also source-first (row stored as USD->RUB), so it multiplies by
-    # 90.00. 1 * 1.10 * 90.00 = 99.00. Tail inversion:
-    # round(1/99, 6) = 0.010101.
-    assert result["FX"] == Decimal("0.010101")
+    # 90.00. 1 * 1.10 * 90.00 = 99.00 (with DecimalField
+    # decimal_places=10 precision: 99.00000000000000000000).
+    # Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    # Previous value was Decimal('0.010101') — round(1/99, 6) from the tail
+    # inversion bug.
+    assert result["FX"] == Decimal("99.00000000000000000000")
     assert result["conversions"] == 2
 
 

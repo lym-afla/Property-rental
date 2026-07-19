@@ -14,10 +14,12 @@ What's pinned here:
   / ``date`` and does NOT expose the old per-pair columns (``EURUSD`` /
   ``GBPUSD`` / ``USDRUB``).
 * ``get_rate`` on the long schema returns the EXACT same values that
-  ``test_fx_char.py`` pinned on the wide schema — including the tail
-  inversion quirk. This re-asserts the same expected numbers as
-  ``test_fx_char.py`` but builds FX rows in the new shape, so a
-  regression here proves the migration drifted ``get_rate`` output.
+  ``test_fx_char.py`` pinned on the wide schema. This re-asserts the same
+  expected numbers as ``test_fx_char.py`` but builds FX rows in the new
+  shape, so a regression here proves the migration drifted ``get_rate``
+  output. (Golden values updated 2026-07-19 for FX inversion fix (Plan B
+  Task 1). Previous values were reciprocals due to the
+  ``round(1 / fx_rate, 6)`` bug.)
 """
 
 from datetime import date
@@ -89,31 +91,43 @@ def build_fx_graph_long():
 
 @pytest.mark.django_db
 def test_get_rate_direct_unchanged_after_migration():
-    """get_rate('EUR','USD') must return 0.909091 (the tail inversion of
-    the stored 1.10), identical to test_fx_char.test_get_rate_direct."""
+    """get_rate('EUR','USD') must return 1.10 (the stored rate, post-FX
+    inversion fix), identical to test_fx_char.test_get_rate_direct.
+
+    Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    Previous value was Decimal('0.909091') — the reciprocal, pinned while
+    the round(1/fx_rate, 6) tail inversion bug was still in get_rate."""
     as_of = build_fx_graph_long()
     result = FX.get_rate("EUR", "USD", as_of)
-    assert result["FX"] == Decimal("0.909091")
+    assert result["FX"] == Decimal("1.1000000000")
     assert result["conversions"] == 1
 
 
 @pytest.mark.django_db
 def test_get_rate_reverse_unchanged_after_migration():
-    """get_rate('USD','EUR') must return 1.100000 (tail inversion flips
-    the divide back to a multiply), identical to test_fx_char."""
+    """get_rate('USD','EUR') must return the reciprocal of the stored 1.10
+    (hop divides by 1.10, no tail inversion), identical to test_fx_char.
+
+    Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    Previous value was Decimal('1.100000') — the divide-by-1.10 result
+    flipped back by the tail inversion bug."""
     as_of = build_fx_graph_long()
     result = FX.get_rate("USD", "EUR", as_of)
-    assert result["FX"] == Decimal("1.100000")
+    assert result["FX"] == Decimal("0.9090909090909090909090909091")
     assert result["conversions"] == 1
 
 
 @pytest.mark.django_db
 def test_get_rate_two_hop_unchanged_after_migration():
-    """Two-hop EUR->RUB via USD must return 0.010101 (round(1/99, 6)),
-    identical to test_fx_char.test_get_rate_two_hop."""
+    """Two-hop EUR->RUB via USD must return 99.00 (1 * 1.10 * 90.00 with
+    DecimalField decimal_places=10 precision), identical to test_fx_char.
+
+    Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    Previous value was Decimal('0.010101') — round(1/99, 6) from the tail
+    inversion bug."""
     as_of = build_fx_graph_long()
     result = FX.get_rate("EUR", "RUB", as_of)
-    assert result["FX"] == Decimal("0.010101")
+    assert result["FX"] == Decimal("99.00000000000000000000")
     assert result["conversions"] == 2
 
 
@@ -131,10 +145,14 @@ def test_get_rate_no_path_unchanged_after_migration():
 
 @pytest.mark.django_db
 def test_get_rate_gbp_usd_matches_financials_char_pin():
-    """test_financials_char pins GBP->USD = 0.800000 on the wide schema
-    (stored GBPUSD=1.25, tail inversion round(1/1.25, 6) = 0.8). The long
+    """test_financials_char pins GBP->USD = 1.25 on the long schema (post
+    FX inversion fix, the stored rate is returned directly). The long
     schema must produce the same number so the financials golden master
-    stays byte-identical."""
+    stays byte-identical.
+
+    Golden values updated 2026-07-19 for FX inversion fix (Plan B Task 1).
+    Previous value was Decimal('0.800000') — round(1/1.25, 6) from the
+    tail inversion bug."""
     FX.objects.create(
         date=date(2024, 1, 1),
         from_currency="GBP",
@@ -142,4 +160,4 @@ def test_get_rate_gbp_usd_matches_financials_char_pin():
         rate=Decimal("1.25"),
     )
     result = FX.get_rate("GBP", "USD", date(2024, 2, 15))
-    assert result["FX"] == Decimal("0.800000")
+    assert result["FX"] == Decimal("1.2500000000")
