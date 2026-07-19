@@ -1,18 +1,24 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { SessionProvider } from '@/context/SessionProvider'
+import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { HomePage } from '@/pages/HomePage'
 
 function App() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <Card className="w-96">
-        <CardHeader>
-          <CardTitle>Property Rental SPA</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button>shadcn works</Button>
-        </CardContent>
-      </Card>
-    </div>
+    <SessionProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<HomePage />} />
+            </Route>
+          </Route>
+          {/* /login and /register added in Tasks 8 & 9 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </SessionProvider>
   )
 }
 
