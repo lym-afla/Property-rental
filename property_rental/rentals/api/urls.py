@@ -25,7 +25,14 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .auth import CsrfView, LoginView, LogoutView, MeView, RegisterView
+from .auth import (
+    ChangePasswordView,
+    CsrfView,
+    LoginView,
+    LogoutView,
+    MeView,
+    RegisterView,
+)
 from .views import (
     ChartDataView,
     FXViewSet,
@@ -53,6 +60,10 @@ urlpatterns = [
     path("auth/login/", LoginView.as_view()),
     path("auth/logout/", LogoutView.as_view()),
     path("auth/me/", MeView.as_view()),
+    # Task 8: change the current user's password. Wraps Django's
+    # PasswordChangeForm; body ``{old_password, new_password1,
+    # new_password2}`` → 200 on success or 400 with form errors.
+    path("auth/change-password/", ChangePasswordView.as_view()),
     path("auth/register/", RegisterView.as_view()),
     # Task 13: stamps the ``csrftoken`` cookie on a GET so the SPA can
     # issue authenticated mutations (logout, etc.). The SPA's

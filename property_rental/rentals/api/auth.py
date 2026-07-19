@@ -16,7 +16,8 @@ settings drive the same attributes the SPA fetch needs (``SameSite``,
 ``HttpOnly``, etc.).
 """
 
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.decorators import method_decorator
@@ -79,6 +80,56 @@ class MeView(APIView):
             {"user": UserSerializer(request.user).data},
             status=status.HTTP_200_OK,
         )
+
+    def patch(self, request: Request) -> Response:
+        """Partially update the current user's settings.
+
+        Accepts a partial payload of user fields (``default_currency``,
+        ``chart_frequency``, ``chart_timeline``, ``digits``,
+        ``use_default_currency_for_all_data``, etc.) and persists them.
+        Returns the updated serialized user under the ``user`` key, the
+        same shape as ``GET /me/``.
+        """
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"user": serializer.data}, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    """Change the current user's password (Task 8).
+
+    Wraps Django's :class:`~django.contrib.auth.forms.PasswordChangeForm`
+    so we get the standard validation (old password must match, new
+    password fields must agree, new password must pass Django's password
+    validators). Body shape ``{old_password, new_password1,
+    new_password2}`` mirrors the form's field names verbatim so the form
+    can be constructed from the request data directly.
+
+    ``update_session_auth_hash`` keeps the user's current session valid
+    after the password change (otherwise Django's auth model invalidates
+    the session when the password hash rotates). This is what allows the
+    SPA to keep working without a re-login after a successful change.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        form = PasswordChangeForm(
+            request.user,
+            data={
+                "old_password": request.data.get("old_password", ""),
+                "new_password1": request.data.get("new_password1", ""),
+                "new_password2": request.data.get("new_password2", ""),
+            },
+        )
+        if form.is_valid():
+            form.save()
+            update_session_auth_hash(request, request.user)
+            return Response(
+                {"detail": "Password changed"}, status=status.HTTP_200_OK
+            )
+        return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class RegisterView(APIView):

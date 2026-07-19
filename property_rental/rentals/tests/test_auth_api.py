@@ -149,3 +149,51 @@ def test_csrf_endpoint_sets_cookie(db):
     assert resp.cookies["csrftoken"].value, (
         "csrftoken cookie value must be non-empty"
     )
+
+
+# --- PATCH /me/ and change-password (Task 8) --------------------------------
+
+@pytest.mark.django_db
+def test_patch_me_updates_settings(db):
+    user = UserFactory(is_landlord=True, chart_frequency='M')
+    user.set_password("OldPass123!")
+    user.save()
+    c = Client()
+    c.force_login(user)
+    resp = c.patch("/api/v1/auth/me/", {"chart_frequency": "Q"}, content_type="application/json")
+    assert resp.status_code == 200
+    assert resp.json()["user"]["chart_frequency"] == "Q"
+    user.refresh_from_db()
+    assert user.chart_frequency == "Q"
+
+
+@pytest.mark.django_db
+def test_change_password_success(db):
+    user = UserFactory(is_landlord=True)
+    user.set_password("OldPass123!")
+    user.save()
+    c = Client()
+    c.force_login(user)
+    resp = c.post("/api/v1/auth/change-password/", {
+        "old_password": "OldPass123!",
+        "new_password1": "NewPass456!",
+        "new_password2": "NewPass456!",
+    }, content_type="application/json")
+    assert resp.status_code == 200
+    user.refresh_from_db()
+    assert user.check_password("NewPass456!")
+
+
+@pytest.mark.django_db
+def test_change_password_wrong_old_returns_400(db):
+    user = UserFactory(is_landlord=True)
+    user.set_password("OldPass123!")
+    user.save()
+    c = Client()
+    c.force_login(user)
+    resp = c.post("/api/v1/auth/change-password/", {
+        "old_password": "WrongPass!",
+        "new_password1": "NewPass456!",
+        "new_password2": "NewPass456!",
+    }, content_type="application/json")
+    assert resp.status_code == 400
