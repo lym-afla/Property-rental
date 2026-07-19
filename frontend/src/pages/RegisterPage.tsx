@@ -49,24 +49,24 @@ export function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-              {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
+              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              {errors.username && <p className="text-sm text-destructive" role="alert">{errors.username}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              {errors.email && <p className="text-sm text-destructive" role="alert">{errors.email}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
-              {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+              {errors.password && <p className="text-sm text-destructive" role="alert">{errors.password}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="passwordConfirm">Confirm password</Label>
               <Input id="passwordConfirm" type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} autoComplete="new-password" required />
             </div>
-            {errors.general && <p className="text-sm text-destructive">{errors.general}</p>}
+            {errors.general && <p className="text-sm text-destructive" role="alert">{errors.general}</p>}
             <Button type="submit" className="w-full" disabled={register.isPending}>
               {register.isPending ? 'Creating…' : 'Register'}
             </Button>
