@@ -17,6 +17,8 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 * ``/api/v1/tenants/...``                  — same shape
 * ``/api/v1/transactions/...``             — same shape
 * ``/api/v1/fx/...``                       — same shape
+* ``/api/v1/property-valuations/...``      — same shape (Task 5; retires
+  ``handle_element``'s ``data_type='propertyValuation'`` branch)
 * ``GET    /api/v1/chart-data/?type=&id=&freq=&start=&end=&currency=``
 """
 
@@ -27,6 +29,7 @@ from .auth import CsrfView, LoginView, LogoutView, MeView, RegisterView
 from .views import (
     ChartDataView,
     FXViewSet,
+    PropertyCapitalStructureViewSet,
     PropertyViewSet,
     TenantViewSet,
     TransactionViewSet,
@@ -41,6 +44,7 @@ router.register(r"properties", PropertyViewSet, basename="property")
 router.register(r"tenants", TenantViewSet, basename="tenant")
 router.register(r"transactions", TransactionViewSet, basename="transaction")
 router.register(r"fx", FXViewSet, basename="fx")
+router.register(r"property-valuations", PropertyCapitalStructureViewSet, basename="property-valuation")
 
 urlpatterns = [
     # Auth (Task 4 / Task 5) — session-cookie endpoints consumed by the

@@ -50,13 +50,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from rentals.models import FX, Landlord, Property, Tenant, Transaction
+from rentals.models import FX, Landlord, Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.charts import get_chart_data as _get_chart_data
 
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     ChartDataResponseSerializer,
     FXSerializer,
+    PropertyCapitalStructureSerializer,
     PropertySerializer,
     TenantSerializer,
     TransactionSerializer,
@@ -261,6 +262,55 @@ class FXViewSet(viewsets.ModelViewSet):
     serializer_class = FXSerializer
     permission_classes = [IsAuthenticated]
     queryset = FX.objects.all()
+
+
+class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
+    """CRUD for ``Property_capital_structure`` scoped via
+    ``property.owned_by.user`` (Task 5).
+
+    This is the last CRUD endpoint needed to retire the legacy
+    ``handle_element`` view's ``data_type='propertyValuation'`` branch.
+
+    * ``get_queryset`` — only capital-structure rows whose ``property`` is
+      owned by the requesting user.
+    * ``perform_create`` / ``perform_update`` — validate the
+      client-supplied ``property`` FK belongs to the requester before
+      save, preventing cross-landlord capital-structure injection (the
+      same IDOR class of bug the Tenant/Transaction ViewSets defend
+      against). The check uses ``request.data`` (the raw payload) so it
+      fires even before the serializer would resolve the FK.
+    """
+
+    serializer_class = PropertyCapitalStructureSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        return Property_capital_structure.objects.filter(
+            property__owned_by__user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        # Validate the property belongs to the requester before saving.
+        property_id = self.request.data.get('property')
+        if not Property.objects.filter(
+            id=property_id, owned_by__user=self.request.user
+        ).exists():
+            raise ValidationError(
+                {"property": "This property does not belong to you."}
+            )
+        serializer.save()
+
+    def perform_update(self, serializer):
+        # Same ownership check on the property FK if it's being changed.
+        property_id = self.request.data.get('property')
+        if property_id is not None:
+            if not Property.objects.filter(
+                id=property_id, owned_by__user=self.request.user
+            ).exists():
+                raise ValidationError(
+                    {"property": "This property does not belong to you."}
+                )
+        serializer.save()
 
 
 # ---------------------------------------------------------------------------

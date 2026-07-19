@@ -14,7 +14,14 @@ chart-data endpoint. Field lists match the real model fields in
 
 from rest_framework import serializers
 
-from rentals.models import FX, Property, Tenant, Transaction, User
+from rentals.models import (
+    FX,
+    Property,
+    Property_capital_structure,
+    Tenant,
+    Transaction,
+    User,
+)
 
 
 class PropertySerializer(serializers.ModelSerializer):
@@ -102,6 +109,26 @@ class FXSerializer(serializers.ModelSerializer):
             "from_currency",
             "to_currency",
             "rate",
+        ]
+
+
+class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
+    """Serializer for the ``Property_capital_structure`` model (Task 5).
+
+    Backs the ``/api/v1/property-valuations/`` ViewSet — the last CRUD
+    endpoint needed to retire the legacy ``handle_element`` view (which
+    currently handles ``data_type='propertyValuation'``). Field names
+    match the model definition in ``rentals/models.py`` (line ~123).
+    """
+
+    class Meta:
+        model = Property_capital_structure
+        fields = [
+            "id",
+            "property",
+            "capital_structure_date",
+            "capital_structure_value",
+            "capital_structure_debt",
         ]
 
 

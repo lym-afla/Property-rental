@@ -642,3 +642,45 @@ def test_property_create_rejects_non_landlord_with_403(db):
     assert resp.status_code == 403, resp.content
     from rentals.models import Property
     assert not Property.objects.filter(name="Should Not Be Created").exists()
+
+
+# ---------------------------------------------------------------------------
+# Task 5: /api/v1/property-valuations/ — last CRUD endpoint to retire
+# handle_element (the legacy view's ``data_type='propertyValuation'`` branch).
+# ---------------------------------------------------------------------------
+#
+# Same per-user-scoped ModelViewSet pattern as Phase 1 Task 17:
+# ``get_queryset`` filters by ``property__owned_by__user=request.user`` and
+# ``perform_create`` validates the client-supplied ``property`` FK belongs to
+# the requester before saving.
+
+
+@pytest.mark.django_db
+def test_property_valuation_list_requires_auth(db, client):
+    resp = client.get("/api/v1/property-valuations/")
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+def test_property_valuation_list_returns_only_own(auth_client, sample_property):
+    from rentals.tests.factories import PropertyCapitalStructureFactory
+    val = PropertyCapitalStructureFactory(property=sample_property)
+    resp = auth_client.get("/api/v1/property-valuations/")
+    assert resp.status_code == 200
+    assert any(v["id"] == val.id for v in resp.json())
+
+
+@pytest.mark.django_db
+def test_property_valuation_create_validates_property_ownership(auth_client, sample_property, other_landlord_user):
+    from django.test import Client
+    from rentals.tests.factories import PropertyFactory
+    other_prop = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_client = Client()
+    other_client.force_login(other_landlord_user)
+    resp = other_client.post("/api/v1/property-valuations/", {
+        "property": sample_property.id,
+        "capital_structure_date": "2024-01-01",
+        "capital_structure_value": "250000.00",
+        "capital_structure_debt": "150000.00",
+    }, content_type="application/json")
+    assert resp.status_code == 400  # property doesn't belong to requester
