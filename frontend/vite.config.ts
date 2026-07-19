@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -60,5 +61,13 @@ export default defineConfig({
     rollupOptions: {
       input: 'src/main.tsx',
     },
+  },
+  // Task 10: Vitest config. Vitest reads this `test` block automatically
+  // from vite.config.ts — no separate vitest.config.ts needed.
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
   },
 })
