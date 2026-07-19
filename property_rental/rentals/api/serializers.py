@@ -14,7 +14,7 @@ chart-data endpoint. Field lists match the real model fields in
 
 from rest_framework import serializers
 
-from rentals.models import FX, Property, Tenant, Transaction
+from rentals.models import FX, Property, Tenant, Transaction, User
 
 
 class PropertySerializer(serializers.ModelSerializer):
@@ -116,3 +116,33 @@ class ChartDataResponseSerializer(serializers.Serializer):
     labels = serializers.ListField(child=serializers.CharField(), required=False)
     datasets = serializers.ListField(child=serializers.DictField(), required=False)
     currency = serializers.CharField(required=False)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for the ``User`` model (Task 4 — auth endpoints).
+
+    Field list matches the real ``User`` model in ``rentals/models.py``
+    and the TypeScript ``User`` type in
+    ``frontend/src/types/user.ts``. The boolean toggle on the model is
+    named ``use_default_currency_for_all_data`` (the plan originally
+    mis-named it ``default_currency_for_all_data``); the corrected name
+    is used here.
+    """
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_landlord",
+            "is_tenant",
+            "effective_date",
+            "default_currency",
+            "use_default_currency_for_all_data",
+            "chart_frequency",
+            "chart_timeline",
+            "digits",
+        ]
