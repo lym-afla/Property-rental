@@ -23,7 +23,7 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .auth import LoginView, LogoutView, MeView
+from .auth import LoginView, LogoutView, MeView, RegisterView
 from .views import (
     ChartDataView,
     FXViewSet,
@@ -43,12 +43,13 @@ router.register(r"transactions", TransactionViewSet, basename="transaction")
 router.register(r"fx", FXViewSet, basename="fx")
 
 urlpatterns = [
-    # Auth (Task 4) — session-cookie endpoints consumed by the SPA's
-    # ``useAuth`` hook. Mounted flat (no router) because each is a
+    # Auth (Task 4 / Task 5) — session-cookie endpoints consumed by the
+    # SPA's ``useAuth`` hook. Mounted flat (no router) because each is a
     # single-verb APIView, not a ViewSet.
     path("auth/login/", LoginView.as_view()),
     path("auth/logout/", LogoutView.as_view()),
     path("auth/me/", MeView.as_view()),
+    path("auth/register/", RegisterView.as_view()),
     path("chart-data/", ChartDataView.as_view()),
 ]
 urlpatterns += router.urls

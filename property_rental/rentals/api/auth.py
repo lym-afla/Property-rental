@@ -17,12 +17,15 @@ settings drive the same attributes the SPA fetch needs (``SameSite``,
 """
 
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from rentals.models import User
 from .serializers import UserSerializer
 
 
@@ -74,3 +77,55 @@ class MeView(APIView):
             {"user": UserSerializer(request.user).data},
             status=status.HTTP_200_OK,
         )
+
+
+class RegisterView(APIView):
+    """Register a new user (Task 5).
+
+    Accepts ``{username, password, email}`` and creates a new ``User``
+    with ``is_landlord=True`` (the app's default — every registering
+    user is a landlord; Phase 1's ``User.save()`` then auto-creates the
+    matching ``Landlord`` row). On success the new user is logged in via
+    ``login()`` so the response carries a ``sessionid`` cookie, matching
+    the SPA's ``useAuth`` hook expectations.
+
+    ``authentication_classes = []`` + ``AllowAny`` so an anonymous
+    visitor can hit this endpoint. Validation errors are returned as
+    field-keyed lists (``{"username": [...], "password": [...]}``) so
+    the frontend can map them onto form fields.
+
+    Reuses the same patterns as ``LoginView``: no auth on the request,
+    manual field extraction, ``UserSerializer`` for the response shape.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request: Request) -> Response:
+        username = request.data.get("username")
+        password = request.data.get("password")
+        email = request.data.get("email", "")
+
+        errors: dict[str, list[str]] = {}
+
+        if not username:
+            errors.setdefault("username", []).append("This field is required.")
+        elif User.objects.filter(username=username).exists():
+            errors.setdefault("username", []).append("A user with this username already exists.")
+
+        if not password:
+            errors.setdefault("password", []).append("This field is required.")
+        else:
+            try:
+                validate_password(password)
+            except DjangoValidationError as e:
+                errors.setdefault("password", []).extend(e.messages)
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User(username=username, email=email, is_landlord=True)
+        user.set_password(password)
+        user.save()  # Phase 1: User.save() auto-creates a Landlord when is_landlord=True
+        login(request, user)
+        return Response({"user": UserSerializer(user).data}, status=status.HTTP_201_CREATED)

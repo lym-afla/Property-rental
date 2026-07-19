@@ -79,3 +79,48 @@ def test_logout_clears_session(db):
     # Subsequent /me should 401
     resp2 = c.get("/api/v1/auth/me/")
     assert resp2.status_code in (401, 403)
+
+
+# --- Register endpoint (Task 5) ---------------------------------------------
+
+@pytest.mark.django_db
+def test_register_creates_user_and_logs_in(db):
+    c = Client()
+    resp = c.post("/api/v1/auth/register/", {
+        "username": "newlandlord",
+        "password": "StrongPass123!",
+        "email": "new@example.com",
+    }, content_type="application/json")
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["user"]["username"] == "newlandlord"
+    # Session cookie set (auto-login)
+    assert "sessionid" in resp.cookies
+    # Landlord auto-created (Phase 1 behavior: User.save() creates Landlord when is_landlord=True)
+    # Registration should set is_landlord=True by default
+    from rentals.models import User
+    u = User.objects.get(username="newlandlord")
+    assert u.is_landlord is True
+
+@pytest.mark.django_db
+def test_register_rejects_duplicate_username(db):
+    UserFactory(username="taken")
+    c = Client()
+    resp = c.post("/api/v1/auth/register/", {
+        "username": "taken",
+        "password": "StrongPass123!",
+        "email": "x@example.com",
+    }, content_type="application/json")
+    assert resp.status_code == 400
+    assert "username" in resp.json()
+
+@pytest.mark.django_db
+def test_register_rejects_weak_password(db):
+    c = Client()
+    resp = c.post("/api/v1/auth/register/", {
+        "username": "newlandlord",
+        "password": "1",  # fails validators
+        "email": "new@example.com",
+    }, content_type="application/json")
+    assert resp.status_code == 400
+    assert "password" in resp.json()
