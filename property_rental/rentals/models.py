@@ -181,14 +181,28 @@ class Tenant(models.Model):
 
         transactions = transactions.filter(date__range=(start_date, end_date))
 
+        # Same-currency short-circuit: when no target currency is requested or
+        # it matches the property's currency, sum at face value via SQL
+        # ``aggregate(Sum)``. Pinned by
+        # ``test_tenant_rent_total_same_currency`` — DO NOT collapse this into
+        # ``convert_transactions`` (which has a per-row short-circuit on
+        # ``transaction.currency == target_currency``; the rent_total contract
+        # is property-level, not per-row, and the silent fallback to face value
+        # is a known latent quirk deliberately preserved here).
         if target_currency == None or property.currency == target_currency:
             total_rent = transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
         else:
-            transactions = transactions.values('date', 'currency', 'amount').all()
-            total_rent = 0
-            for transaction in transactions:
-                fx_rate = FX.get_rate(transaction['currency'], target_currency, transaction['date'])['FX']
-                total_rent += transaction['amount'] * fx_rate
+            # Cross-currency path: delegate the FX loop to the canonical
+            # ``services.financials.convert_transactions`` helper (Phase 1
+            # Task 11). Pre-filtering (date range, category, tenant) stays
+            # here; only the FX math is delegated. The helper iterates model
+            # instances reading ``.amount`` / ``.currency`` / ``.date``
+            # directly (no ``.values()`` projection needed) and multiplies
+            # each row by ``services.fx.get_rate(...)['FX']`` when the row
+            # currency differs from ``target_currency`` — identical
+            # arithmetic to the inline loop it replaces.
+            from rentals.services.financials import convert_transactions
+            total_rent = convert_transactions(transactions.all(), target_currency, end_date)
 
         return total_rent
     
