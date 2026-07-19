@@ -684,3 +684,87 @@ def test_property_valuation_create_validates_property_ownership(auth_client, sam
         "capital_structure_debt": "150000.00",
     }, content_type="application/json")
     assert resp.status_code == 400  # property doesn't belong to requester
+
+
+# ---------------------------------------------------------------------------
+# Task 7: @action endpoints — tenant vacate + FX update
+# ---------------------------------------------------------------------------
+#
+# Two ``@action`` endpoints wiring the last behavioral mutations the
+# React SPA needs into ``/api/v1/``:
+#
+# * ``POST /api/v1/tenants/<id>/vacate/`` — sets ``lease_end`` on a tenant
+#   via the ViewSet's ``get_object()`` so ownership scoping applies (an
+#   out-of-scope PK is 404, never 403 — same enumeration defense as the
+#   rest of the API).
+# * ``POST /api/v1/fx/update/`` — wraps ``services.fx.update_rates`` (which
+#   itself wraps yfinance). The endpoint loops over the requester's own
+#   properties (mirroring the legacy ``update_fx_view`` semantics). The
+#   service is mocked in the test — no network calls.
+
+
+@pytest.mark.django_db
+def test_vacate_tenant_sets_lease_end(auth_client, sample_property):
+    """POST /tenants/<id>/vacate/ with ``{lease_end}`` -> 200, tenant's
+    ``lease_end`` is persisted.
+
+    The vacate action is a thin mutation that delegates ownership scoping
+    to ``self.get_object()`` — the same scoped ``get_queryset`` that LIST
+    and RETRIEVE use — so the same per-user isolation applies (the second
+    test pins the cross-landlord 404 path).
+    """
+    from rentals.tests.factories import TenantFactory
+    from rentals.models import Tenant
+    tenant = TenantFactory(property=sample_property)
+    resp = auth_client.post(
+        f"/api/v1/tenants/{tenant.id}/vacate/",
+        {"lease_end": "2024-12-31"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    tenant.refresh_from_db()
+    assert str(tenant.lease_end) == "2024-12-31"
+
+
+@pytest.mark.django_db
+def test_vacate_tenant_other_landlord_404(
+    auth_client, sample_property, other_landlord_user
+):
+    """POST /tenants/<other_pk>/vacate/ -> 404 (not 403, not 200).
+
+    Because ``vacate`` resolves the tenant via ``self.get_object()`` (which
+    uses the per-user scoped queryset), a tenant owned by another landlord
+    simply does not exist from this caller's perspective. No enumeration
+    channel.
+    """
+    from rentals.tests.factories import TenantFactory, PropertyFactory
+    other_prop = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_prop)
+    resp = auth_client.post(
+        f"/api/v1/tenants/{other_tenant.id}/vacate/",
+        {"lease_end": "2024-12-31"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_fx_update_endpoint(auth_client, sample_property):
+    """POST /fx/update/ -> 200 ``{detail: "FX rates updated"}`` and
+    ``services.fx.update_rates`` was invoked (mocked — no network).
+
+    The endpoint wraps ``services.fx.update_rates`` for each of the
+    requester's properties (mirroring the legacy ``update_fx_view``).
+    Asserting the service was called rather than asserting a specific
+    property_id keeps the test decoupled from the iteration order.
+
+    Note: ``sample_property`` is needed because the real
+    ``update_rates`` signature takes a ``property_id`` (not a user), so
+    the endpoint loops the caller's properties — with no properties the
+    loop body would not run and the service would never be called.
+    """
+    from unittest.mock import patch
+    with patch("rentals.services.fx.update_rates") as mock_update:
+        resp = auth_client.post("/api/v1/fx/update/")
+        assert resp.status_code == 200
+        assert mock_update.called

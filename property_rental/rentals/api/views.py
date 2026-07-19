@@ -387,6 +387,29 @@ class TenantViewSet(viewsets.ModelViewSet):
             result.append(data)
         return Response(result)
 
+    @action(detail=True, methods=["post"])
+    def vacate(self, request, pk=None):
+        """POST /api/v1/tenants/<id>/vacate/ body ``{lease_end}`` -> 200
+        serialized tenant.
+
+        Sets ``lease_end`` on a tenant. Ownership is enforced by
+        :meth:`get_object`, which uses the same per-user scoped queryset
+        as LIST / RETRIEVE — so a tenant owned by another landlord
+        resolves to a 404 (no enumeration channel), exactly mirroring the
+        rest of the API's isolation model. A missing ``lease_end`` is a
+        400 field-level error.
+        """
+        tenant = self.get_object()  # ownership-scoped (404 on mismatch)
+        lease_end = request.data.get("lease_end")
+        if not lease_end:
+            return Response(
+                {"lease_end": "This field is required."},
+                status=400,
+            )
+        tenant.lease_end = lease_end
+        tenant.save()
+        return Response(TenantSerializer(tenant).data, status=200)
+
 
 class TransactionViewSet(viewsets.ModelViewSet):
     """CRUD for Transaction scoped via ``property.owned_by.user``.
@@ -467,6 +490,31 @@ class FXViewSet(viewsets.ModelViewSet):
     serializer_class = FXSerializer
     permission_classes = [IsAuthenticated]
     queryset = FX.objects.all()
+
+    @action(detail=False, methods=["post"], url_path="update")
+    def update_rates(self, request):
+        """POST /api/v1/fx/update/ -> 200 ``{detail: "FX rates updated"}``.
+
+        Wraps :func:`rentals.services.fx.update_rates` (which itself
+        wraps the yfinance fetch). ``services.fx.update_rates`` takes a
+        single ``property_id`` (NOT a user), so this endpoint mirrors
+        the legacy ``update_fx_view`` and loops over the requester's own
+        properties, calling the service once per property. Scoping to the
+        requester's properties avoids touching other users' data and
+        bounds the external yfinance calls.
+
+        The legacy view returned ``{'success': True, ...}``; we return a
+        ``{detail: ...}`` shape for consistency with the rest of the
+        ``/api/v1/`` namespace. Failures inside the service (e.g.
+        yfinance outages) propagate as 500s today, matching the legacy
+        view's ``try/except`` path that surfaced the message; a future
+        task can wrap this in a structured error envelope.
+        """
+        from rentals.services.fx import update_rates
+
+        for prop in Property.objects.filter(owned_by__user=request.user):
+            update_rates(prop.id)
+        return Response({"detail": "FX rates updated"}, status=200)
 
 
 class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
