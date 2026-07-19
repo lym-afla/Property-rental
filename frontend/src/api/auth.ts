@@ -56,3 +56,35 @@ export function useRegister() {
     },
   })
 }
+
+// PATCH /auth/me/ — partial update of the current user's settings
+// (default_currency, chart_frequency, chart_timeline, digits,
+// use_default_currency_for_all_data, etc.). Response shape matches
+// `MeView.get` (`{user}`), so we prime the cache with the new user.
+export function useUpdateMe() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: Partial<User>) =>
+      apiFetch<MeResponse>('/auth/me/', { method: 'PATCH', body: vars }),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.auth.me, data.user)
+    },
+  })
+}
+
+// POST /auth/change-password/ — wraps Django's PasswordChangeForm.
+// `update_session_auth_hash` keeps the current session valid after the
+// hash rotates, so no cache wipe / re-login is needed on success.
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (vars: {
+      old_password: string
+      new_password1: string
+      new_password2: string
+    }) =>
+      apiFetch<{ detail: string }>('/auth/change-password/', {
+        method: 'POST',
+        body: vars,
+      }),
+  })
+}
