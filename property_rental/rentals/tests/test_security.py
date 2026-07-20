@@ -219,7 +219,6 @@ def test_landlord_cannot_put_other_landlords_property_valuation(sample_property,
 
 AUTH_REQUIRED_URLS_GET = [
     "rentals:update_fx",
-    "rentals:fx_list",
     "rentals:property_choices",
     "rentals:chart_data_request",
 ]
@@ -414,68 +413,49 @@ def _settings_post_data(**overrides):
     return data
 
 
-def test_user_can_set_effective_date_via_profile(db, landlord_user):
-    """POSTing ``effective_date`` to profile_page must persist it on the User.
-
-    Restores the as-of-date UI that Task 8 removed: the settings form now
-    carries the field, the view's existing ``settings_form.save()`` writes
-    it to the User row, and a follow-up ``get_effective_date(user)`` reads
-    the saved value back.
+def test_user_can_set_effective_date_via_api(db, landlord_user):
+    """PATCHing ``effective_date`` to /api/v1/auth/me/ must persist it on the User.
+    (Replaces the old profile_page POST test — the SPA uses the DRF endpoint.)
     """
     from datetime import date
     from django.test import Client
-    from rentals.models import User
     from rentals.utils import get_effective_date
 
     client = Client()
     client.force_login(landlord_user)
 
-    url = reverse("rentals:profile_page")
-    resp = client.post(
-        url,
-        data=_settings_post_data(
-            effective_date="2024-06-15",
-            settings_form_submit="1",
-        ),
+    resp = client.patch(
+        "/api/v1/auth/me/",
+        data={"effective_date": "2024-06-15"},
+        content_type="application/json",
     )
-    assert resp.status_code == 200, f"profile POST failed: {resp.status_code} {resp.content!r}"
+    assert resp.status_code == 200, f"PATCH /me/ failed: {resp.status_code} {resp.content!r}"
 
     landlord_user.refresh_from_db()
-    assert landlord_user.effective_date == date(2024, 6, 15), (
-        f"effective_date not persisted; got {landlord_user.effective_date!r}"
-    )
-    # And the helper reads back the saved value (not today).
+    assert landlord_user.effective_date == date(2024, 6, 15)
     assert get_effective_date(landlord_user) == date(2024, 6, 15)
 
 
 def test_blank_effective_date_defaults_to_today(db, landlord_user):
-    """A blank ``effective_date`` submission must clear the field so
+    """PATCHing a blank ``effective_date`` clears the field so
     ``get_effective_date`` falls back to ``date.today()``.
-
-    This is the "leave blank to always use today" contract from the
-    field's help text. A user who previously set a date must be able to
-    clear it by submitting an empty value.
     """
     from datetime import date
     from django.test import Client
     from rentals.utils import get_effective_date
 
-    # Pre-seed a non-today date so clearing is observable.
     landlord_user.effective_date = date(2020, 1, 1)
     landlord_user.save()
 
     client = Client()
     client.force_login(landlord_user)
 
-    url = reverse("rentals:profile_page")
-    resp = client.post(
-        url,
-        data=_settings_post_data(
-            effective_date="",
-            settings_form_submit="1",
-        ),
+    resp = client.patch(
+        "/api/v1/auth/me/",
+        data={"effective_date": None},
+        content_type="application/json",
     )
-    assert resp.status_code == 200, f"profile POST failed: {resp.status_code} {resp.content!r}"
+    assert resp.status_code == 200
 
     landlord_user.refresh_from_db()
     assert landlord_user.effective_date is None, (

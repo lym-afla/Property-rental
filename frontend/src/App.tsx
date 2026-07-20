@@ -8,6 +8,9 @@ import { PropertyDetailPage } from '@/pages/PropertyDetailPage'
 import { PropertiesPage } from '@/pages/PropertiesPage'
 import { TenantsPage } from '@/pages/TenantsPage'
 import { TenantDetailPage } from '@/pages/TenantDetailPage'
+import { TransactionsPage } from '@/pages/TransactionsPage'
+import { FXPage } from '@/pages/FXPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { RegisterPage } from '@/pages/RegisterPage'
 
 function App() {
@@ -26,6 +29,9 @@ function App() {
               <Route path="/properties/:id" element={<PropertyDetailPage />} />
               <Route path="/tenants" element={<TenantsPage />} />
               <Route path="/tenants/:id" element={<TenantDetailPage />} />
+              <Route path="/transactions" element={<TransactionsPage />} />
+              <Route path="/fx" element={<FXPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

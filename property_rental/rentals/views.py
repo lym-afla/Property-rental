@@ -162,71 +162,6 @@ def logout_view(request):
     return redirect('rentals:index')
 
 @login_required
-def profile_page(request):
-    user = request.user
-    settings_form = UserSettingsForm(instance=user)
-    password_change_form = CustomPasswordChangeForm(user)
-
-    if request.method == 'POST':
-        if 'settings_form_submit' in request.POST:
-            settings_form = UserSettingsForm(request.POST, instance=user)
-            if settings_form.is_valid():
-                settings_form.save()
-
-                # After saving, update the session data
-                request.session['chart_settings'] = {
-                    'frequency': user.chart_frequency,
-                    'timeline': user.chart_timeline,
-                    'To': str(get_effective_date(user)),
-                }
-                request.session['default_currency'] = user.default_currency
-                request.session['default_currency_for_all_data'] = user.use_default_currency_for_all_data
-                request.session['digits'] = user.digits
-
-                return JsonResponse({'success': True}, status=200)
-            else:
-                print(f"profile page: {settings_form.errors}")
-                return JsonResponse({'errors': settings_form.errors}, status=400)
-        elif 'password_change_form_submit' in request.POST:
-            password_change_form = CustomPasswordChangeForm(user, request.POST)
-            if password_change_form.is_valid():
-                password_change_form.save()
-                update_session_auth_hash(request, user)
-                return redirect('rentals:profile_page')
-            else:
-                print(f"profile page: {password_change_form.errors}")
-                return JsonResponse({'errors': password_change_form.errors}, status=400)
-
-    return render(request, 'rentals/profile_page.html', {'user': user, 'settings_form': settings_form, 'password_change_form': password_change_form})
-
-# User profile form
-@login_required
-def edit_profile(request):
-    user = request.user
-    profile_form = UserProfileForm(instance=user)
-    # settings_form = UserSettingsForm(instance=user)
-
-    if request.method == 'POST':
-        profile_form = UserProfileForm(request.POST, instance=user)
-        if profile_form.is_valid():
-            print(f"Printing profile form from profile {profile_form}")
-            profile_form.save()
-            return redirect('rentals:profile_page')
-
-    return render(request, 'rentals/edit_profile.html', {'profile_form': profile_form})
-
-# Render transactions page
-@login_required
-def transactions(request):
-
-    if request.user.is_landlord:
-        return render(request, 'rentals/transactions.html')
-    else:
-        messages.error(request, "You are not authorized to access this page.")
-        return redirect('rentals:index')
-
-# Create form for adding new property
-@login_required
 def new_form(request, form_type):
 
     # Create an instance of the Form
@@ -886,37 +821,6 @@ def property_valuation(request, property_id):
     return JsonResponse(data)
 
 # Compiling the table with FX data
-@login_required
-def fx_list(request):
-    # Long-format FX rows (Task 9): one row per (date, currency pair).
-    # The wide-format code used to invert each per-pair column in place
-    # before rendering; with one pair per row the inversion is just a
-    # row-level field swap.
-    fx_list = FX.objects.order_by('-date')
-
-    # Paginate the FX instances
-    paginator = Paginator(fx_list, 10)  # Show 10 entries per page
-    page = request.GET.get('page')
-
-    try:
-        fx_entries = paginator.page(page)
-    except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
-        fx_entries = paginator.page(1)
-    except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
-        fx_entries = paginator.page(paginator.num_pages)
-
-    # Invert the displayed rate (preserves the legacy wide-format view
-    # behavior, which rendered the reciprocal of the stored column).
-    for fx_entry in fx_entries:
-        fx_entry.display_rate = (
-            1 / fx_entry.rate if fx_entry.rate else None
-        )
-
-    return render(request, 'rentals/fx_list.html', {'fx_entries': fx_entries})
-
-# View to update FX rates for a given property.
 @login_required
 def update_fx_view(request):
     try:
