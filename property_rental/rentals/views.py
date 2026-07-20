@@ -215,16 +215,6 @@ def edit_profile(request):
 
     return render(request, 'rentals/edit_profile.html', {'profile_form': profile_form})
 
-# Render properties page
-@login_required
-def properties(request):
-
-    if request.user.is_landlord:
-        return render(request, 'rentals/properties.html')#, {'property_form': form})
-    else:
-        messages.error(request, "You are not authorized to access this page.")
-        return redirect('rentals:index')
-
 # Render tenants page
 @login_required
 def tenants(request):

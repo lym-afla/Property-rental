@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { HomePage } from '@/pages/HomePage'
 import { LoginPage } from '@/pages/LoginPage'
+import { PropertiesPage } from '@/pages/PropertiesPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/properties" element={<PropertiesPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
