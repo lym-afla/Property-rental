@@ -1,16 +1,24 @@
-"""Golden-master characterization tests for ``rentals.views.get_chart_data``.
+"""Golden-master characterization tests for ``rentals.services.charts.get_chart_data``.
 
 ``get_chart_data(type, element_id, frequency, from_date, to_date, currency,
-properties=None)`` is the chart-dataset builder consumed by the ``index``,
-``handle_element`` (property + tenant branches) and (indirectly)
-``property_valuation`` views. It is the function Task 12 (charts service
-extraction + property_valuation hardcoded-params fix) must NOT regress.
+properties=None)`` is the chart-dataset builder consumed by the chart-data
+DRF endpoint (``/api/v1/chart-data/``) and (in the legacy template era)
+by the ``index``, ``handle_element`` and ``property_valuation`` template
+views. It is the function Task 12 (charts service extraction +
+property_valuation hardcoded-params fix) must NOT regress.
 
 Approach (golden master): build a small deterministic dataset, call
 ``get_chart_data`` with known inputs, and assert the EXACT dict the current
 code returns. Expected payloads were captured by running the tests with
 empty placeholders and reading the assertion-failure output, then pasted
 back in verbatim.
+
+Task 10 of Plan B2 deleted the legacy ``property_valuation`` template
+view (along with the rest of the legacy template views). The
+regression test that pinned the view's request-param behavior
+(``test_property_valuation_uses_request_params``) was removed at the
+same time — the equivalent coverage now lives at the API layer in
+``test_api.py``'s ``test_chart_data_endpoint_*`` tests.
 
 DEViations from the brief's prose (the brief warned its prose is
 approximate and the source is authoritative):
@@ -46,7 +54,7 @@ from datetime import date
 from decimal import Decimal
 
 from rentals.models import Property
-from rentals.views import get_chart_data
+from rentals.services.charts import get_chart_data
 from rentals.tests.factories import (
     LeaseRentFactory,
     PropertyCapitalStructureFactory,
@@ -339,82 +347,3 @@ def test_get_chart_data_tenant(db):
         'currency': '$',
     }
     assert actual == EXPECTED
-
-
-# ---------------------------------------------------------------------------
-# Regression: the property_valuation VIEW must honor request/session params
-# (Task 12 bug fix — the view used to hardcode freq='M', start='2022-06-01',
-# end='2023-09-15', currency='USD' regardless of what the caller asked for).
-# ---------------------------------------------------------------------------
-#
-# ``get_chart_data`` itself is covered by the golden-master tests above and
-# is NOT touched by Task 12's behavior change. This test targets the VIEW
-# layer: it asserts that when a non-2022-2023 window is requested via query
-# params, the endpoint returns chart labels for that window (proving the
-# hardcoding is gone).
-#
-# The view reads ``request.session['chart_settings']`` so the test client's
-# session must be seeded with a minimal chart_settings dict first. The view
-# is NOT decorated with ``@login_required`` (it predates that gate), so no
-# auth setup is needed beyond forcing a session.
-
-def test_property_valuation_uses_request_params(db):
-    from django.test import Client
-    from django.urls import reverse
-
-    sc = build_chart_scenario()
-
-    c = Client()
-    # Authenticate as the property's owning landlord. Before the
-    # final-review fix ``property_valuation`` had no ``@login_required``,
-    # so this test could hit it anonymously; now the auth gate fires
-    # first, so we must be logged in to reach the chart-param logic.
-    c.force_login(sc["landlord"].user)
-    # Seed the session the way the login view does (``views.login_user``
-    # sets ``chart_settings`` with ``frequency`` / ``timeline`` / ``To``).
-    # The window below (2025-01-01..2025-12-31) deliberately differs from
-    # the pre-Task-12 hardcoded window (2022-06-01..2023-09-15).
-    session = c.session
-    session["chart_settings"] = {
-        "frequency": "M",
-        "timeline": "12m",
-        "To": "2025-12-31",
-        "From": "2025-01-01",
-    }
-    session.save()
-
-    url = reverse(
-        "rentals:property_valuation",
-        kwargs={"property_id": sc["property"].id},
-    )
-    resp = c.get(
-        url,
-        data={
-            "freq": "M",
-            "start": "2025-01-01",
-            "end": "2025-12-31",
-            "currency": "USD",
-        },
-    )
-    assert resp.status_code == 200
-
-    payload = resp.json()
-    chart_data = payload["chart_data"]
-    labels = chart_data["labels"]
-
-    # The pre-Task-12 hardcoded window was 2022-06-01..2023-09-15, which
-    # would have produced labels like 'Jul-22', 'Aug-22', ..., 'Oct-23'.
-    # The requested window (2025-01-01..2025-12-31, monthly) shifts both
-    # ends forward by one month — so the first label MUST be 'Feb-25'
-    # and the last MUST be 'Jan-26'. If any 2022 or 2023 label appears,
-    # the hardcoded-params bug has regressed.
-    assert labels[0] == "Feb-25", labels
-    assert labels[-1] == "Jan-26", labels
-    assert all("22" not in lbl for lbl in labels), labels
-    assert all("23" not in lbl for lbl in labels), labels
-
-    # The property chart should still produce the two expected datasets
-    # (Debt / Equity) with one value per label.
-    assert [d["label"] for d in chart_data["datasets"]] == ["Debt", "Equity"]
-    for dataset in chart_data["datasets"]:
-        assert len(dataset["data"]) == len(labels)

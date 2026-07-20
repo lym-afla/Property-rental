@@ -8,7 +8,8 @@ in Task 9) must NOT change observable behavior for:
 * ``Tenant.debt``
 * ``Tenant.debt_advance_payment``
 * ``Transaction.financials`` (classmethod)
-* ``pnl_calc`` (module-level function in ``rentals.views``)
+* ``pnl_calc`` (now in ``rentals.services.financials``; the
+  ``views.pnl_calc`` shim was removed in Task 10 of Plan B2)
 
 Approach (golden master): build a tiny deterministic dataset, call the
 method with known inputs, and assert the EXACT value the current code
@@ -31,7 +32,7 @@ from datetime import date
 from decimal import Decimal
 
 from rentals.models import Transaction
-from rentals import views
+from rentals.services.financials import pnl_calc
 from rentals.tests.factories import (
     FXFactory,
     LeaseRentFactory,
@@ -264,7 +265,7 @@ def test_pnl_calc_portfolio(db):
 
     sc = build_financials_scenario()
     properties = [sc["property"]]
-    expenses, rent_ytd, rent_all_time, unique_categories = views.pnl_calc(
+    expenses, rent_ytd, rent_all_time, unique_categories = pnl_calc(
         properties=properties,
         target_currency="USD",
         default_currency_for_all_data=False,
