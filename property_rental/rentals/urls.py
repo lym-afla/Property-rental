@@ -12,7 +12,6 @@ urlpatterns = [
     path('api/v1/', include('rentals.api.urls')),
     path('', views.index, name='index'),
     path('logout/', views.logout_view, name='logout'),
-    path('tenants/', views.tenants, name='tenants'),
     path('transactions/', views.transactions, name='transactions'),
     path('profile/', views.profile_page, name='profile_page'),
     path('edit-profile/', views.edit_profile, name='edit_profile'),
