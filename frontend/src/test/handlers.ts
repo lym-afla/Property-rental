@@ -132,16 +132,16 @@ const defaultHandlers = [
     return HttpResponse.json({ ...found, ...body })
   }),
   http.delete(`${API}/tenants/:id/`, () => new HttpResponse(null, { status: 204 })),
-  // POST /tenants/<id>/vacate/ body `{ lease_end }` -> 200 `{detail, lease_end}`
+  // POST /tenants/<id>/vacate/ body `{ lease_end }` -> 200 full Tenant.
+  // Mirrors `TenantViewSet.vacate`, which returns
+  // `Response(TenantSerializer(tenant).data)` — the whole serialized tenant
+  // with the updated `lease_end`.
   http.post(`${API}/tenants/:id/vacate/`, async ({ request, params }) => {
     const id = Number(params.id)
     const found = fixtureTenants.find((t) => t.id === id)
     if (!found) return HttpResponse.json({ detail: 'Not found.' }, { status: 404 })
     const body = (await request.json()) as { lease_end: string }
-    return HttpResponse.json({
-      detail: 'Tenant vacated',
-      lease_end: body.lease_end,
-    })
+    return HttpResponse.json({ ...found, lease_end: body.lease_end })
   }),
 
   // ---- Transactions -----------------------------------------------------
@@ -234,15 +234,16 @@ const defaultHandlers = [
   http.delete(`${API}/property-valuations/:id/`, () => new HttpResponse(null, { status: 204 })),
 
   // ---- Chart data -------------------------------------------------------
-  // ChartDataView requires `type`, `id`, `freq`, `start`, `end`. Default to
-  // an empty series so any chart-mounted test doesn't blow up; tests that
-  // care about the shape should override via `server.use(...)`.
+  // ChartDataView requires `type`, `id`, `freq`, `start`, `end`. Returns
+  // `{labels, datasets, currency}` — the real shape serialized by
+  // `ChartDataResponseSerializer` (NOT `{income, expense, net}`). The empty
+  // default keeps chart-mounted tests from blowing up; tests that care about
+  // the values should override via `server.use(...)`.
   http.get(`${API}/chart-data/`, () =>
     HttpResponse.json({
       labels: [],
-      income: [],
-      expense: [],
-      net: [],
+      datasets: [],
+      currency: 'USD',
     }),
   ),
 ]

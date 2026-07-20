@@ -73,13 +73,15 @@ export function useDeleteTenant() {
   })
 }
 
-// POST /tenants/<id>/vacate/ body `{ lease_end }` -> 200 `{ tenant: Tenant }`.
-// See `TenantViewSet.vacate` in `rentals/api/views.py`.
+// POST /tenants/<id>/vacate/ body `{ lease_end }` -> 200 full Tenant.
+// See `TenantViewSet.vacate` in `rentals/api/views.py`: it returns
+// `Response(TenantSerializer(tenant).data)` — the whole serialized tenant,
+// not a `{detail, lease_end}` envelope.
 export function useVacateTenant() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, leaseEnd }: { id: number; leaseEnd: string }) =>
-      apiFetch<{ detail: string; lease_end: string }>(
+      apiFetch<Tenant>(
         `/tenants/${id}/vacate/`,
         { method: 'POST', body: { lease_end: leaseEnd } },
       ),

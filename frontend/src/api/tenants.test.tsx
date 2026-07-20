@@ -136,8 +136,10 @@ describe('useVacateTenant', () => {
     result.current.mutate({ id: fixtureTenant.id, leaseEnd: '2025-12-31' })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    // The /vacate/ handler returns `{ detail, lease_end }`.
-    expect(result.current.data?.detail).toBe('Tenant vacated')
+    // `TenantViewSet.vacate` returns `Response(TenantSerializer(tenant).data)`
+    // — a full Tenant, not a `{detail, lease_end}` envelope. Assert the
+    // tenant identity + the server-applied `lease_end`.
+    expect(result.current.data?.id).toBe(fixtureTenant.id)
     expect(result.current.data?.lease_end).toBe('2025-12-31')
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
