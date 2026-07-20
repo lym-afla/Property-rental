@@ -12,6 +12,13 @@ export function formatCurrency(
   return `${symbol}${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
+export function formatCurrencyAxis(value: number, currency: string): string {
+  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
+  const symbol = symbols[currency] ?? ''
+  if (Math.abs(value) >= 1000) return `${symbol}${(value / 1000).toFixed(0)}k`
+  return `${symbol}${value}`
+}
+
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
