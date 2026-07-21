@@ -1,10 +1,13 @@
 from datetime import date, timedelta
+import logging
 import requests
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 import datetime
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES
+
+logger = logging.getLogger(__name__)
 
 # Define the currency of representation for aggregated data
 currency_basis = 'USD'
@@ -132,7 +135,7 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
             time.sleep(0.5)
             
         except Exception as e:
-            print(f"Error fetching exchange rate data for {currency_pair}: {e}")
+            logger.warning("Error fetching exchange rate data for %s: %s", currency_pair, e)
             attempt += 1
             continue
 
@@ -141,8 +144,8 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
             exchange_rate = round(exchange_rate_data["Close"].iloc[0], 6)
             actual_date = exchange_rate_data.index[0].date()  # Extract the actual date
 
-            print(
-                f"Successfully fetched {currency_pair} rate for {actual_date}: {exchange_rate}"
+            logger.info(
+                "Successfully fetched %s rate for %s: %s", currency_pair, actual_date, exchange_rate
             )
 
             return {
@@ -153,13 +156,13 @@ def update_FX_database(base_currency, target_currency, date, max_attempts=5):
 
         # Increment the attempt counter
         attempt += 1
-        print(
-            f"Attempt {attempt}/{max_attempts} failed for {currency_pair} on {date}"
+        logger.warning(
+            "Attempt %s/%s failed for %s on %s", attempt, max_attempts, currency_pair, date
         )
 
     # If no data is found after max_attempts, return None or an appropriate error message
-    print(
-        f"Failed to fetch {currency_pair} after {max_attempts} attempts for date {date}"
+    logger.warning(
+        "Failed to fetch %s after %s attempts for date %s", currency_pair, max_attempts, date
     )
     return None
 

@@ -176,3 +176,33 @@ DJANGO_VITE = {
         "static_url_prefix": "frontend",
     },
 }
+
+
+# Logging (Phase 4 Task 4, 2026-07-19)
+#
+# Replaces the stray ``print()`` calls that were scattered through
+# ``rentals.services.fx`` and ``rentals.utils``. Per-module loggers
+# (``logging.getLogger(__name__)``) inherit the root handler + level
+# configured here. ``disable_existing_loggers=False`` keeps Django's
+# default loggers (``django.request``, ``django.security``, etc.)
+# intact. Level/handlers can be overridden per-environment in
+# ``dev.py`` / ``prod.py``.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'default': {
+            'format': '[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'default',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
