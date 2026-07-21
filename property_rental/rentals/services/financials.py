@@ -52,10 +52,6 @@ mechanical changes only:
    identical arithmetic to the original loop.
 
 Known latent bugs pinned by Task 3 char tests (NOT fixed here):
-* ``pnl_calc`` returns mixed numeric types (per-category values are
-  ``float`` after ``round(float(...), digits)``; the ``total`` sub-dict
-  accumulates raw ``Decimal`` sums). Pinned by
-  ``test_pnl_calc_portfolio``.
 * ``Transaction.financials`` raises ``ValueError`` when
   ``target_currency`` is None — kept verbatim.
 * The commented-out single-property short-circuit in the old
@@ -209,13 +205,15 @@ def aggregate(cls, end_date, target_currency=None, properties=None,
 # Moved verbatim from ``rentals/views.py`` (Task 8-era signature with the
 # ``as_of`` kwarg). The two inline FX loops (YTD and all-time windows
 # under the ``default_currency_for_all_data`` branch) WERE consolidated
-# into ``convert_transactions`` calls in Task 3 (2026-07-19). The mixed-
-# type contract pinned by ``test_pnl_calc_portfolio`` is preserved:
-# per-category values are still ``float`` (via ``round(float(...),
-# digits)``) and the ``total`` sub-dict still accumulates raw ``Decimal``
-# (``convert_transactions`` returns ``Decimal`` for non-empty iterables,
-# ``int 0`` for empty ones — matching the old ``cf_ytd = 0``
-# initializer).
+# into ``convert_transactions`` calls in Task 3 (2026-07-19).
+#
+# Phase 4 normalized the return types to all-``float`` (previously the
+# per-category values were ``float`` via ``round(float(...), digits)``
+# but ``rent_ytd`` / ``rent_all_time`` and the ``total`` sub-dict
+# accumulated raw ``Decimal`` from ``aggregate(Sum)`` /
+# ``convert_transactions``). All four return values are now ``float``
+# consistently — char test ``test_pnl_calc_portfolio`` pins the new
+# all-float shape.
 def pnl_calc(properties, target_currency, default_currency_for_all_data,
              digits, as_of=None):
     """Calculate P&L for given properties.
@@ -223,6 +221,13 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
     Signature unchanged from the pre-Task-11 ``views.pnl_calc``: callers
     pass ``as_of`` explicitly (Task 8 removed the module-global
     ``effective_current_date`` the function used to read).
+
+    Returns ``(expenses, rent_ytd, rent_all_time, unique_categories)``
+    where every numeric value (per-category ytd/all_time, the ``total``
+    sub-dict's ytd/all_time, and ``rent_ytd`` / ``rent_all_time``) is a
+    ``float``. Pre-Phase-4 the function returned a mix of ``float``
+    (per-category) and ``Decimal`` (totals + rent); Phase 4 normalized
+    them all to ``float``.
     """
     # ``Transaction``, ``get_category_name`` are imported lazily to avoid a
     # module-load circular import (models imports constants that utils also
@@ -291,12 +296,12 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
             # ``services.fx.convert`` (which short-circuits to ``amount``
             # when the currencies match, identical to the loop's first hop).
             #
-            # Mixed-types pin (NOT a bug to fix): ``convert_transactions``
-            # returns a ``Decimal`` (or ``int`` 0 for an empty iterable,
-            # matching the old ``cf_ytd = 0`` initializer). The
-            # per-category values are still cast to ``float`` via the
-            # ``round(float(cf_ytd), digits)`` assignment below; the
-            # ``total`` sub-dict still accumulates the raw ``Decimal``.
+            # ``convert_transactions`` returns a ``Decimal`` (or ``int`` 0
+            # for an empty iterable, matching the old ``cf_ytd = 0``
+            # initializer). Phase 4 normalizes everything to ``float``
+            # below — keep the raw Decimal here so the per-category
+            # ``round(float(...), digits)`` rounding is unchanged, then
+            # cast at the point of accumulation / return.
             cf_ytd = convert_transactions(
                 queryset_ytd.all(), target_currency, as_of
             )
@@ -305,14 +310,20 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
             )
 
         if category == 'rent':
-            rent_ytd = cf_ytd
-            rent_all_time = cf_all_time
+            # Phase 4: cast to ``float`` for a uniform return type
+            # (previously the raw ``Decimal`` / ``int 0`` was returned).
+            rent_ytd = float(cf_ytd)
+            rent_all_time = float(cf_all_time)
         else:
             category_name = get_category_name(category)
             expenses[category_name]['ytd'] = round(float(cf_ytd), digits)
             expenses[category_name]['all_time'] = round(float(cf_all_time), digits)
 
-            expenses['total']['ytd'] += cf_ytd
-            expenses['total']['all_time'] += cf_all_time
+            # Phase 4: accumulate as ``float`` (previously accumulated
+            # the raw ``Decimal``, leaking Decimal into the ``total``
+            # sub-dict). ``float(cf_ytd)`` matches the cast the
+            # per-category line above already does.
+            expenses['total']['ytd'] += float(cf_ytd)
+            expenses['total']['all_time'] += float(cf_all_time)
 
     return expenses, rent_ytd, rent_all_time, unique_categories

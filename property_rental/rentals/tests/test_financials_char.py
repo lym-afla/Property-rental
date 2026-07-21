@@ -319,16 +319,16 @@ def test_pnl_calc_portfolio(db):
         digits=2,
         as_of=fixed_now,
     )
-    # Captured verbatim from the current code with effective_current_date
-    # pinned to 2024-04-15. The 'rent' category is returned bare via
-    # aggregate(Sum) (Decimal('500')); the 'tax' expense is rounded to
-    # float (200.0) and accumulated into 'total' as a Decimal. The mixed
-    # types are part of the contract being pinned.
-    EXPECTED_RENT_YTD = Decimal("500")
-    EXPECTED_RENT_ALL_TIME = Decimal("500")
+    # Phase 4 normalized pnl_calc's return types: every numeric value is
+    # now ``float`` (previously ``rent_ytd`` / ``rent_all_time`` and the
+    # ``total`` sub-dict leaked raw ``Decimal`` from aggregate(Sum) /
+    # convert_transactions). The numeric values are unchanged — only the
+    # types changed (Decimal("500") -> 500.0, etc.).
+    EXPECTED_RENT_YTD = 500.0
+    EXPECTED_RENT_ALL_TIME = 500.0
     EXPECTED_EXPENSES = {
         "Tax": {"ytd": 200.0, "all_time": 200.0},
-        "total": {"ytd": Decimal("200"), "all_time": Decimal("200")},
+        "total": {"ytd": 200.0, "all_time": 200.0},
     }
     EXPECTED_CATEGORIES = ["rent", "tax"]
 
@@ -336,3 +336,11 @@ def test_pnl_calc_portfolio(db):
     assert rent_all_time == EXPECTED_RENT_ALL_TIME
     assert expenses == EXPECTED_EXPENSES
     assert unique_categories == EXPECTED_CATEGORIES
+    # Type pin: every numeric value in the return is now ``float``
+    # (this is the regression this test guards against after Phase 4).
+    assert isinstance(rent_ytd, float)
+    assert isinstance(rent_all_time, float)
+    assert isinstance(expenses["Tax"]["ytd"], float)
+    assert isinstance(expenses["Tax"]["all_time"], float)
+    assert isinstance(expenses["total"]["ytd"], float)
+    assert isinstance(expenses["total"]["all_time"], float)
