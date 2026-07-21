@@ -171,6 +171,10 @@ export function TransactionsPage() {
     {
       accessorKey: 'date',
       header: 'Date',
+      // `sortingFn: 'datetime'` so TanStack compares the rows as dates
+      // rather than lexical strings — correct ordering across year
+      // boundaries even when the field is a `YYYY-MM-DD` string.
+      sortingFn: 'datetime',
       cell: ({ row }) => formatDate(row.original.date),
     },
     {
@@ -311,7 +315,11 @@ export function TransactionsPage() {
         tenants={tenantsQuery.data ?? []}
       />
 
-      <DataTable columns={columns} data={visibleTransactions} />
+      <DataTable
+        columns={columns}
+        data={visibleTransactions}
+        initialSorting={[{ id: 'date', desc: true }]}
+      />
 
       <EntityFormDialog
         open={createOpen}

@@ -37,6 +37,10 @@ type Props<T> = {
   data: T[]
   onRowClick?: (row: T) => void
   pageSize?: number
+  // Initial controlled sorting state (e.g. `[{ id: 'date', desc: true }]`
+  // to default to latest-first). The state is still controlled — the user
+  // can toggle it via the headers from there.
+  initialSorting?: SortingState
 }
 
 export function DataTable<T extends { id: number }>({
@@ -44,8 +48,9 @@ export function DataTable<T extends { id: number }>({
   data,
   onRowClick,
   pageSize = 10,
+  initialSorting = [],
 }: Props<T>) {
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const table = useReactTable({
     data,
     columns,

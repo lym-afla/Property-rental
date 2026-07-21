@@ -124,6 +124,18 @@ export function TenantsPage() {
       },
     },
     {
+      id: 'currency',
+      header: 'Currency',
+      // Surface each tenant's property currency code so the rent /
+      // revenue / debt columns have an explicit FX context. Falls back
+      // to an em dash if the property lookup missed (e.g. race during
+      // create).
+      cell: ({ row }) => {
+        const property = propertyById.get(row.original.property)
+        return property?.currency ?? '—'
+      },
+    },
+    {
       accessorKey: 'lease_start',
       header: 'Renting since',
       cell: ({ row }) => formatDate(row.original.lease_start),

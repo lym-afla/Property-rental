@@ -59,6 +59,14 @@ export function PropertiesPage() {
     { accessorKey: 'name', header: 'Property' },
     { accessorKey: 'location', header: 'Location' },
     {
+      accessorKey: 'currency',
+      header: 'Currency',
+      // Surface each property's native currency code so it's obvious from
+      // the list view which FX context the net-income columns live in
+      // (e.g. RUB, GBP) — no hard-coded USD assumption.
+      cell: ({ row }) => row.original.currency || '—',
+    },
+    {
       accessorKey: 'net_income_all_time',
       header: 'Net (All-time)',
       cell: ({ row }) =>

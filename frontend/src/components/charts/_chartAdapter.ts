@@ -7,8 +7,16 @@ export type TransformedChartData = {
   currency: string
 }
 
+// Map currency symbols to codes for consistent formatting
+const SYMBOL_TO_CODE: Record<string, string> = { '$': 'USD', '€': 'EUR', '£': 'GBP', '₽': 'RUB' }
+
+function normalizeCurrency(currency: string): string {
+  return SYMBOL_TO_CODE[currency] ?? currency
+}
+
 export function transformForRecharts(data: ChartDataResponse): TransformedChartData {
-  const { labels, datasets, currency } = data
+  const { labels, datasets, currency: rawCurrency } = data
+  const currency = normalizeCurrency(rawCurrency)
   // Build flat objects: [{ label: 'Jan-24', rent: 1000, utilities: 200 }, ...]
   const chartData = labels.map((label, i) => {
     const row: Record<string, number | string> = { label }

@@ -1,23 +1,18 @@
 // frontend/src/components/charts/ExpenseBreakdownChart.tsx
 //
-// Donut chart (Plan C Task 5) showing expense proportions by category for
-// the supplied window. Consumes the same ChartDataResponse shape as the
-// other charts (so a "last 12 months" chart-data request can power it
-// directly), aggregates every series total, and renders with Recharts
-// PieChart + innerRadius. The Legend is interactive — click a slice to
-// toggle visibility (handled by Recharts out of the box).
+// Donut chart showing expense proportions by category.
+// Filters to expense categories only (negative values in chart data),
+// showing absolute values for the donut.
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
 import { formatCurrencyAxis } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
+
+// Known income categories — exclude from expense breakdown
+const INCOME_CATEGORIES = ['rent', 'other_income', 'capax', 'capex']
 
 type Props = {
   data: ChartDataResponse
@@ -26,39 +21,28 @@ type Props = {
 export function ExpenseBreakdownChart({ data }: Props) {
   const { chartData, series, currency } = transformForRecharts(data)
 
-  // One slice per series, summed across every period. Categories with no
-  // spend in the window are dropped so the donut stays readable.
+  // One slice per EXPENSE series (negative values), summed across periods.
+  // Income categories (rent, other_income) are excluded.
   const pieData = series
-    .map(s => ({
-      name: s.label,
-      value: chartData.reduce((acc, row) => acc + (Number(row[s.key]) || 0), 0),
-      color: s.color,
-    }))
+    .filter(s => !INCOME_CATEGORIES.includes(s.key.toLowerCase()))
+    .map(s => {
+      const total = chartData.reduce((acc, row) => acc + Math.abs(Number(row[s.key]) || 0), 0)
+      return { name: s.label, value: total, color: s.color }
+    })
     .filter(d => d.value > 0)
 
   const tableData = {
-    headers: ['Category', 'Total'],
-    rows: pieData.map(d => [d.name, d.value]),
+    headers: ['Expense Category', 'Total'],
+    rows: pieData.map(d => [d.name, formatCurrencyAxis(d.value, currency)]),
   }
 
   return (
-    <ChartCard
-      title="Expense breakdown"
-      description="Spend by category"
-      tableData={tableData}
-    >
+    <ChartCard title="Expense breakdown" description={`Spend by category (${currency})`} tableData={tableData}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Tooltip formatter={(v) => formatCurrencyAxis(Number(v), currency)} />
           <Legend />
-          <Pie
-            data={pieData}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={60}
-            outerRadius={100}
-            paddingAngle={2}
-          >
+          <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={2}>
             {pieData.map((entry, i) => (
               <Cell key={`cell-${i}`} fill={entry.color} />
             ))}

@@ -248,22 +248,26 @@ export function HomePage() {
     return best
   }, [propertiesStats.data])
 
-  // ---- P&L table rows ------------------------------------------------------
-  // Sorted by net income YTD desc so the biggest contributors sit at the
-  // top. We deliberately don't reuse `DataTable` here — the dashboard P&L
-  // is read-only, doesn't need the row-click affordance, and the shadcn
-  // `<Table>` primitives read cleaner for a 4-column summary.
+  // ---- P&L aggregated rows -------------------------------------------------
+  // Per the dashboard redesign: the P&L tile shows the OLD-style aggregated
+  // layout — one row per financial category, two columns (All-time / YTD).
+  // The backend's `with_stats` payload doesn't expose a per-category
+  // breakdown (only gross income / expenses / net totals), so we collapse
+  // to the three canonical rows. All amounts are FX-converted to USD by
+  // the backend already (see `rentals/stats.py`), so we display them with
+  // `formatCurrency(value, 'USD')`.
   const pnlRows = useMemo(() => {
-    const rows = (propertiesStats.data ?? []).map((p) => ({
-      id: p.id,
-      name: p.name,
-      currency: p.currency,
-      revenueYTD: p.gross_income_ytd ?? 0,
-      expensesYTD: p.expenses_ytd ?? 0,
-      netIncomeYTD: p.net_income_ytd ?? 0,
-    }))
-    rows.sort((a, b) => b.netIncomeYTD - a.netIncomeYTD)
-    return rows
+    const props = propertiesStats.data ?? []
+    const sum = (sel: (p: (typeof props)[number]) => number) =>
+      props.reduce((acc, p) => acc + (sel(p) ?? 0), 0)
+    return {
+      grossIncomeAllTime: sum((p) => p.gross_income_all_time),
+      grossIncomeYTD: sum((p) => p.gross_income_ytd),
+      expensesAllTime: sum((p) => p.expenses_all_time),
+      expensesYTD: sum((p) => p.expenses_ytd),
+      netIncomeAllTime: sum((p) => p.net_income_all_time),
+      netIncomeYTD: sum((p) => p.net_income_ytd),
+    }
   }, [propertiesStats.data])
 
   // ---- Cash Flow drill-down ------------------------------------------------
@@ -405,7 +409,7 @@ export function HomePage() {
       {/* ---- P&L table -------------------------------------------------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Profit &amp; Loss (YTD)</CardTitle>
+          <CardTitle>Profit &amp; Loss</CardTitle>
         </CardHeader>
         <CardContent>
           {isError ? (
@@ -418,7 +422,7 @@ export function HomePage() {
             />
           ) : isLoading ? (
             <Skeleton className="h-40 w-full" />
-          ) : pnlRows.length === 0 ? (
+          ) : (propertiesStats.data ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No properties yet.
             </p>
@@ -426,29 +430,42 @@ export function HomePage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property</TableHead>
-                  <TableHead>Currency</TableHead>
-                  <TableHead className="text-right">Revenue YTD</TableHead>
-                  <TableHead className="text-right">Expenses YTD</TableHead>
-                  <TableHead className="text-right">Net YTD</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">All-time</TableHead>
+                  <TableHead className="text-right">YTD</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pnlRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-medium">{row.name}</TableCell>
-                    <TableCell>{row.currency}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.revenueYTD, row.currency, { compact: true })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(row.expensesYTD, row.currency, { compact: true })}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(row.netIncomeYTD, row.currency, { compact: true })}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {/* Income */}
+                <TableRow>
+                  <TableCell className="font-medium">Gross income</TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(pnlRows.grossIncomeAllTime, 'USD')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(pnlRows.grossIncomeYTD, 'USD')}
+                  </TableCell>
+                </TableRow>
+                {/* Expenses */}
+                <TableRow>
+                  <TableCell className="font-medium">Total expenses</TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(pnlRows.expensesAllTime, 'USD')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(pnlRows.expensesYTD, 'USD')}
+                  </TableCell>
+                </TableRow>
+                {/* Net */}
+                <TableRow className="border-t-2">
+                  <TableCell className="font-bold">Net income</TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatCurrency(pnlRows.netIncomeAllTime, 'USD')}
+                  </TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatCurrency(pnlRows.netIncomeYTD, 'USD')}
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           )}

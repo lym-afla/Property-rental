@@ -21,7 +21,7 @@ import {
 } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
-import { formatCurrencyAxis } from '@/lib/format'
+import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
 
 type Props = {
@@ -39,12 +39,16 @@ export function NetIncomeTrendChart({ data }: Props) {
   }))
 
   const tableData = {
-    headers: ['Period', 'Net income'],
-    rows: netData.map(row => [row.label as string, row.net]),
+    headers: ['Period', `Net income (${currency})`],
+    rows: netData.map(row => [row.label as string, formatCurrency(row.net, currency)]),
   }
 
   return (
-    <ChartCard title="Net income trend" description="Net income by period" tableData={tableData}>
+    <ChartCard
+      title="Net income trend"
+      description={`Net income trajectory (${currency})`}
+      tableData={tableData}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={netData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <defs>
@@ -56,7 +60,7 @@ export function NetIncomeTrendChart({ data }: Props) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="label" tick={{ fontSize: 12 }} />
           <YAxis tickFormatter={(v) => formatCurrencyAxis(v, currency)} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(v) => formatCurrencyAxis(Number(v), currency)} />
+          <Tooltip formatter={(v) => formatCurrency(Number(v), currency)} />
           <Area
             type="monotone"
             dataKey="net"
