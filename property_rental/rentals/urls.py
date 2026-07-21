@@ -28,5 +28,5 @@ urlpatterns = [
 # SPA catch-all (MUST be appended LAST so /api/v1/ wins).
 urlpatterns += [
     path('', SpaView.as_view()),
-    re_path(r'^.*/$', SpaView.as_view()),
+    re_path(r'^.+$', SpaView.as_view()),
 ]
