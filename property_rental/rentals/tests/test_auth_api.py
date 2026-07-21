@@ -168,6 +168,61 @@ def test_patch_me_updates_settings(db):
 
 
 @pytest.mark.django_db
+def test_patch_me_cannot_change_role(db):
+    """``PATCH /auth/me/`` must NOT let a client flip role flags.
+
+    Phase 4 Task 6 (2026-07-19): ``is_landlord`` / ``is_tenant`` /
+    ``id`` / ``username`` are listed as ``read_only_fields`` on
+    ``UserSerializer``. The PATCH view passes the payload through the
+    serializer with ``partial=True``; without the read-only marking, a
+    tenant could escalate to landlord (and gain landlord-only API
+    access) by sending ``{"is_landlord": true}``, or hijack another
+    account by PATCHing ``{"id": <other_user_id>}``.
+
+    The serializer MUST accept the request (200) — read-only fields
+    are silently ignored by DRF, not rejected — but the database value
+    must NOT change. ``user.refresh_from_db()`` confirms the persisted
+    flag is unchanged after the PATCH round-trip.
+    """
+    from rentals.models import User
+
+    user = UserFactory(is_landlord=True)
+    c = Client()
+    c.force_login(user)
+    resp = c.patch(
+        "/api/v1/auth/me/",
+        {"is_landlord": False},
+        content_type="application/json",
+    )
+    # DRF silently drops read-only fields from validated_data, so the
+    # request succeeds with 200 — the security contract is that the
+    # value is preserved, not that the request is rejected.
+    assert resp.status_code == 200, (
+        f"PATCH /auth/me/ with a read-only field should still return 200 "
+        f"(serializer silently ignores it); got {resp.status_code}"
+    )
+    user.refresh_from_db()
+    assert user.is_landlord is True, (
+        "is_landlord is read_only on UserSerializer; PATCH must not flip it"
+    )
+
+    # Defense-in-depth: also confirm the read-only fields reject direct
+    # writes at the serializer layer (the structural guarantee the
+    # test above relies on). A future change to ``read_only_fields``
+    # that drops ``is_landlord`` would fail here too.
+    from rentals.api.serializers import UserSerializer
+
+    serializer = UserSerializer(user, data={"is_landlord": False, "id": 99999}, partial=True)
+    serializer.is_valid(raise_exception=True)
+    assert "is_landlord" not in serializer.validated_data, (
+        "is_landlord must be in read_only_fields and excluded from validated_data"
+    )
+    assert "id" not in serializer.validated_data, (
+        "id must be in read_only_fields and excluded from validated_data"
+    )
+
+
+@pytest.mark.django_db
 def test_change_password_success(db):
     user = UserFactory(is_landlord=True)
     user.set_password("OldPass123!")

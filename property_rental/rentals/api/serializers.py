@@ -154,6 +154,15 @@ class UserSerializer(serializers.ModelSerializer):
     named ``use_default_currency_for_all_data`` (the plan originally
     mis-named it ``default_currency_for_all_data``); the corrected name
     is used here.
+
+    Phase 4 Task 6 (2026-07-19): ``id``, ``username``, ``is_landlord``
+    and ``is_tenant`` are read-only. The ``MeView.patch`` endpoint
+    accepts arbitrary user fields via ``partial=True``; without this
+    restriction a tenant-role user could escalate to landlord by
+    PATCHing ``{"is_landlord": true}``, and any user could move to
+    another landlord's account namespace by PATCHing ``{"id": ...}``.
+    The role flags and the PK are set ONLY by the registration /
+    admin path, never by ``PATCH /auth/me/``.
     """
 
     class Meta:
@@ -173,3 +182,4 @@ class UserSerializer(serializers.ModelSerializer):
             "chart_timeline",
             "digits",
         ]
+        read_only_fields = ["id", "username", "is_landlord", "is_tenant"]
