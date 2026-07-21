@@ -1,3 +1,8 @@
+export function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
 export function formatCurrency(
   amount: number | null | undefined,
   currency: string,
@@ -16,7 +21,7 @@ export function formatCurrencyAxis(value: number, currency: string): string {
   const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
   const symbol = symbols[currency] ?? ''
   if (Math.abs(value) >= 1000) return `${symbol}${(value / 1000).toFixed(0)}k`
-  return `${symbol}${value}`
+  return `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 export function formatDate(date: string | Date | null | undefined): string {

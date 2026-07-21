@@ -599,9 +599,9 @@ class ChartDataView(APIView):
         to_date = request.GET.get("end")
         currency = request.GET.get("currency")
 
-        if not chart_type or not element_id or not frequency or not from_date or not to_date:
+        if not chart_type or not frequency or not from_date or not to_date:
             return Response(
-                {"detail": "type, id, freq, start, end are required query params."},
+                {"detail": "type, freq, start, end are required query params."},
                 status=400,
             )
 
