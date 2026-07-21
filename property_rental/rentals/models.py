@@ -208,34 +208,37 @@ class Tenant(models.Model):
     
     # Calculate tenant's debt for specified date
     def debt(self, as_of_date=None):
-        """Delegate to ``services.scheduler.debt`` (Task 13).
+        """Delegate to ``services.scheduler.debt`` (Task 13; Phase 4
+        unified the two scheduler functions into one parameterized
+        ``debt(tenant, as_of_date=None, method='standard')``).
 
-        Body moved verbatim into ``rentals.services.scheduler.debt``;
-        the payday edge-case / first-vs-current-vs-middle-month / 3-day
-        grace logic is preserved exactly. Characterization tests in
+        ``method='standard'`` reproduces the pre-Phase-4 behavior
+        exactly: 3-day grace window for the current month. Char test
         ``test_financials_char.py::test_tenant_debt_arrears_scenario``
-        pin the output to ``-2000.00``. Lazy import avoids a module-load
-        circular import (``services.scheduler`` references
+        pins the output to ``-2000.00``. Lazy import avoids a
+        module-load circular import (``services.scheduler`` references
         ``tenant.rent_total`` / ``tenant.rent_history`` lazily at call
         time, but the import-time cycle is still safer this way and
         matches the pattern used by the other service delegates).
         """
         from rentals.services.scheduler import debt as _debt
-        return _debt(self, as_of_date)
+        return _debt(self, as_of_date, method='standard')
 
     # Alternative debt calculation for advance payment scenarios
     def debt_advance_payment(self, as_of_date=None):
-        """Delegate to ``services.scheduler.debt_advance_payment`` (Task 13).
+        """Delegate to ``services.scheduler.debt`` with
+        ``method='advance'`` (Task 13; Phase 4 unified the two scheduler
+        functions into one parameterized ``debt``).
 
-        Body moved verbatim into
-        ``rentals.services.scheduler.debt_advance_payment``; the
-        completed-months-only / 7-day-past-payday rule is preserved
-        exactly. Characterization tests in
+        ``method='advance'`` reproduces the pre-Phase-4 behavior
+        exactly: 7-day grace window for the current month (more
+        conservative — only counts the current month as due once the
+        payday is at least a week behind us). Char test
         ``test_financials_char.py::test_tenant_debt_advance_payment_scenario``
-        pin the output to ``-2000.00``.
+        pins the output to ``-2000.00``.
         """
-        from rentals.services.scheduler import debt_advance_payment as _debt_advance_payment
-        return _debt_advance_payment(self, as_of_date)
+        from rentals.services.scheduler import debt as _debt
+        return _debt(self, as_of_date, method='advance')
     
     # Extract lease rent for the specific date
     def lease_rent(self, as_of_date=None):

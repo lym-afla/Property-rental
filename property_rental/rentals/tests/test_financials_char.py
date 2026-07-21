@@ -190,6 +190,53 @@ def test_tenant_debt_advance_payment_scenario(db):
 
 
 # ---------------------------------------------------------------------------
+# Unified debt(): prove the ``method='standard'`` vs ``method='advance'``
+# parameterization actually diverges. Added in Phase 4 alongside the
+# ``debt`` / ``debt_advance_payment`` unification in ``scheduler.py``.
+#
+# The two methods differ ONLY in the grace-period threshold for the current
+# month: standard = 3 days, advance = 7 days. So with a payday of the 1st
+# and a check_date between the 4th and the 7th of the current month, the
+# standard method counts the current month as due and the advance method
+# does not — the two results differ.
+# ---------------------------------------------------------------------------
+
+def test_debt_standard_vs_advance_diverge(db):
+    """Verify ``method='standard'`` and ``method='advance'`` can produce
+    different results on the same tenant/date.
+
+    Scenario: lease_start 2024-01-01, payday=1, $1000/month, paid only
+    Jan + Feb ($2000 total). Checking as of 2024-04-05:
+    * ``method='standard'`` (3-day grace): Apr payday (Apr 1) is 4 days
+      behind us (>= 3), so Apr accrues. Jan+Feb+Mar+Apr = $4000 due.
+      debt = $2000 paid - $4000 due = -2000.
+    * ``method='advance'`` (7-day grace): Apr payday is only 4 days
+      behind us (< 7), so Apr does NOT accrue. Jan+Feb+Mar = $3000 due.
+      debt = $2000 paid - $3000 due = -1000.
+
+    The two methods return DIFFERENT balances on this date, proving the
+    parameterization is wired through correctly (a regression that
+    hard-codes one threshold would make them equal and fail this test).
+    """
+    from rentals.services.scheduler import debt
+
+    sc = build_arrears_scenario()
+    tenant = sc["tenant"]
+    # 2024-04-05: 4 days past the Apr-1 payday — between the 3-day
+    # (standard) and 7-day (advance) thresholds.
+    as_of = date(2024, 4, 5)
+
+    standard = debt(tenant, as_of, method='standard')
+    advance = debt(tenant, as_of, method='advance')
+
+    # Standard counts Apr; advance doesn't — so standard's balance is
+    # $1000 lower than advance's.
+    assert standard == Decimal("-2000")
+    assert advance == Decimal("-1000")
+    assert standard != advance
+
+
+# ---------------------------------------------------------------------------
 # Tenant.rent_total — same currency (USD -> USD, no FX)
 # ---------------------------------------------------------------------------
 
