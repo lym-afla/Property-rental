@@ -9,6 +9,7 @@
 // the chart always spans the tenant history; properties with no tenants
 // still appear as a baseline vacant band.
 import { useMemo } from 'react'
+import type { ReactNode } from 'react'
 import {
   AreaChart,
   Area,
@@ -64,7 +65,16 @@ function leaseActiveIn(
   return true
 }
 
-export function OccupancyChart() {
+type Props = {
+  // How many months of history to show. `undefined` means "all history"
+  // (the full tenant lease span). Defaults to undefined for backwards
+  // compatibility; the dashboard passes an explicit value.
+  monthsBack?: number
+  // Optional controls rendered in the card header (e.g. a period Select).
+  controls?: ReactNode
+}
+
+export function OccupancyChart({ monthsBack, controls }: Props = {}) {
   const properties = useProperties()
   const tenants = useTenants()
 
@@ -72,7 +82,12 @@ export function OccupancyChart() {
     const tenantList = tenants.data ?? []
     const totalUnits = properties.data?.length ?? 0
 
-    const buckets = buildMonthBuckets(tenantList.map(t => t.lease_start))
+    let buckets = buildMonthBuckets(tenantList.map(t => t.lease_start))
+    // Trim to the last `monthsBack` months when a finite window is
+    // requested. Buckets are sorted ascending, so slice from the end.
+    if (monthsBack !== undefined && monthsBack > 0) {
+      buckets = buckets.slice(-monthsBack)
+    }
     return buckets.map(bucket => {
       const occupied = tenantList.filter(t =>
         leaseActiveIn(bucket, t.lease_start, t.lease_end),
@@ -83,7 +98,7 @@ export function OccupancyChart() {
         Vacant: Math.max(0, totalUnits - occupied),
       }
     })
-  }, [properties.data, tenants.data])
+  }, [properties.data, tenants.data, monthsBack])
 
   const tableData = useMemo(
     () => ({
@@ -95,7 +110,7 @@ export function OccupancyChart() {
 
   if (properties.isLoading || tenants.isLoading) {
     return (
-      <ChartCard title="Occupancy" description="Occupied vs vacant units over time">
+      <ChartCard title="Occupancy" description="Occupied vs vacant units over time" controls={controls}>
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           Loading…
         </div>
@@ -104,7 +119,7 @@ export function OccupancyChart() {
   }
 
   return (
-    <ChartCard title="Occupancy" description="Occupied vs vacant units over time" tableData={tableData}>
+    <ChartCard title="Occupancy" description="Occupied vs vacant units over time" controls={controls} tableData={tableData}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <defs>

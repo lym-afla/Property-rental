@@ -75,8 +75,18 @@ const TIMELINE_OPTIONS = [
   { value: '5Y', label: 'Last 5 years' },
 ] as const
 
+// Occupancy history is derived client-side from tenants (no chart-data
+// round-trip), so its period selector uses a simpler month-count model
+// than the chart-data timelines.
+const OCCUPANCY_PERIOD_OPTIONS = [
+  { value: '12m', label: 'Last 12 months' },
+  { value: '24m', label: 'Last 24 months' },
+  { value: 'all', label: 'All history' },
+] as const
+
 type Frequency = (typeof FREQUENCY_OPTIONS)[number]['value']
 type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
+type OccupancyPeriod = (typeof OCCUPANCY_PERIOD_OPTIONS)[number]['value']
 
 // Compute the `YYYY-MM-DD` `from`/`to` window for a timeline ending today.
 // Mirrors the backend `calculate_from_date` (see `rentals/utils.py`) so the
@@ -154,6 +164,13 @@ function periodLabelToRange(
   }
 }
 
+// Convert an occupancy period selection into a month count. `all` returns
+// undefined so the chart knows to span the full tenant history.
+function occupancyPeriodToMonths(period: OccupancyPeriod): number | undefined {
+  if (period === 'all') return undefined
+  return period === '12m' ? 12 : 24
+}
+
 export function HomePage() {
   const navigate = useNavigate()
 
@@ -163,7 +180,27 @@ export function HomePage() {
   const [frequency, setFrequency] = useState<Frequency>('M')
   const [timeline, setTimeline] = useState<Timeline>('12m')
 
+  // Each secondary chart owns its own timeline selector so users can scope
+  // the expense donut and the net income trend independently of the Cash
+  // Flow headline chart. Net Income Trend defaults to the same window as
+  // Cash Flow; Expense Breakdown defaults to 12m (recent spend patterns).
+  const [expenseTimeline, setExpenseTimeline] = useState<Timeline>('12m')
+  const [netIncomeTimeline, setNetIncomeTimeline] = useState<Timeline>('12m')
+
+  // Occupancy history length: number of months to look back, or 'all' for
+  // the full tenant history. Default 12m keeps the chart readable.
+  const [occupancyPeriod, setOccupancyPeriod] =
+    useState<OccupancyPeriod>('12m')
+
   const range = useMemo(() => timelineToRange(timeline), [timeline])
+  const expenseRange = useMemo(
+    () => timelineToRange(expenseTimeline),
+    [expenseTimeline],
+  )
+  const netIncomeRange = useMemo(
+    () => timelineToRange(netIncomeTimeline),
+    [netIncomeTimeline],
+  )
 
   // ---- Data hooks ----------------------------------------------------------
   // KPIs derive from the with_stats aggregations every other page already
@@ -182,15 +219,22 @@ export function HomePage() {
     start: range.from,
     end: range.to,
   })
-  // Expense breakdown consumes a 12-month window regardless of the Cash
-  // Flow timeline selector — that way the donut reflects recent spend
-  // patterns even when the user scrubs the Cash Flow chart to "YTD".
-  const expenseRange = useMemo(() => timelineToRange('12m'), [])
+  // Expense breakdown consumes its own chart-data request driven by the
+  // expense timeline selector — the donut reflects the spend window the
+  // user picked rather than always defaulting to 12 months.
   const expenseQuery = useChartData({
     type: 'homePage',
     frequency: 'M',
     start: expenseRange.from,
     end: expenseRange.to,
+  })
+  // Net Income Trend gets its own request so its timeline selector is
+  // independent of the Cash Flow headline chart.
+  const netIncomeQuery = useChartData({
+    type: 'homePage',
+    frequency,
+    start: netIncomeRange.from,
+    end: netIncomeRange.to,
   })
 
   // ---- KPI derivations -----------------------------------------------------
@@ -394,14 +438,67 @@ export function HomePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <ExpenseBreakdownChart
           data={expenseQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
+          controls={
+            <Select
+              value={expenseTimeline}
+              onValueChange={(v) => setExpenseTimeline(v as Timeline)}
+            >
+              <SelectTrigger className="h-8 w-[150px]" aria-label="Expense timeline">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMELINE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
         />
-        <OccupancyChart />
+        <OccupancyChart
+          monthsBack={occupancyPeriodToMonths(occupancyPeriod)}
+          controls={
+            <Select
+              value={occupancyPeriod}
+              onValueChange={(v) => setOccupancyPeriod(v as OccupancyPeriod)}
+            >
+              <SelectTrigger className="h-8 w-[150px]" aria-label="Occupancy period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OCCUPANCY_PERIOD_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
       </div>
 
       {/* ---- Net income trend + Currency exposure (side-by-side) -------- */}
       <div className="grid gap-4 lg:grid-cols-2">
         <NetIncomeTrendChart
-          data={chartQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
+          data={netIncomeQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
+          controls={
+            <Select
+              value={netIncomeTimeline}
+              onValueChange={(v) => setNetIncomeTimeline(v as Timeline)}
+            >
+              <SelectTrigger className="h-8 w-[150px]" aria-label="Net income timeline">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMELINE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
         />
         <CurrencyExposureChart />
       </div>

@@ -6,6 +6,7 @@
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import type { ReactNode } from 'react'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
 import { formatCurrencyAxis } from '@/lib/format'
@@ -16,9 +17,11 @@ const INCOME_CATEGORIES = ['rent', 'other_income', 'capax', 'capex']
 
 type Props = {
   data: ChartDataResponse
+  // Optional controls rendered in the card header (e.g. a timeline Select).
+  controls?: ReactNode
 }
 
-export function ExpenseBreakdownChart({ data }: Props) {
+export function ExpenseBreakdownChart({ data, controls }: Props) {
   const { chartData, series, currency } = transformForRecharts(data)
 
   // One slice per EXPENSE series (negative values), summed across periods.
@@ -37,7 +40,7 @@ export function ExpenseBreakdownChart({ data }: Props) {
   }
 
   return (
-    <ChartCard title="Expense breakdown" description={`Spend by category (${currency})`} tableData={tableData}>
+    <ChartCard title="Expense breakdown" description={`Spend by category (${currency})`} controls={controls} tableData={tableData}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Tooltip formatter={(v) => formatCurrencyAxis(Number(v), currency)} />

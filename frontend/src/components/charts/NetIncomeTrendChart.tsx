@@ -19,6 +19,7 @@ import {
   Brush,
   ResponsiveContainer,
 } from 'recharts'
+import type { ReactNode } from 'react'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
@@ -26,9 +27,11 @@ import type { ChartDataResponse } from '@/api/charts'
 
 type Props = {
   data: ChartDataResponse
+  // Optional controls rendered in the card header (e.g. a timeline Select).
+  controls?: ReactNode
 }
 
-export function NetIncomeTrendChart({ data }: Props) {
+export function NetIncomeTrendChart({ data, controls }: Props) {
   const { chartData, series, currency } = transformForRecharts(data)
 
   // Net = sum of every numeric series value for the period. Label is
@@ -47,6 +50,7 @@ export function NetIncomeTrendChart({ data }: Props) {
     <ChartCard
       title="Net income trend"
       description={`Net income trajectory (${currency})`}
+      controls={controls}
       tableData={tableData}
     >
       <ResponsiveContainer width="100%" height="100%">

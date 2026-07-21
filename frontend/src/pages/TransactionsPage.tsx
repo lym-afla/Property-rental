@@ -27,10 +27,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useTransactions, useCreateTransaction, useDeleteTransaction } from '@/api/transactions'
+import {
+  useTransactions,
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction,
+} from '@/api/transactions'
 import { useProperties } from '@/api/properties'
 import { useTenants } from '@/api/tenants'
 import { DataTable } from '@/components/table/DataTable'
@@ -135,9 +140,13 @@ export function TransactionsPage() {
   const propertiesQuery = useProperties()
   const tenantsQuery = useTenants()
   const createTransaction = useCreateTransaction()
+  const updateTransaction = useUpdateTransaction()
   const deleteTransaction = useDeleteTransaction()
 
   const [createOpen, setCreateOpen] = useState(false)
+  // Edit target: when set, the edit dialog renders with this transaction's
+  // values pre-filled. Cleared on dialog close.
+  const [editTarget, setEditTarget] = useState<Transaction | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
 
   // Build lookup maps for the property/tenant display columns.
@@ -224,19 +233,32 @@ export function TransactionsPage() {
     },
     {
       id: 'actions',
-      header: '',
+      header: 'Actions',
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`Delete transaction ${row.original.id}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            setDeleteTarget(row.original)
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Edit transaction ${row.original.id}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditTarget(row.original)
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Delete transaction ${row.original.id}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setDeleteTarget(row.original)
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -294,6 +316,45 @@ export function TransactionsPage() {
             isSubmitting={createTransaction.isPending}
           />
         </EntityFormDialog>
+        {editTarget && (
+          <EntityFormDialog
+            open={!!editTarget}
+            onOpenChange={(open) => {
+              if (!open) setEditTarget(null)
+            }}
+            title="Transaction"
+            mode="edit"
+          >
+            <TransactionForm
+              properties={propertiesQuery.data ?? []}
+              tenants={tenantsQuery.data ?? []}
+              defaultValues={{
+                date: editTarget.date,
+                property: editTarget.property,
+                tenant: editTarget.tenant,
+                category: editTarget.category as
+                  | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
+                  | undefined,
+                amount: editTarget.amount,
+                currency: editTarget.currency as never,
+                comment: editTarget.comment ?? '',
+              }}
+              onSubmit={(values) =>
+                updateTransaction.mutate(
+                  { id: editTarget.id, data: values },
+                  {
+                    onSuccess: () => {
+                      toast.success('Transaction updated')
+                      setEditTarget(null)
+                    },
+                    onError: () => toast.error('Failed to update transaction'),
+                  },
+                )
+              }
+              isSubmitting={updateTransaction.isPending}
+            />
+          </EntityFormDialog>
+        )}
       </div>
     )
   }
@@ -342,6 +403,46 @@ export function TransactionsPage() {
           isSubmitting={createTransaction.isPending}
         />
       </EntityFormDialog>
+
+      {editTarget && (
+        <EntityFormDialog
+          open={!!editTarget}
+          onOpenChange={(open) => {
+            if (!open) setEditTarget(null)
+          }}
+          title="Transaction"
+          mode="edit"
+        >
+          <TransactionForm
+            properties={propertiesQuery.data ?? []}
+            tenants={tenantsQuery.data ?? []}
+            defaultValues={{
+              date: editTarget.date,
+              property: editTarget.property,
+              tenant: editTarget.tenant,
+              category: editTarget.category as
+                | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
+                | undefined,
+              amount: editTarget.amount,
+              currency: editTarget.currency as never,
+              comment: editTarget.comment ?? '',
+            }}
+            onSubmit={(values) =>
+              updateTransaction.mutate(
+                { id: editTarget.id, data: values },
+                {
+                  onSuccess: () => {
+                    toast.success('Transaction updated')
+                    setEditTarget(null)
+                  },
+                  onError: () => toast.error('Failed to update transaction'),
+                },
+              )
+            }
+            isSubmitting={updateTransaction.isPending}
+          />
+        </EntityFormDialog>
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
