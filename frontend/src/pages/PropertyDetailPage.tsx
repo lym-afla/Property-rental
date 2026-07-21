@@ -13,9 +13,10 @@
 //         property via `DataTable`, with create / edit / delete wired
 //         through `EntityFormDialog` + `ConfirmDialog`.
 //
-// Chart placeholders: the P&L panel reserves a slot for an upcoming chart
-// (filled by Plan C). Until then it renders a commented placeholder so the
-// layout doesn't shift when the chart lands.
+// Charts (Plan C): the Overview tab mounts RentYieldChart (rent / value
+// per period); the Valuations tab mounts ValuationChart (Debt + Equity
+// stacked with total-value line). Both pull from a single
+// `useChartData({type: 'property', elementId: id})` round-trip.
 //
 // B1 adaptation notes (vs the original task-3 brief):
 //   - `EntityFormDialog` takes `title` + `children` (the form), not a
@@ -45,6 +46,9 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
+import { useChartData } from '@/api/charts'
+import { ValuationChart } from '@/components/charts/ValuationChart'
+import { RentYieldChart } from '@/components/charts/RentYieldChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { ConfirmDialog } from '@/components/modals/ConfirmDialog'
@@ -84,6 +88,26 @@ export function PropertyDetailPage() {
   const propertyQuery = useProperty(propertyId)
   const valuationsQuery = usePropertyValuations(propertyId)
   const transactionsQuery = useTransactions({ property: propertyId })
+
+  // Property-scoped chart data: feeds ValuationChart (Debt + Equity per
+  // period) and RentYieldChart (rent / value). A single round-trip covers
+  // both since the chart-data view already returns the union of series
+  // the property branch builds (`Debt`, `Equity`, plus the rent category
+  // from the homePage-style aggregation). We pull 5 years of history so
+  // both charts have meaningful context for established properties.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const fiveYearsAgo = (() => {
+    const d = new Date()
+    d.setFullYear(d.getFullYear() - 5)
+    return d.toISOString().slice(0, 10)
+  })()
+  const chartQuery = useChartData({
+    type: 'property',
+    elementId: propertyId,
+    frequency: 'M',
+    start: fiveYearsAgo,
+    end: todayStr,
+  })
 
   const updateProperty = useUpdateProperty()
   const deleteProperty = useDeleteProperty()
@@ -315,10 +339,6 @@ export function PropertyDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Chart placeholder — Plan C will mount the P&L chart here.
-                  Keeping the slot visible (vs. omitting it) means the tab
-                  layout won't reflow when the chart lands. */}
-              {/* <PnLChart data={pnl} currency={property.currency} /> */}
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Stat
                   label="Gross income"
@@ -335,6 +355,17 @@ export function PropertyDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          {/* Rent yield chart (Plan C). Sits between the P&L card and the
+              recent-transactions table so the yield trend is visible right
+              after the summary numbers it derives from. The chart owns its
+              own loading/error states via ChartCard; we pass the chart-data
+              payload through and let the chart fetch its own valuations
+              (RentYieldChart calls usePropertyValuations internally). */}
+          <RentYieldChart
+            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
+            propertyId={propertyId}
+          />
 
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Recent transactions</h2>
@@ -385,6 +416,14 @@ export function PropertyDetailPage() {
               data={valuationsQuery.data}
             />
           )}
+
+          {/* Valuation chart (Plan C). Sits under the capital-structure
+              table so users can read the same numbers as a trend. The
+              chart-data request feeds Debt + Equity series; the chart
+              overlays the sum (total value) as a line. */}
+          <ValuationChart
+            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
+          />
         </TabsContent>
       </Tabs>
 

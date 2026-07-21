@@ -18,9 +18,8 @@
 //         is structured so a future `useLeaseRentHistory(id)` hook can
 //         replace the derived rows without touching the page layout.
 //
-// Chart placeholder: the Overview tab reserves a card slot for an
-// upcoming chart (filled by Plan C). Until then it renders a commented
-// placeholder so the layout doesn't shift when the chart lands.
+// Charts (Plan C): the Overview tab mounts TenantRentChart (rent received
+// per period), wired to useChartData({type: 'tenant', elementId: id}).
 //
 // B1 adaptation notes (vs the original task-5 brief):
 //   - `useTenant(id)` returns the plain `Tenant` shape, but the header
@@ -46,6 +45,8 @@ import {
 } from '@/api/tenants'
 import { useProperty } from '@/api/properties'
 import { useTransactions } from '@/api/transactions'
+import { useChartData } from '@/api/charts'
+import { TenantRentChart } from '@/components/charts/TenantRentChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
@@ -118,6 +119,21 @@ export function TenantDetailPage() {
   const statsQuery = useTenantsWithStats()
   const transactionsQuery = useTransactions({ tenant: tenantId })
   const updateTenant = useUpdateTenant()
+
+  // Tenant-scoped chart data: powers TenantRentChart (rent received per
+  // period). Monthly frequency over the lease lifetime; the chart's own
+  // Brush handles long histories. We seed the window from the tenant's
+  // lease_start through today once the tenant record is loaded; until then
+  // we fall back to today as both bounds so the request fires with a
+  // harmless 1-day window rather than NaN.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const chartQuery = useChartData({
+    type: 'tenant',
+    elementId: tenantId,
+    frequency: 'M',
+    start: tenantQuery.data?.lease_start ?? todayStr,
+    end: todayStr,
+  })
 
   const [editOpen, setEditOpen] = useState(false)
   const [vacateOpen, setVacateOpen] = useState(false)
@@ -327,10 +343,6 @@ export function TenantDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Chart placeholder — Plan C will mount the revenue/debt
-                  chart here. Keeping the slot visible (vs. omitting it)
-                  means the tab layout won't reflow when the chart lands. */}
-              {/* <RevenueChart tenant={tenant} currency={currency} /> */}
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Stat
                   label="Revenue (all-time)"
@@ -369,6 +381,14 @@ export function TenantDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          {/* Tenant rent history chart (Plan C). Renders below the
+              revenue/debt card so the lifetime + YTD figures sit right
+              above the per-period bars they aggregate. The chart owns its
+              own loading/error states via ChartCard. */}
+          <TenantRentChart
+            data={chartQuery.data ?? { labels: [], datasets: [], currency: currency || 'USD' }}
+          />
 
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Recent transactions</h2>

@@ -8,6 +8,7 @@
 //
 // All shape translation lives in `transformForRecharts`; this component
 // is purely presentation.
+import type { ReactNode } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush, ResponsiveContainer } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
@@ -17,16 +18,19 @@ import type { ChartDataResponse } from '@/api/charts'
 type Props = {
   data: ChartDataResponse
   onBarClick?: (period: string, category: string) => void
+  // Forwarded to ChartCard so the dashboard can render the frequency +
+  // timeline selectors in the chart header (next to the "Table" toggle).
+  controls?: ReactNode
 }
 
-export function CashFlowChart({ data, onBarClick }: Props) {
+export function CashFlowChart({ data, onBarClick, controls }: Props) {
   const { chartData, series, currency } = transformForRecharts(data)
   const tableData = {
     headers: ['Period', ...series.map(s => s.label)],
     rows: chartData.map(row => [row.label as string, ...series.map(s => row[s.key] as number)]),
   }
   return (
-    <ChartCard title="Cash Flow" description="Income vs expenses by period" tableData={tableData}>
+    <ChartCard title="Cash Flow" description="Income vs expenses by period" controls={controls} tableData={tableData}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
