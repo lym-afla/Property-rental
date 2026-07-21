@@ -316,6 +316,56 @@ class Transaction(models.Model):
         super(Transaction, self).save(*args, **kwargs)
         
 # Table with FX data
+class FXManager(models.Manager):
+    """Custom manager for ``FX`` whose ``bulk_create`` emits
+    ``post_save`` per created row.
+
+    Django's stock ``QuerySet.bulk_create`` deliberately skips the
+    per-row ``save()`` path AND skips ``post_save`` signals (the docs
+    say so explicitly). For ``FX`` that is a problem because cache
+    invalidation is signal-driven (Phase 4 Task 3): without a manual
+    signal, a bulk insert would leave the graph cache stale and the
+    next ``get_rate`` would return rates computed from the PRE-bulk
+    snapshot. Overriding ``bulk_create`` here to emit ``post_save``
+    per row closes that gap and matches the contract every other FX
+    write (``save()``, ``delete()``) already satisfies.
+
+    The override is intentionally minimal: it delegates to the parent
+    ``bulk_create`` for the actual INSERT (so we keep the single-query
+    performance win) and then emits one ``post_save`` per row with
+    ``created=True`` and ``raw=False``. ``update_fields`` is omitted
+    (it's a create, not an update).
+    """
+
+    def bulk_create(self, objs, batch_size=None, ignore_conflicts=False):
+        objs = list(objs)
+        # Ignore_conflicts=True can leave PKs unset on the returned
+        # instances when a row was actually a no-op conflict — in that
+        # case the signal handler still fires, which is the conservative
+        # choice (an upsert no-op can't make the cache stale, but it
+        # also can't hurt to invalidate).
+        result = super().bulk_create(
+            objs, batch_size=batch_size, ignore_conflicts=ignore_conflicts
+        )
+        # Lazy import: ``models`` is imported by ``rentals.signals`` at
+        # module load, and ``signals`` is imported by ``apps.ready`` —
+        # importing ``signals`` here at module scope would close a
+        # circular import.
+        from django.db.models.signals import post_save
+
+        for instance in result:
+            post_save.send(
+                sender=self.model,
+                instance=instance,
+                created=True,
+                raw=False,
+                using=self.db,
+                update_fields=None,
+            )
+        return result
+
+
+# Table with FX data
 class FX(models.Model):
     # Long format (Task 9): one row per (date, currency pair). Adding a
     # new currency pair is now a row insert, not a schema migration. The
@@ -324,29 +374,21 @@ class FX(models.Model):
     # ``_meta.fields``.
     #
     # Task 10: the graph-build + Bellman-Ford traversal lives in
-    # ``rentals.services.fx`` so it can be cached at module scope. This
-    # model is now a thin delegate: ``get_rate`` / ``update_fx_rates``
-    # forward to the service, and ``save`` / ``delete`` invalidate the
-    # service's cache so an FX write can never leave the graph stale.
+    # ``rentals.services.fx`` so it can be cached (Django cache framework
+    # as of Phase 4 Task 3, 2026-07-19). This model is now a thin
+    # delegate: ``get_rate`` / ``update_fx_rates`` forward to the service.
+    # Cache invalidation is handled by ``post_save`` / ``post_delete``
+    # signal handlers in ``rentals.signals`` (registered in
+    # ``RentalsConfig.ready``), so an FX write — including
+    # ``bulk_create`` (via the ``FXManager`` override below) and the
+    # ``save()`` / ``delete()`` paths that previously used model overrides
+    # — always forces the next ``get_rate`` to rebuild.
     date = models.DateField()
     from_currency = models.CharField(max_length=3)
     to_currency = models.CharField(max_length=3)
     rate = models.DecimalField(max_digits=20, decimal_places=10)
 
-    def save(self, *args, **kwargs):
-        # Invalidate the FX graph cache on every write so the next
-        # ``get_rate`` rebuilds with the new row. Lazy import avoids a
-        # module-load circular import with ``rentals.services.fx``.
-        super().save(*args, **kwargs)
-        from rentals.services import fx as fx_service
-        fx_service.invalidate_cache()
-
-    def delete(self, *args, **kwargs):
-        # Same cache-invalidation contract as ``save``: a deleted row
-        # must force a rebuild on the next ``get_rate``.
-        super().delete(*args, **kwargs)
-        from rentals.services import fx as fx_service
-        fx_service.invalidate_cache()
+    objects = FXManager()
 
     @classmethod
     def update_fx_rates(cls, property_id):

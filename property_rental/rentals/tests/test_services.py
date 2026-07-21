@@ -8,8 +8,13 @@ table on EVERY call. A chart with 360 data points triggered 360 graph
 rebuilds per render.
 
 After Task 10, the graph is built at most once per ``as_of`` date and
-cached at module scope in ``rentals.services.fx``. ``FX.save`` /
-``FX.delete`` invalidate the cache so it can never go stale.
+cached. Phase 4 Task 3 (2026-07-19) moved the cache off the
+module-level dict and onto Django's cache framework, and moved the
+invalidation off the ``FX.save``/``FX.delete`` overrides and onto
+``post_save`` / ``post_delete`` signal handlers (registered in
+``RentalsConfig.ready``). The signal-based path catches
+``bulk_create`` / ``QuerySet.update`` / ``QuerySet.delete`` writes that
+the old model-override pattern missed.
 
 Task 11 introduced ``rentals/services/financials.py`` — the
 financial-aggregation service. ``Transaction.financials`` and
@@ -30,6 +35,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from django.core.cache import cache
 
 from rentals.services import fx as fx_service
 from rentals.tests.factories import FXFactory
@@ -62,7 +68,7 @@ def test_fx_graph_is_cached():
 
     # Belt-and-suspenders: a leftover cache entry from a prior test
     # would mask a cache-miss bug. Start from a known-empty cache.
-    fx_service.invalidate_cache()
+    cache.clear()
 
     real_build_graph = fx_service.build_graph
     with patch.object(fx_service, "build_graph", wraps=real_build_graph) as spy:
@@ -79,21 +85,27 @@ def test_fx_graph_is_cached():
 @pytest.mark.django_db
 def test_fx_graph_cache_invalidated_on_save():
     """Saving a new ``FX`` row must invalidate the cache so the next
-    ``get_rate`` sees the new edge."""
+    ``get_rate`` sees the new edge.
+
+    Phase 4 Task 3 (2026-07-19): invalidation now happens via the
+    ``post_save`` signal handler in ``rentals.signals`` rather than the
+    model ``save()`` override — the contract from the caller's
+    perspective is unchanged.
+    """
     as_of = date(2024, 1, 15)
     FXFactory(
         date=date(2024, 1, 10),
         from_currency="EUR", to_currency="USD", rate=Decimal("1.10"),
     )
 
-    fx_service.invalidate_cache()
+    cache.clear()
     # Prime the cache.
     fx_service.get_rate("EUR", "USD", as_of=as_of)
 
     real_build_graph = fx_service.build_graph
     with patch.object(fx_service, "build_graph", wraps=real_build_graph) as spy:
         # Adding a new FX row goes through FX.save() (factory does this),
-        # which must invalidate.
+        # which emits ``post_save`` and invalidates the cache.
         FXFactory(
             date=date(2024, 1, 10),
             from_currency="GBP", to_currency="USD", rate=Decimal("1.25"),
@@ -114,6 +126,9 @@ def test_fx_graph_cache_invalidated_on_delete():
     reachable in the graph (``get_rate`` after the delete must not
     raise ``NodeNotFound`` — we are testing the cache contract, not the
     no-path branch).
+
+    Phase 4 Task 3 (2026-07-19): invalidation now happens via the
+    ``post_delete`` signal handler in ``rentals.signals``.
     """
     as_of = date(2024, 1, 15)
     eur_usd = FXFactory(
@@ -125,7 +140,7 @@ def test_fx_graph_cache_invalidated_on_delete():
         from_currency="EUR", to_currency="GBP", rate=Decimal("0.90"),
     )
 
-    fx_service.invalidate_cache()
+    cache.clear()
     # Prime the cache.
     fx_service.get_rate("EUR", "USD", as_of=as_of)
 
@@ -133,12 +148,65 @@ def test_fx_graph_cache_invalidated_on_delete():
     with patch.object(fx_service, "build_graph", wraps=real_build_graph) as spy:
         eur_usd.delete()
         # EUR-GBP still exists so EUR is reachable. The cache was
-        # invalidated by ``delete()``, so this must trigger a rebuild.
+        # invalidated by the ``post_delete`` signal, so this must
+        # trigger a rebuild.
         fx_service.get_rate("EUR", "GBP", as_of=as_of)
 
     assert spy.call_count == 1, (
         f"expected exactly one rebuild after delete-then-get_rate; "
         f"got {spy.call_count}"
+    )
+
+
+@pytest.mark.django_db
+def test_fx_graph_cache_invalidated_on_bulk_create(db):
+    """``FX.objects.bulk_create(...)`` must invalidate the cache.
+
+    The motivating case for Phase 4 Task 3 (2026-07-19): the previous
+    ``FX.save`` / ``FX.delete`` model overrides missed writes that
+    bypass ``save()``. ``bulk_create`` is exactly such a path — it is
+    also the call shape a future optimization of the yfinance back-fill
+    in ``services.fx.update_rates`` would naturally adopt (collect
+    pairs, insert in one query). Django 4.0+ emits ``post_save`` per
+    row created via ``bulk_create`` when the model has ``post_save``
+    receivers registered, which our ``rentals.signals`` handler does.
+
+    Seed one pair so the cache has something to invalidate. Prime the
+    cache, then ``bulk_create`` a new pair, then wrap ``build_graph``
+    with a spy and call ``get_rate`` for the new pair. The cache must
+    have been invalidated by the signal, so the second call rebuilds
+    the graph and the spy records at least one call.
+    """
+    from rentals.models import FX
+
+    as_of = date(2024, 6, 1)
+    FXFactory(
+        date=date(2024, 1, 10),
+        from_currency="EUR", to_currency="USD", rate=Decimal("1.10"),
+    )
+
+    cache.clear()
+    # Prime the cache.
+    fx_service.get_rate("EUR", "USD", as_of=as_of)
+
+    # Bulk-create an FX row — bypasses ``save()``. Only the signal
+    # handler catches this path.
+    FX.objects.bulk_create([
+        FX(
+            date=date(2024, 5, 1),
+            from_currency="GBP",
+            to_currency="USD",
+            rate=Decimal("1.25"),
+        ),
+    ])
+
+    real_build_graph = fx_service.build_graph
+    with patch.object(fx_service, "build_graph", wraps=real_build_graph) as spy:
+        fx_service.get_rate("GBP", "USD", as_of=as_of)
+
+    assert spy.call_count >= 1, (
+        "graph should be rebuilt after signal-based invalidation "
+        f"(bulk_create); got {spy.call_count} build_graph call(s)"
     )
 
 

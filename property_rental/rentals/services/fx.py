@@ -3,9 +3,10 @@
 Task 10 (Phase 1 Foundation). Before this module existed, ``FX.get_rate``
 rebuilt an ``nx.Graph`` from the FX table on EVERY call. A chart with
 360 data points triggered 360 graph rebuilds per render. This module
-caches the graph at module scope so it is built at most once per
-``as_of`` date, and invalidated whenever an ``FX`` row is saved or
-deleted (the cache key is the ``as_of`` date).
+caches the graph in Django's cache framework so it is built at most
+once per ``as_of`` date, and invalidated whenever an ``FX`` row is
+saved or deleted via ``post_save`` / ``post_delete`` signals (Phase 4
+Task 3, 2026-07-19).
 
 Public surface (the bits ``FX`` model and callers reach for):
 
@@ -21,8 +22,9 @@ Public surface (the bits ``FX`` model and callers reach for):
 * ``build_graph(as_of)`` — the raw graph construction (one
   ``date__lte=as_of`` query + ``add_edge`` per row). Exposed as a
   separate function so the cache test can wrap it with a spy.
-* ``invalidate_cache()`` — clears the cached graph. Called by
-  ``FX.save`` / ``FX.delete`` so the cache can never go stale.
+* ``invalidate_cache()`` — clears the cached graph. Called by the
+  ``post_save`` / ``post_delete`` signal handlers in
+  ``rentals.signals`` so the cache can never go stale.
 * ``update_rates(property_id)`` — the yfinance back-fill routine,
   moved verbatim from ``FX.update_fx_rates``.
 
@@ -39,7 +41,10 @@ not "improve" any of them — ``test_fx_char.py`` and
 ``test_fx_migration.py`` will flag a change.
 """
 
+import logging
+
 import networkx as nx
+from django.core.cache import cache
 from django.db.models import Q
 
 # ``FX`` / ``Property`` / ``update_FX_database`` are imported lazily
@@ -48,20 +53,42 @@ from django.db.models import Q
 # (``FX.get_rate`` delegates here), and ``rentals.utils`` (imported by
 # ``rentals.models``) does the yfinance fetch.
 
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
-# Module-level graph cache
+# FX graph cache (Django cache framework)
+# ---------------------------------------------------------------------------
+#
+# Phase 4 Task 3 (2026-07-19) replaced the previous module-level dict
+# cache with Django's cache framework. The cache is keyed by the
+# ``as_of`` date (the only thing the graph depends on, since the graph
+# query is ``date__lte=as_of``). Invalidation now happens via Django
+# ``post_save`` / ``post_delete`` signal handlers in ``rentals.signals``
+# instead of ``FX.save`` / ``FX.delete`` overrides on the model — the
+# override pattern missed writes that bypass ``save()`` (e.g.
+# ``QuerySet.update()``) and was an architectural smell. Signals catch
+# every ORM-driven write to the FX table.
+#
+# ``invalidate_cache()`` calls ``cache.clear()`` which is the simplest
+# approach for the default ``LocMemCache``. If the cache backend is
+# later switched to Redis / memcached, swap to a version-counter pattern
+# (key the graph by ``(as_of, fx_version)`` and bump ``fx_version`` on
+# invalidation) to avoid clearing unrelated cache keys.
+_CACHE_PREFIX = 'fx_graph:'
+_CACHE_TIMEOUT = 3600  # 1 hour
+
+
+# ---------------------------------------------------------------------------
+# FX graph cache helpers
 # ---------------------------------------------------------------------------
 #
 # Keyed by ``as_of`` (the only thing the graph depends on, since the
-# graph query is ``date__lte=as_of``). A single-slot cache is fine for
-# this phase because each request uses exactly one ``as_of`` (it comes
-# from ``get_effective_date(request.user)``). A multi-date caller in a
-# single process (e.g. a back-dated batch job) would thrash the cache
-# and fall back to rebuild-per-call, which is the pre-Task-10 behavior —
-# correct, just not optimal. Keying by ``as_of`` instead of blindly
-# reusing the cached graph keeps a multi-date caller CORRECT.
-_graph_cache = {"graph": None, "as_of": None}
+# graph query is ``date__lte=as_of``). ``_get_graph`` looks up the
+# Django cache by ``as_of`` date string and rebuilds on a miss. The
+# multi-date case (e.g. a back-dated batch job) just triggers one
+# rebuild per date, which is correct (each date gets its own key and
+# is never reused with stale data) and bounded by the number of dates.
 
 
 def build_graph(as_of):
@@ -90,29 +117,34 @@ def build_graph(as_of):
 
 
 def _get_graph(as_of):
-    """Return the cached graph for ``as_of``, rebuilding if the cache
-    is empty or keyed to a different date.
+    """Return the cached graph for ``as_of``, rebuilding on a miss.
 
-    Single-slot cache: if a caller bounces between two ``as_of`` dates
-    in the same process, each swap is a cache miss + rebuild. That is
-    correct (the cache key check guarantees no stale graph is reused),
-    just not optimal. Most request flows use a single ``as_of``.
+    Looks the graph up in Django's cache by ``as_of.isoformat()``. On a
+    miss, builds the graph and stores it under the same key with the
+    configured timeout. The cache key includes the date so two callers
+    using different ``as_of`` values never collide.
     """
-    if _graph_cache["graph"] is None or _graph_cache["as_of"] != as_of:
-        _graph_cache["graph"] = build_graph(as_of)
-        _graph_cache["as_of"] = as_of
-    return _graph_cache["graph"]
+    key = f'{_CACHE_PREFIX}{as_of.isoformat()}'
+    graph = cache.get(key)
+    if graph is None:
+        graph = build_graph(as_of)
+        cache.set(key, graph, _CACHE_TIMEOUT)
+    return graph
 
 
 def invalidate_cache():
-    """Clear the cached graph.
+    """Clear the FX graph cache.
 
-    Called by ``FX.save`` / ``FX.delete`` (override pattern per the
-    Task 10 brief) so the cache can never go stale: any FX write or
-    delete forces the next ``get_rate`` to rebuild.
+    Called by the ``post_save`` / ``post_delete`` signal handlers in
+    ``rentals.signals`` so the cache can never go stale: any FX write
+    or delete forces the next ``get_rate`` to rebuild.
     """
-    _graph_cache["graph"] = None
-    _graph_cache["as_of"] = None
+    # ``cache.clear()`` is the simplest approach for LocMemCache (the
+    # default and what the test suite uses). For a shared backend
+    # (Redis/memcached) this also clears unrelated keys, which is
+    # acceptable for a small personal app; if the app grows, swap to a
+    # version-counter pattern (see the module docstring).
+    cache.clear()
 
 
 def get_rate(from_currency, to_currency, as_of):
@@ -252,11 +284,11 @@ def update_rates(property_id):
     # Scan Transaction instances in the database to collect dates
     transaction_dates = property_instance.transactions.values_list('date', flat=True)
 
-    print(f"Checking FX rates for {len(transaction_dates)} dates")
+    logger.info("Checking FX rates for %s dates", len(transaction_dates))
     count = 0
     for date in transaction_dates:
         count += 1
-        print(f'{count} of {len(transaction_dates)}')
+        logger.info("%s of %s", count, len(transaction_dates))
         for source, target in currency_pairs:
             # Check if a long-format FX rate already exists for the
             # (date, pair) combination.
@@ -278,8 +310,8 @@ def update_rates(property_id):
                         to_currency=target,
                         defaults={'rate': rate_data['exchange_rate']},
                     )
-                    print(f'{source}{target} for {rate_data["requested_date"]} is updated')
+                    logger.info("%s%s for %s is updated", source, target, rate_data["requested_date"])
                 else:
                     raise Exception(f'{source}{target} for {date} is NOT updated. Yahoo Finance is not responding correctly')
             else:
-                print(f'{source}{target} for {date} already exists')
+                logger.info("%s%s for %s already exists", source, target, date)
