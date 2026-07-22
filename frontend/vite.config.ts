@@ -30,11 +30,21 @@ export default defineConfig({
     // under ``/static/frontend/`` (set via ``base`` above) — only Django's
     // own static files (anything NOT under /static/frontend/) are proxied.
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
-      '/admin': 'http://127.0.0.1:8000',
-      '/media': 'http://127.0.0.1:8000',
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/admin': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/media': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
       '/static': {
         target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
         // Skip Vite-served assets (its base is /static/frontend/).
         bypass: (req) => {
           if (req.url && req.url.startsWith('/static/frontend/')) {
