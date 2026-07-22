@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
-import { formatCurrencyAxis } from '@/lib/format'
+import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
 
 type Props = {
@@ -47,8 +47,9 @@ export function TenantRentChart({ data, onBarClick }: Props) {
         <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+          {/* Axis uses compact `k`; tooltip uses full `#,###` per spec. */}
           <YAxis tickFormatter={(v) => formatCurrencyAxis(v, currency)} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(v) => formatCurrencyAxis(Number(v), currency)} />
+          <Tooltip formatter={(v) => formatCurrency(Number(v), currency)} />
           {series.map(s => (
             <Bar
               key={s.key}

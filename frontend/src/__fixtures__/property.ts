@@ -20,6 +20,7 @@ export const fixturePropertyWithStats: PropertyWithStats = {
   gross_income_ytd: 3600,
   expenses_ytd: 840,
   net_income_ytd: 4440,
+  stats_currency: 'USD',
 }
 
 // Second property with distinct values so list-rendering tests can assert

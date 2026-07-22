@@ -19,4 +19,9 @@ export type TenantWithStats = Tenant & {
   revenue_all_time: number
   revenue_ytd: number
   debt: number
+  // Currency the aggregate fields above are denominated in (almost always
+  // `USD` — the backend FX-converts stats to a single target currency).
+  // The tenant's NATIVE currency is the property's `currency` field, which
+  // is fetched separately via `useProperties`.
+  stats_currency: string
 }

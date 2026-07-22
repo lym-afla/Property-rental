@@ -28,7 +28,8 @@ export const fixturePropertiesWithStats: PropertyWithStats[] = [
     net_income_all_time: 12000,
     gross_income_ytd: 7200,
     expenses_ytd: 1200,
-    net_income_ytd: 6000 },
+    net_income_ytd: 6000,
+    stats_currency: 'USD' },
 ]
 
 export const fixtureTenants: Tenant[] = [fixtureTenant, fixtureTenantAlt]
@@ -39,7 +40,8 @@ export const fixtureTenantsWithStats: TenantWithStats[] = [
     rent_rate: '1200.00',
     revenue_all_time: 7200,
     revenue_ytd: 3600,
-    debt: 0 },
+    debt: 0,
+    stats_currency: 'USD' },
 ]
 
 export const fixtureTransactions: Transaction[] = [

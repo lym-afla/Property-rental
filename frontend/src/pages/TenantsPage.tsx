@@ -32,6 +32,13 @@
 //   - `TenantWithStats.rent_rate` is typed as `number | string` because
 //     the API serializes the decimal as a string in some code paths; we
 //     coerce via `Number()` before formatting.
+//   - The stats (`revenue_*`, `debt`) are FX-converted to USD on the
+//     backend (exposed as `stats_currency`). The display uses the native
+//     property currency for the rent_rate column (which IS in native
+//     currency) but uses `stats_currency` for the revenue/debt columns —
+//     mixing them caused the revenue column to show e.g. `£7,200` for a
+//     USD-converted amount. Vacated tenants get a greyed-out row + the
+//     vacate date surfaced in the Status column.
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -55,6 +62,21 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { TenantWithStats } from '@/types/tenant'
 import type { Property } from '@/types/property'
+
+// Render a tenant's full name, tolerating a null/undefined `last_name`
+// (the API exposes the column as nullable in some legacy data). Returns
+// just the first name if no last name is set — never the literal "null".
+function formatTenantName(
+  first: string | null | undefined,
+  last: string | null | undefined,
+): string {
+  const f = first ?? ''
+  const l = last ?? ''
+  if (!f && !l) return '—'
+  if (!l) return f
+  if (!f) return l
+  return `${f} ${l}`
+}
 
 // Status bucketing — see the file header for the rules. We treat
 // `lease_end` as a date string `YYYY-MM-DD` (the serializer format); a
@@ -110,10 +132,11 @@ export function TenantsPage() {
     {
       id: 'name',
       header: 'Tenant',
-      // Display "First Last"; sorting by the underlying field is a
-      // secondary concern (TanStack falls back to row order).
+      // Display "First Last" with a null-tolerant helper. Previously this
+      // template-literal'd `null` straight into the DOM when `last_name`
+      // was missing.
       cell: ({ row }) =>
-        `${row.original.first_name} ${row.original.last_name}`,
+        formatTenantName(row.original.first_name, row.original.last_name),
     },
     {
       id: 'property',
@@ -126,10 +149,9 @@ export function TenantsPage() {
     {
       id: 'currency',
       header: 'Currency',
-      // Surface each tenant's property currency code so the rent /
-      // revenue / debt columns have an explicit FX context. Falls back
-      // to an em dash if the property lookup missed (e.g. race during
-      // create).
+      // Surface each tenant's property currency code (native currency).
+      // Stats columns are USD — this column is the only place the native
+      // currency shows up.
       cell: ({ row }) => {
         const property = propertyById.get(row.original.property)
         return property?.currency ?? '—'
@@ -143,12 +165,27 @@ export function TenantsPage() {
     {
       id: 'status',
       header: 'Status',
+      // For vacated tenants we ALSO surface the vacate date alongside the
+      // badge so landlords can see WHEN they left (the old Django template
+      // shaded the row grey for vacated tenants; we replicate that visual
+      // cue via the row className on the wrapping <DataTable> below).
       cell: ({ row }) => {
         const status = tenantStatus(row.original.lease_end)
+        const vacatedOn =
+          status === 'vacated' && row.original.lease_end
+            ? formatDate(row.original.lease_end)
+            : null
         return (
-          <Badge variant={STATUS_VARIANT[status]}>
-            {STATUS_LABEL[status]}
-          </Badge>
+          <span className="flex items-center gap-2">
+            <Badge variant={STATUS_VARIANT[status]}>
+              {STATUS_LABEL[status]}
+            </Badge>
+            {vacatedOn ? (
+              <span className="text-xs text-muted-foreground">
+                on {vacatedOn}
+              </span>
+            ) : null}
+          </span>
         )
       },
     },
@@ -157,6 +194,8 @@ export function TenantsPage() {
       header: 'Rent rate',
       cell: ({ row }) => {
         const property = propertyById.get(row.original.property)
+        // rent_rate is in the property's native currency (it mirrors the
+        // underlying LeaseRent.rent decimal, no FX conversion).
         return formatCurrency(
           Number(row.original.rent_rate),
           property?.currency ?? '',
@@ -167,10 +206,13 @@ export function TenantsPage() {
       accessorKey: 'revenue_all_time',
       header: 'Revenue (all-time)',
       cell: ({ row }) => {
-        const property = propertyById.get(row.original.property)
+        // Stats are FX-converted on the backend; use `stats_currency`
+        // (almost always USD) — NOT the property's native currency. The
+        // previous code used the native currency symbol with USD-converted
+        // values, which made revenue look wrong (£7,200 for $7,200).
         return formatCurrency(
           row.original.revenue_all_time,
-          property?.currency ?? '',
+          row.original.stats_currency ?? 'USD',
         )
       },
     },
@@ -178,10 +220,9 @@ export function TenantsPage() {
       accessorKey: 'revenue_ytd',
       header: 'Revenue (YTD)',
       cell: ({ row }) => {
-        const property = propertyById.get(row.original.property)
         return formatCurrency(
           row.original.revenue_ytd,
-          property?.currency ?? '',
+          row.original.stats_currency ?? 'USD',
         )
       },
     },
@@ -189,11 +230,11 @@ export function TenantsPage() {
       accessorKey: 'debt',
       header: 'Debt',
       cell: ({ row }) => {
-        const property = propertyById.get(row.original.property)
+        const cur = row.original.stats_currency ?? 'USD'
         const debt = row.original.debt
         return (
           <span className={debt > 0 ? 'font-medium text-destructive' : ''}>
-            {formatCurrency(debt, property?.currency ?? '')}
+            {formatCurrency(debt, cur)}
           </span>
         )
       },
@@ -210,7 +251,10 @@ export function TenantsPage() {
           <Button
             variant="outline"
             size="sm"
-            aria-label={`Vacate ${row.original.first_name} ${row.original.last_name}`}
+            aria-label={`Vacate ${formatTenantName(
+              row.original.first_name,
+              row.original.last_name,
+            )}`}
             // Stop propagation so the row's onClick (navigate to detail)
             // does not fire alongside the vacate intent.
             onClick={(e) => {
@@ -272,6 +316,13 @@ export function TenantsPage() {
     )
   }
 
+  // Mark vacated rows so the DataTable can shade them grey (mirrors the
+  // old Django template's "vacated -> muted row" treatment).
+  const rowClassName = (tenant: TenantWithStats) =>
+    tenantStatus(tenant.lease_end) === 'vacated'
+      ? 'opacity-60 bg-muted/40'
+      : ''
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -286,6 +337,7 @@ export function TenantsPage() {
         columns={columns}
         data={data}
         onRowClick={(row) => navigate(`/tenants/${row.id}`)}
+        getRowClassName={rowClassName}
       />
 
       <EntityFormDialog
@@ -316,7 +368,10 @@ export function TenantsPage() {
             if (!open) setVacateTarget(null)
           }}
           tenantId={vacateTarget.id}
-          tenantLabel={`${vacateTarget.first_name} ${vacateTarget.last_name}`}
+          tenantLabel={formatTenantName(
+            vacateTarget.first_name,
+            vacateTarget.last_name,
+          )}
           onSuccess={() => setVacateTarget(null)}
         />
       )}

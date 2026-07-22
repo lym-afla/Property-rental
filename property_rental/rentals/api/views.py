@@ -167,14 +167,20 @@ class PropertyViewSet(viewsets.ModelViewSet):
         Returned shape (one entry per owned property)::
 
             {
-              ...PropertySerializer fields,
+              ...PropertySerializer fields,        # ``currency`` is the NATIVE
+                                                    # property currency (RUB/GBP/
+                                                    # etc.) — used by the frontend
+                                                    # for the Currency Exposure
+                                                    # chart grouping.
               "gross_income_all_time": float,
               "expenses_all_time": float,        # always <= 0
               "net_income_all_time": float,      # income + expense
               "gross_income_ytd": float,
               "expenses_ytd": float,
               "net_income_ytd": float,
-              "currency": "USD"
+              "stats_currency": "USD"             # currency the aggregates are
+                                                    # FX-converted into (defaults
+                                                    # to ``USD``).
             }
 
         Expenses carry their negative sign through from the underlying
@@ -231,6 +237,13 @@ class PropertyViewSet(viewsets.ModelViewSet):
             )
 
             data = PropertySerializer(prop).data
+            # Preserve the property's native ``currency`` (RUB/GBP/etc.) so
+            # the frontend can group by it for the Currency Exposure chart.
+            # The FX-converted currency the aggregates are denominated in
+            # is exposed separately as ``stats_currency`` (almost always
+            # ``USD``) — previously this view overwrote ``currency`` with
+            # the target currency, which collapsed every property to USD
+            # in the exposure chart.
             data.update(
                 {
                     "gross_income_all_time": float(gross_income_all),
@@ -239,7 +252,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
                     "gross_income_ytd": float(gross_income_ytd),
                     "expenses_ytd": float(expenses_ytd),
                     "net_income_ytd": float(gross_income_ytd + expenses_ytd),
-                    "currency": currency,
+                    "stats_currency": currency,
                 }
             )
             result.append(data)
@@ -329,7 +342,11 @@ class TenantViewSet(viewsets.ModelViewSet):
               "revenue_all_time": float,
               "revenue_ytd": float,
               "debt": float,
-              "currency": "USD"
+              "stats_currency": "USD"            # currency the aggregates are
+                                                  # FX-converted into (defaults
+                                                  # to ``USD``). The tenant's
+                                                  # native currency is the
+                                                  # property's ``currency``.
             }
         """
         # Lazy import matches PropertyViewSet.with_stats.
@@ -381,7 +398,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                     "revenue_all_time": float(revenue_all_time),
                     "revenue_ytd": float(revenue_ytd),
                     "debt": float(debt_converted),
-                    "currency": currency,
+                    "stats_currency": currency,
                 }
             )
             result.append(data)

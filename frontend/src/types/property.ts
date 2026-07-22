@@ -20,4 +20,10 @@ export type PropertyWithStats = Property & {
   gross_income_ytd: number
   expenses_ytd: number
   net_income_ytd: number
+  // Currency the aggregate fields above are denominated in (almost always
+  // `USD` — the backend FX-converts stats to a single target currency).
+  // Kept separate from the property's native `currency` (RUB/GBP/etc.) so
+  // the UI can group by native currency AND format the USD values with the
+  // correct symbol.
+  stats_currency: string
 }

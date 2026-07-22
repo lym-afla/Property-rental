@@ -23,7 +23,7 @@ import {
 } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { transformForRecharts } from './_chartAdapter'
-import { formatCurrencyAxis } from '@/lib/format'
+import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
 
 type Props = {
@@ -62,7 +62,8 @@ export function ValuationChart({ data, onBarClick }: Props) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="label" tick={{ fontSize: 12 }} />
           <YAxis tickFormatter={(v) => formatCurrencyAxis(v, currency)} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(v) => formatCurrencyAxis(Number(v), currency)} />
+          {/* Axis uses compact `k`; tooltip uses full `#,###` per spec. */}
+          <Tooltip formatter={(v) => formatCurrency(Number(v), currency)} />
           <Legend />
           {series.map(s => (
             <Bar

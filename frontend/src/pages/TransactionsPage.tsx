@@ -46,7 +46,6 @@ import { SkeletonTable } from '@/components/states/SkeletonTable'
 import { EmptyState } from '@/components/states/EmptyState'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -55,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 import type { Transaction } from '@/types/transaction'
 import type { Property } from '@/types/property'
 import type { Tenant } from '@/types/tenant'
@@ -187,10 +186,6 @@ export function TransactionsPage() {
       cell: ({ row }) => formatDate(row.original.date),
     },
     {
-      accessorKey: 'period',
-      header: 'Period',
-    },
-    {
       id: 'property',
       header: 'Property',
       cell: ({ row }) => {
@@ -201,30 +196,33 @@ export function TransactionsPage() {
     {
       id: 'tenant',
       header: 'Tenant',
+      // Tenant names come from the lookup map; if the FK is null (a
+      // property-level transaction with no tenant assigned) we render an
+      // em dash instead of "null" / "undefined".
       cell: ({ row }) => {
         if (row.original.tenant == null) return '—'
         const t = tenantById.get(row.original.tenant)
-        return t ? `${t.first_name} ${t.last_name}` : `#${row.original.tenant}`
+        if (!t) return `#${row.original.tenant}`
+        const last = t.last_name ?? ''
+        if (!last) return t.first_name ?? '—'
+        return `${t.first_name} ${last}`
       },
     },
     { accessorKey: 'category', header: 'Category' },
     {
-      accessorKey: 'type',
-      header: 'Type',
-      cell: ({ row }) => (
-        <Badge
-          variant={row.original.type === 'income' ? 'secondary' : 'outline'}
-          className="capitalize"
-        >
-          {row.original.type}
-        </Badge>
-      ),
-    },
-    {
       accessorKey: 'amount',
       header: 'Amount',
-      cell: ({ row }) =>
-        formatCurrency(Number(row.original.amount), row.original.currency),
+      // Accounting format: negatives render as `(1,234)` (matching the
+      // old Django template's treatment of expenses); positives use the
+      // plain `#,###` form. The symbol is omitted because the column
+      // header doesn't pin a single currency (rows can be in any of the
+      // property currencies); the currency lives in the row's own
+      // `currency` field and surfaces in the delete confirmation dialog.
+      cell: ({ row }) => formatAccounting(row.original.amount),
+    },
+    {
+      accessorKey: 'period',
+      header: 'Period',
     },
     {
       accessorKey: 'comment',

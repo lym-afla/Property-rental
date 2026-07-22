@@ -19,6 +19,7 @@ export const fixtureTenantWithStats: TenantWithStats = {
   revenue_all_time: 9600,
   revenue_ytd: 4800,
   debt: 0,
+  stats_currency: 'USD',
 }
 
 // A second tenant tied to property 2, with an open-ended lease

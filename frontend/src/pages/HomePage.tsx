@@ -10,8 +10,13 @@
 //          re-fire the chart-data request).
 //        - Expense breakdown + Occupancy (side-by-side).
 //        - Net income trend + Currency exposure (side-by-side).
-//   3. P&L table — derived from the same with_stats aggregations the KPIs
-//      use, one row per property, sortable by net income YTD.
+//   3. P&L table — per-category breakdown (income + expense sections) with
+//      All-time + YTD columns, derived from `useChartData({type: 'homePage',
+//      frequency: 'Y'})`. The chart-data response returns one dataset per
+//      category; summing each dataset gives the all-time / YTD total per
+//      category. (Previously this table only showed 3 aggregated rows from
+//      `with_stats`, which lost the per-category detail the old Django
+//      template exposed.)
 //
 // Charts are powered by `useChartData({ type: 'homePage', frequency, start,
 // end })`; KPIs derive from `usePropertiesWithStats` and
@@ -273,46 +278,92 @@ export function HomePage() {
     }
   }, [propertiesStats.data, tenantsStats.data])
 
-  // Aggregate display currency for KPI values: pick the most common
-  // currency across properties (or USD if none). Purely cosmetic — same
-  // mixed-currency caveat as CurrencyExposureChart applies.
+  // Aggregate display currency for KPI values: stats are FX-converted to a
+  // single target currency on the backend (exposed as `stats_currency`,
+  // almost always `USD`). The previous code picked the most common NATIVE
+  // `currency` across properties — which was wrong, because the stats
+  // values themselves are denominated in `stats_currency`, not the native
+  // currency. We now use `stats_currency` so the symbol matches the number.
   const kpiCurrency = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of propertiesStats.data ?? []) {
-      counts.set(p.currency || '???', (counts.get(p.currency || '???') ?? 0) + 1)
-    }
-    let best = 'USD'
-    let bestCount = 0
-    for (const [cur, count] of counts) {
-      if (count > bestCount) {
-        best = cur
-        bestCount = count
-      }
-    }
-    return best
+    const first = (propertiesStats.data ?? [])[0]
+    return first?.stats_currency ?? 'USD'
   }, [propertiesStats.data])
 
-  // ---- P&L aggregated rows -------------------------------------------------
-  // Per the dashboard redesign: the P&L tile shows the OLD-style aggregated
-  // layout — one row per financial category, two columns (All-time / YTD).
-  // The backend's `with_stats` payload doesn't expose a per-category
-  // breakdown (only gross income / expenses / net totals), so we collapse
-  // to the three canonical rows. All amounts are FX-converted to USD by
-  // the backend already (see `rentals/stats.py`), so we display them with
-  // `formatCurrency(value, 'USD')`.
+  // ---- P&L per-category breakdown -----------------------------------------
+  // The user wants the OLD-style P&L with every category line, not just
+  // Gross/Expenses/Net. `with_stats` only returns aggregate totals, so we
+  // fire a `chart-data` request (yearly frequency over a wide range) and
+  // sum each dataset to get per-category all-time / YTD totals. The
+  // chart-data `homePage` branch emits one dataset per category with its
+  // monthly/quarterly/yearly totals; summing the `data` array gives the
+  // grand total for that category over the requested window.
+  //
+  // All-time window: from a far-back sentinel (`1900-01-01`) through today.
+  // The backend's chart_data service treats `1900-01-01` as the "All time"
+  // sentinel and rewrites it to the property set's earliest transaction
+  // date (see `services/charts.py::get_chart_data`).
+  // YTD window: Jan 1 of the current year through Dec 31 (the chart_data
+  // service clamps the upper bound to today internally for `homePage`).
+  const today = new Date()
+  const todayIso = today.toISOString().slice(0, 10)
+  const yearStart = `${today.getFullYear()}-01-01`
+  const yearEnd = `${today.getFullYear()}-12-31`
+  const pnlAllTimeQuery = useChartData({
+    type: 'homePage',
+    frequency: 'Y',
+    start: '1900-01-01',
+    end: todayIso,
+  })
+  const pnlYtdQuery = useChartData({
+    type: 'homePage',
+    frequency: 'Y',
+    start: yearStart,
+    end: yearEnd,
+  })
+
+  // Income vs expense classification — mirrors `rentals/constants.py`.
+  const INCOME_CATEGORIES = ['rent', 'other_income']
+
+  // Sum each dataset's `data` array to get the category total for the
+  // requested window. The chart-data service returns negatives for
+  // expenses, so we sum the signed values and report `Math.abs` for
+  // display (the P&L table presents expenses as positive magnitudes).
   const pnlRows = useMemo(() => {
-    const props = propertiesStats.data ?? []
-    const sum = (sel: (p: (typeof props)[number]) => number) =>
-      props.reduce((acc, p) => acc + (sel(p) ?? 0), 0)
-    return {
-      grossIncomeAllTime: sum((p) => p.gross_income_all_time),
-      grossIncomeYTD: sum((p) => p.gross_income_ytd),
-      expensesAllTime: sum((p) => p.expenses_all_time),
-      expensesYTD: sum((p) => p.expenses_ytd),
-      netIncomeAllTime: sum((p) => p.net_income_all_time),
-      netIncomeYTD: sum((p) => p.net_income_ytd),
+    const sum = (datasets: { label?: string; data: number[] }[], predicate: (label: string) => boolean) => {
+      const rows: { label: string; total: number }[] = []
+      for (const ds of datasets) {
+        const label = ds.label ?? ''
+        if (!predicate(label)) continue
+        const total = (ds.data ?? []).reduce((acc, v) => acc + (Number(v) || 0), 0)
+        rows.push({ label, total })
+      }
+      // Stable display order: income categories in the canonical order,
+      // then expense categories alphabetically.
+      return rows.sort((a, b) => a.label.localeCompare(b.label))
     }
-  }, [propertiesStats.data])
+    const allTimeDatasets = pnlAllTimeQuery.data?.datasets ?? []
+    const ytdDatasets = pnlYtdQuery.data?.datasets ?? []
+    const incomeAllTime = sum(allTimeDatasets, (l) => INCOME_CATEGORIES.includes(l))
+    const expenseAllTime = sum(allTimeDatasets, (l) => !INCOME_CATEGORIES.includes(l) && l.length > 0)
+    const incomeYtd = sum(ytdDatasets, (l) => INCOME_CATEGORIES.includes(l))
+    const expenseYtd = sum(ytdDatasets, (l) => !INCOME_CATEGORIES.includes(l) && l.length > 0)
+    const totalIncomeAll = incomeAllTime.reduce((acc, r) => acc + r.total, 0)
+    const totalIncomeYtd = incomeYtd.reduce((acc, r) => acc + r.total, 0)
+    const totalExpenseAll = expenseAllTime.reduce((acc, r) => acc + r.total, 0)
+    const totalExpenseYtd = expenseYtd.reduce((acc, r) => acc + r.total, 0)
+    return {
+      incomeAllTime,
+      incomeYtd,
+      expenseAllTime,
+      expenseYtd,
+      totalIncomeAll,
+      totalIncomeYtd,
+      totalExpenseAll,
+      totalExpenseYtd,
+      netIncomeAll: totalIncomeAll + totalExpenseAll, // expenses are negative
+      netIncomeYtd: totalIncomeYtd + totalExpenseYtd,
+    }
+  }, [pnlAllTimeQuery.data, pnlYtdQuery.data])
 
   // ---- Cash Flow drill-down ------------------------------------------------
   const onBarClick = (period: string, category: string) => {
@@ -355,7 +406,7 @@ export function HomePage() {
             isLoading ? (
               <Skeleton className="h-7 w-24" />
             ) : (
-              formatCurrency(kpis.revenueYTD, kpiCurrency, { compact: true })
+              formatCurrency(kpis.revenueYTD, kpiCurrency)
             )
           }
         />
@@ -365,7 +416,7 @@ export function HomePage() {
             isLoading ? (
               <Skeleton className="h-7 w-24" />
             ) : (
-              formatCurrency(kpis.netIncomeYTD, kpiCurrency, { compact: true })
+              formatCurrency(kpis.netIncomeYTD, kpiCurrency)
             )
           }
         />
@@ -504,9 +555,17 @@ export function HomePage() {
       </div>
 
       {/* ---- P&L table -------------------------------------------------- */}
+      {/* Per-category P&L breakdown with All-time + YTD columns. The chart-data
+          request gives us one dataset per category; we sum each one to get
+          the totals displayed here. Currency is the backend's `stats_currency`
+          (USD by default) since chart-data FX-converts everything. */}
       <Card>
         <CardHeader>
           <CardTitle>Profit &amp; Loss</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            All values in {kpiCurrency}. Per-category breakdown across all owned
+            properties, FX-converted on the backend.
+          </p>
         </CardHeader>
         <CardContent>
           {isError ? (
@@ -526,41 +585,116 @@ export function HomePage() {
           ) : (
             <Table>
               <TableHeader>
+                {/* Super-header row: "All time" + "YTD" each span two
+                    sub-columns (Category label sits alone on the left). */}
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">All-time</TableHead>
-                  <TableHead className="text-right">YTD</TableHead>
+                  <TableHead rowSpan={2}>Category</TableHead>
+                  <TableHead colSpan={2} className="text-center border-l">
+                    All time
+                  </TableHead>
+                  <TableHead colSpan={2} className="text-center border-l">
+                    YTD
+                  </TableHead>
+                </TableRow>
+                <TableRow>
+                  <TableHead className="text-right border-l">Income</TableHead>
+                  <TableHead className="text-right">Expense</TableHead>
+                  <TableHead className="text-right border-l">Income</TableHead>
+                  <TableHead className="text-right">Expense</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Income */}
-                <TableRow>
-                  <TableCell className="font-medium">Gross income</TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(pnlRows.grossIncomeAllTime, 'USD')}
+                {/* Income section — one row per income category. */}
+                {pnlRows.incomeAllTime.map((row, idx) => {
+                  const ytdMatch = pnlRows.incomeYtd.find(
+                    (r) => r.label === row.label,
+                  )
+                  return (
+                    <TableRow key={`income-${row.label}-${idx}`}>
+                      <TableCell className="font-medium capitalize">
+                        {row.label}
+                      </TableCell>
+                      <TableCell className="text-right border-l">
+                        {formatCurrency(Math.abs(row.total), kpiCurrency)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right border-l">
+                        {formatCurrency(
+                          Math.abs(ytdMatch?.total ?? 0),
+                          kpiCurrency,
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        —
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {/* Expense section — one row per expense category. Expenses
+                    come back negative from chart-data, so we display the
+                    absolute value in the Expense column. */}
+                {pnlRows.expenseAllTime.map((row, idx) => {
+                  const ytdMatch = pnlRows.expenseYtd.find(
+                    (r) => r.label === row.label,
+                  )
+                  return (
+                    <TableRow key={`expense-${row.label}-${idx}`}>
+                      <TableCell className="font-medium capitalize">
+                        {row.label}
+                      </TableCell>
+                      <TableCell className="text-right border-l text-muted-foreground">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(Math.abs(row.total), kpiCurrency)}
+                      </TableCell>
+                      <TableCell className="text-right border-l text-muted-foreground">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(
+                          Math.abs(ytdMatch?.total ?? 0),
+                          kpiCurrency,
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {/* Total income row. */}
+                <TableRow className="border-t-2">
+                  <TableCell className="font-bold">Total income</TableCell>
+                  <TableCell className="text-right border-l font-bold">
+                    {formatCurrency(pnlRows.totalIncomeAll, kpiCurrency)}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(pnlRows.grossIncomeYTD, 'USD')}
+                  <TableCell className="text-right text-muted-foreground">—</TableCell>
+                  <TableCell className="text-right border-l font-bold">
+                    {formatCurrency(pnlRows.totalIncomeYtd, kpiCurrency)}
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">—</TableCell>
+                </TableRow>
+                {/* Total expenses row (display magnitude — chart-data sends
+                    negatives, so we negate for display). */}
+                <TableRow>
+                  <TableCell className="font-bold">Total expenses</TableCell>
+                  <TableCell className="text-right border-l text-muted-foreground">—</TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatCurrency(Math.abs(pnlRows.totalExpenseAll), kpiCurrency)}
+                  </TableCell>
+                  <TableCell className="text-right border-l text-muted-foreground">—</TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatCurrency(Math.abs(pnlRows.totalExpenseYtd), kpiCurrency)}
                   </TableCell>
                 </TableRow>
-                {/* Expenses */}
-                <TableRow>
-                  <TableCell className="font-medium">Total expenses</TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(pnlRows.expensesAllTime, 'USD')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(pnlRows.expensesYTD, 'USD')}
-                  </TableCell>
-                </TableRow>
-                {/* Net */}
+                {/* Net income row. */}
                 <TableRow className="border-t-2">
                   <TableCell className="font-bold">Net income</TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatCurrency(pnlRows.netIncomeAllTime, 'USD')}
+                  <TableCell colSpan={2} className="text-right border-l font-bold">
+                    {formatCurrency(pnlRows.netIncomeAll, kpiCurrency)}
                   </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatCurrency(pnlRows.netIncomeYTD, 'USD')}
+                  <TableCell colSpan={2} className="text-right border-l font-bold">
+                    {formatCurrency(pnlRows.netIncomeYtd, kpiCurrency)}
                   </TableCell>
                 </TableRow>
               </TableBody>
