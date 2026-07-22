@@ -5,9 +5,11 @@ import type { Tenant, TenantWithStats } from '@/types/tenant'
 
 // React Query hooks for the `/api/v1/tenants/` ViewSet (Task 17).
 //
-// Cascade invalidation: every tenant mutation touches BOTH `tenants.all` AND
-// `tenants.withStats` — the with_stats endpoint joins on Transaction and
-// recomputes rent_rate / debt, so any change to a tenant (or its underlying
+// Cascade invalidation: every tenant mutation touches the `tenants.all`
+// parent key, which TanStack Query matches as a prefix — that sweeps every
+// `tenants.withStats(...)` variant AND the plain `tenants` list in one
+// shot. The with_stats endpoint joins on Transaction and recomputes
+// rent_rate / debt, so any change to a tenant (or its underlying
 // transactions) makes those aggregated numbers stale.
 //
 // The `vacate` action sets `lease_end` server-side; once that fires the
@@ -23,7 +25,7 @@ export function useTenants() {
 
 export function useTenantsWithStats(asOf?: string, currency?: string) {
   return useQuery<TenantWithStats[]>({
-    queryKey: queryKeys.tenants.withStats,
+    queryKey: queryKeys.tenants.withStats(asOf, currency),
     queryFn: () =>
       apiFetch<TenantWithStats[]>('/tenants/with_stats/', {
         query: { as_of: asOf, currency },
@@ -45,7 +47,6 @@ export function useCreateTenant() {
       apiFetch<Tenant>('/tenants/', { method: 'POST', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.withStats })
     },
   })
 }
@@ -57,7 +58,6 @@ export function useUpdateTenant() {
       apiFetch<Tenant>(`/tenants/${id}/`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.withStats })
     },
   })
 }
@@ -68,7 +68,6 @@ export function useDeleteTenant() {
     mutationFn: (id: number) => apiFetch(`/tenants/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.withStats })
     },
   })
 }
@@ -87,7 +86,6 @@ export function useVacateTenant() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.withStats })
     },
   })
 }

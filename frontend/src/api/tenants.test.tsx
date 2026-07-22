@@ -3,7 +3,9 @@
 // Covers query hooks (`useTenants`, `useTenant`, `useTenantsWithStats`) and
 // mutation hooks (`useCreateTenant`, `useUpdateTenant`, `useDeleteTenant`,
 // `useVacateTenant`). Every mutation asserts both endpoint success AND the
-// cascade invalidation (`tenants.all` + `tenants.withStats`).
+// cascade invalidation. Invalidation targets `tenants.all` — the parent
+// prefix that TanStack Query matches against every `tenants.*` key,
+// including the `tenants.withStats(...)` variants the detail page uses.
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -78,9 +80,6 @@ describe('useCreateTenant', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
     })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.tenants.withStats,
-    })
   })
 })
 
@@ -99,9 +98,6 @@ describe('useUpdateTenant', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
     })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.tenants.withStats,
-    })
   })
 })
 
@@ -118,9 +114,6 @@ describe('useDeleteTenant', () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.tenants.withStats,
     })
   })
 })
@@ -143,9 +136,6 @@ describe('useVacateTenant', () => {
     expect(result.current.data?.lease_end).toBe('2025-12-31')
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.tenants.withStats,
     })
   })
 })

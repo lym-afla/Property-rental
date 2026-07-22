@@ -34,7 +34,6 @@
 //     filter is applied server-side by the ViewSet.
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { type ColumnDef } from '@tanstack/react-table'
 import { ArrowLeft, Pencil, LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -47,7 +46,6 @@ import { useProperty } from '@/api/properties'
 import { useTransactions } from '@/api/transactions'
 import { useChartData } from '@/api/charts'
 import { TenantRentChart } from '@/components/charts/TenantRentChart'
-import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
 import { TenantForm } from '@/components/forms/TenantForm'
@@ -64,14 +62,21 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { TenantWithStats } from '@/types/tenant'
-import type { Transaction } from '@/types/transaction'
 
 // Number of recent transactions shown in the Overview tab. The full list
-// lives on the Transactions page; the detail page only surfaces a taste
-// so the debt/rent panel has supporting context.
-const RECENT_TRANSACTIONS_PREVIEW = 5
+// lives on the Transactions page; the detail page surfaces the most
+// recent activity without pagination controls.
+const RECENT_TRANSACTIONS_LIMIT = 20
 
 // Status bucketing — same rules as TenantsPage; duplicated because the
 // list page and detail page are independent and we don't want a shared
@@ -116,7 +121,22 @@ export function TenantDetailPage() {
   const tenantId = Number(id)
 
   const tenantQuery = useTenant(tenantId)
-  const statsQuery = useTenantsWithStats()
+  // First fetch the plain tenant so we can read its `property` FK, then
+  // resolve the property to learn its native currency. We THEN fetch
+  // `with_stats` with that currency so `debt` (which the backend
+  // FX-converts into the requested currency) lands in the tenant's
+  // NATIVE currency — matching `rent_rate`, which is always native.
+  // Before the property resolves we fire the default (USD) request so
+  // the header renders immediately; once `nativeCurrency` is known the
+  // query key changes and React Query refetches.
+  const propertyIdFromTenant = tenantQuery.data?.property
+  const propertyPreview = useProperty(
+    Number.isFinite(propertyIdFromTenant) && propertyIdFromTenant
+      ? propertyIdFromTenant
+      : 0,
+  )
+  const nativeCurrency = propertyPreview.data?.currency
+  const statsQuery = useTenantsWithStats(undefined, nativeCurrency)
   const transactionsQuery = useTransactions({ tenant: tenantId })
   const updateTenant = useUpdateTenant()
 
@@ -137,6 +157,7 @@ export function TenantDetailPage() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [vacateOpen, setVacateOpen] = useState(false)
+  const [updateRentOpen, setUpdateRentOpen] = useState(false)
 
   const tenant = tenantQuery.data
 
@@ -147,14 +168,11 @@ export function TenantDetailPage() {
     return statsQuery.data?.find((t) => t.id === tenantId)
   }, [statsQuery.data, tenantId])
 
-  // The property FK is on the tenant; once the tenant loads we can fetch
-  // the property for its name + currency. `useProperty(NaN)` would 404
-  // and surface an error state, so we only fire it once we have a real id.
-  const propertyId = tenant?.property
-  const propertyQuery = useProperty(
-    Number.isFinite(propertyId) && propertyId ? propertyId : 0,
-  )
-  const property = propertyQuery.data
+  // Reuse the property we already fetched up top (for the native
+  // currency) — there's no point firing a second `useProperty` request
+  // for the same id. `property` here is the same record as
+  // `propertyPreview.data`.
+  const property = propertyPreview.data
   const currency = property?.currency ?? ''
 
   // Build a lease timeline: lease_start, every rent payment, lease_end.
@@ -191,40 +209,35 @@ export function TenantDetailPage() {
     }
     events.sort((a, b) => b.date.localeCompare(a.date))
     return events
-  }, [tenant, transactionsQuery.data, currency])
+  }, [tenant, transactionsQuery.data])
 
   const recentTransactions = useMemo(() => {
     const txns = [...(transactionsQuery.data ?? [])]
     txns.sort((a, b) => b.date.localeCompare(a.date))
-    return txns.slice(0, RECENT_TRANSACTIONS_PREVIEW)
+    return txns.slice(0, RECENT_TRANSACTIONS_LIMIT)
   }, [transactionsQuery.data])
 
-  const transactionColumns: ColumnDef<Transaction>[] = [
-    {
-      accessorKey: 'date',
-      header: 'Date',
-      cell: ({ row }) => formatDate(row.original.date),
-    },
-    { accessorKey: 'category', header: 'Category' },
-    {
-      accessorKey: 'type',
-      header: 'Type',
-      cell: ({ row }) => (
-        <Badge
-          variant={row.original.type === 'income' ? 'secondary' : 'outline'}
-          className="capitalize"
-        >
-          {row.original.type}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'amount',
-      header: 'Amount',
-      cell: ({ row }) =>
-        formatCurrency(Number(row.original.amount), row.original.currency),
-    },
-  ]
+  // Net income (all-time + YTD) for this tenant, computed from this
+  // tenant's transactions (Task 21). Tenant stats only expose
+  // `revenue_*` (rent-only) and `debt`, so for a proper income-minus-
+  // expense number we sum the transactions directly. Transactions are
+  // stored in their original currency; we sum naively across currencies
+  // here (mirroring how the property detail P&L handles a single
+  // property — the tenant's transactions all reference one property, so
+  // the currency is uniform in practice).
+  const netIncome = useMemo(() => {
+    const txns = transactionsQuery.data ?? []
+    let all = 0
+    let ytd = 0
+    const yearPrefix = new Date().getFullYear().toString()
+    for (const t of txns) {
+      const amount = Number(t.amount)
+      if (!Number.isFinite(amount)) continue
+      all += amount
+      if (t.date.startsWith(yearPrefix)) ytd += amount
+    }
+    return { allTime: all, ytd }
+  }, [transactionsQuery.data])
 
   // ---- Render guards -------------------------------------------------------
 
@@ -273,6 +286,20 @@ export function TenantDetailPage() {
               >
                 <Pencil className="h-4 w-4" />
                 Edit
+              </Button>
+              {/* Task 24: rent rate management. The `Lease_rent` model
+                  does not yet have a write API endpoint (the spec
+                  explicitly defers that work), so for now this opens a
+                  small dialog that surfaces a "coming soon" note rather
+                  than wiring up a real POST. When the endpoint lands,
+                  this dialog is the natural place to host the date +
+                  amount form. */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUpdateRentOpen(true)}
+              >
+                Update rent
               </Button>
               <Button
                 variant="destructive"
@@ -338,12 +365,16 @@ export function TenantDetailPage() {
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
               <CardDescription>
-                Lifetime revenue and outstanding debt for this tenant.
-                Currency shown in {currency || '—'}.
+                Lifetime revenue, net income, and outstanding debt for this
+                tenant. Currency shown in {currency || '—'}.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {/* Task 21: net income (all-time + YTD) shown alongside
+                  revenue. Net income is computed client-side from this
+                  tenant's transactions (income minus expenses); the
+                  stats endpoint only exposes revenue + debt. */}
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat
                   label="Revenue (all-time)"
                   value={
@@ -360,6 +391,16 @@ export function TenantDetailPage() {
                       : '—'
                   }
                 />
+                <Stat
+                  label="Net income (all-time)"
+                  value={formatCurrency(netIncome.allTime, currency)}
+                />
+                <Stat
+                  label="Net income (YTD)"
+                  value={formatCurrency(netIncome.ytd, currency)}
+                />
+              </dl>
+              <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat
                   label="Debt"
                   value={
@@ -378,6 +419,14 @@ export function TenantDetailPage() {
                     )
                   }
                 />
+                <Stat
+                  label="Rent rate"
+                  value={
+                    stats
+                      ? formatCurrency(Number(stats.rent_rate), currency)
+                      : '—'
+                  }
+                />
               </dl>
             </CardContent>
           </Card>
@@ -388,6 +437,7 @@ export function TenantDetailPage() {
               own loading/error states via ChartCard. */}
           <TenantRentChart
             data={chartQuery.data ?? { labels: [], datasets: [], currency: currency || 'USD' }}
+            currency={currency || undefined}
           />
 
           <div className="space-y-2">
@@ -404,10 +454,41 @@ export function TenantDetailPage() {
                 No transactions for this tenant yet.
               </p>
             ) : (
-              <DataTable
-                columns={transactionColumns}
-                data={recentTransactions}
-              />
+              /* Task 25: filter is already applied via `useTransactions({
+                 tenant: id })`; pagination is removed (plain <Table>
+                 limited client-side to the last 20 — the full list lives
+                 on the Transactions page). */
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recentTransactions.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>{formatDate(t.date)}</TableCell>
+                        <TableCell className="capitalize">{t.category}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={t.type === 'income' ? 'secondary' : 'outline'}
+                            className="capitalize"
+                          >
+                            {t.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {formatCurrency(Number(t.amount), t.currency)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </TabsContent>
@@ -506,6 +587,26 @@ export function TenantDetailPage() {
         tenantId={tenant.id}
         tenantLabel={fullName}
       />
+
+      {/* Update rent rate — Task 24. The `Lease_rent` model does not yet
+          expose a write API (the brief explicitly defers that work), so
+          this dialog surfaces a "coming soon" note rather than wiring up
+          a real POST. When the endpoint lands, this is the natural host
+          for the date + rent-amount form (mirroring the valuation form
+          on the property detail page). */}
+      <EntityFormDialog
+        open={updateRentOpen}
+        onOpenChange={setUpdateRentOpen}
+        title="Update rent rate"
+        description={`Rent rate management for ${fullName}.`}
+      >
+        <p className="text-sm text-muted-foreground">
+          Rent rate management coming soon. Creating a new{' '}
+          <code className="rounded bg-muted px-1">Lease_rent</code> entry
+          (effective date + amount) requires a dedicated backend endpoint
+          that is not yet available.
+        </p>
+      </EntityFormDialog>
     </div>
   )
 }
