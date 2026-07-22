@@ -3,8 +3,18 @@
 from .base import *  # noqa
 
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 SECRET_KEY = "django-insecure-dev-only-key-do-not-use-in-prod"
+
+# In dev, the SPA runs on Vite (:5173) which proxies to Django (:8000).
+# CSRF_TRUSTED_ORIGINS must include both ports so Django accepts the
+# X-CSRFToken header from the SPA's fetch calls through the proxy.
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
