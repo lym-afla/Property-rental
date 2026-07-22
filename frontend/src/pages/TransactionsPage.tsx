@@ -212,13 +212,12 @@ export function TransactionsPage() {
     {
       accessorKey: 'amount',
       header: 'Amount',
-      // Accounting format: negatives render as `(1,234)` (matching the
+      // Accounting format: negatives render as `€(150)` (matching the
       // old Django template's treatment of expenses); positives use the
-      // plain `#,###` form. The symbol is omitted because the column
-      // header doesn't pin a single currency (rows can be in any of the
-      // property currencies); the currency lives in the row's own
-      // `currency` field and surfaces in the delete confirmation dialog.
-      cell: ({ row }) => formatAccounting(row.original.amount),
+      // plain `€800` form. The symbol comes from the row's own
+      // `currency` field, so each transaction shows its native currency.
+      cell: ({ row }) =>
+        formatAccounting(row.original.amount, row.original.currency),
     },
     {
       accessorKey: 'period',

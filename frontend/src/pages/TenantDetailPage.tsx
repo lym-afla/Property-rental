@@ -70,13 +70,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 import type { TenantWithStats } from '@/types/tenant'
 
 // Number of recent transactions shown in the Overview tab. The full list
-// lives on the Transactions page; the detail page surfaces the most
-// recent activity without pagination controls.
-const RECENT_TRANSACTIONS_LIMIT = 20
+// lives on the Transactions page; the detail page surfaces only the most
+// recent activity (no pagination controls).
+const RECENT_TRANSACTIONS_LIMIT = 5
 
 // Status bucketing — same rules as TenantsPage; duplicated because the
 // list page and detail page are independent and we don't want a shared
@@ -121,23 +121,19 @@ export function TenantDetailPage() {
   const tenantId = Number(id)
 
   const tenantQuery = useTenant(tenantId)
-  // First fetch the plain tenant so we can read its `property` FK, then
-  // resolve the property to learn its native currency. We THEN fetch
-  // `with_stats` with that currency so `debt` (which the backend
-  // FX-converts into the requested currency) lands in the tenant's
-  // NATIVE currency — matching `rent_rate`, which is always native.
-  // Before the property resolves we fire the default (USD) request so
-  // the header renders immediately; once `nativeCurrency` is known the
-  // query key changes and React Query refetches.
+  // Resolve the tenant's property so we can read its native currency for
+  // display. We THEN fetch `with_stats` WITHOUT a currency arg — the
+  // backend returns per-tenant NATIVE-currency figures (no FX
+  // conversion), which is what the card + recent-transactions table
+  // need. Stats currency equals the tenant's property currency.
   const propertyIdFromTenant = tenantQuery.data?.property
   const propertyPreview = useProperty(
     Number.isFinite(propertyIdFromTenant) && propertyIdFromTenant
       ? propertyIdFromTenant
       : 0,
   )
-  const nativeCurrency = propertyPreview.data?.currency
-  const statsQuery = useTenantsWithStats(undefined, nativeCurrency)
   const transactionsQuery = useTransactions({ tenant: tenantId })
+  const statsQuery = useTenantsWithStats()
   const updateTenant = useUpdateTenant()
 
   // Tenant-scoped chart data: powers TenantRentChart (rent received per
@@ -344,7 +340,7 @@ export function TenantDetailPage() {
                       : ''
                   }
                 >
-                  {stats ? formatCurrency(stats.debt, currency) : '—'}
+                  {stats ? formatAccounting(stats.debt, currency) : '—'}
                 </span>
               }
             />
@@ -365,21 +361,26 @@ export function TenantDetailPage() {
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
               <CardDescription>
-                Lifetime revenue, net income, and outstanding debt for this
-                tenant. Currency shown in {currency || '—'}.
+                Lifetime revenue and net income for this tenant. Currency
+                shown in {currency || '—'}. Rent rate and Debt live in the
+                header card above (avoiding duplication).
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Task 21: net income (all-time + YTD) shown alongside
-                  revenue. Net income is computed client-side from this
-                  tenant's transactions (income minus expenses); the
-                  stats endpoint only exposes revenue + debt. */}
+              {/* Net income (all-time + YTD) shown alongside revenue.
+                  Net income is computed client-side from this tenant's
+                  transactions (income minus expenses); the stats
+                  endpoint only exposes revenue + debt. Negative values
+                  (tenant's expenses exceeded rent collected in the
+                  window) render in accounting format with the currency
+                  sign (e.g. `₽(85,000)`), consistent with the
+                  Transactions page convention. */}
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat
                   label="Revenue (all-time)"
                   value={
                     stats
-                      ? formatCurrency(stats.revenue_all_time, currency)
+                      ? formatAccounting(stats.revenue_all_time, currency)
                       : '—'
                   }
                 />
@@ -387,45 +388,17 @@ export function TenantDetailPage() {
                   label="Revenue (YTD)"
                   value={
                     stats
-                      ? formatCurrency(stats.revenue_ytd, currency)
+                      ? formatAccounting(stats.revenue_ytd, currency)
                       : '—'
                   }
                 />
                 <Stat
                   label="Net income (all-time)"
-                  value={formatCurrency(netIncome.allTime, currency)}
+                  value={formatAccounting(netIncome.allTime, currency)}
                 />
                 <Stat
                   label="Net income (YTD)"
-                  value={formatCurrency(netIncome.ytd, currency)}
-                />
-              </dl>
-              <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Stat
-                  label="Debt"
-                  value={
-                    stats ? (
-                      <span
-                        className={
-                          stats.debt > 0
-                            ? 'font-medium text-destructive'
-                            : ''
-                        }
-                      >
-                        {formatCurrency(stats.debt, currency)}
-                      </span>
-                    ) : (
-                      '—'
-                    )
-                  }
-                />
-                <Stat
-                  label="Rent rate"
-                  value={
-                    stats
-                      ? formatCurrency(Number(stats.rent_rate), currency)
-                      : '—'
-                  }
+                  value={formatAccounting(netIncome.ytd, currency)}
                 />
               </dl>
             </CardContent>
@@ -482,7 +455,7 @@ export function TenantDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(Number(t.amount), t.currency)}
+                          {formatAccounting(t.amount, t.currency)}
                         </TableCell>
                       </TableRow>
                     ))}

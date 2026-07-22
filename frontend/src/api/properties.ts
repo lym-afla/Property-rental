@@ -19,7 +19,7 @@ export function useProperties() {
 
 export function usePropertiesWithStats(asOf?: string, currency?: string) {
   return useQuery<PropertyWithStats[]>({
-    queryKey: queryKeys.properties.withStats,
+    queryKey: queryKeys.properties.withStats(asOf, currency),
     queryFn: () =>
       apiFetch<PropertyWithStats[]>('/properties/with_stats/', {
         query: { as_of: asOf, currency },
@@ -40,8 +40,12 @@ export function useCreateProperty() {
     mutationFn: (data: Partial<Property>) =>
       apiFetch<Property>('/properties/', { method: 'POST', body: data }),
     onSuccess: () => {
+      // Invalidate the parent key (covers every properties.* variant,
+      // including all with-stats (asOf, currency) tuples) AND the
+      // with-stats base key explicitly so the cascade is obvious from
+      // the call site even if the parent shape changes later.
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
-      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats })
+      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
     },
   })
 }
@@ -53,7 +57,7 @@ export function useUpdateProperty() {
       apiFetch<Property>(`/properties/${id}/`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
-      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats })
+      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
     },
   })
 }
@@ -65,7 +69,7 @@ export function useDeleteProperty() {
       apiFetch(`/properties/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
-      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats })
+      qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
     },
   })
 }

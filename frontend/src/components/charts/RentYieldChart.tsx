@@ -62,6 +62,7 @@ const TIMELINE_OPTIONS = [
   { value: '12m', label: 'Last 12 months' },
   { value: '3Y', label: 'Last 3 years' },
   { value: '5Y', label: 'Last 5 years' },
+  { value: 'All', label: 'All time' },
 ] as const
 
 type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
@@ -69,6 +70,8 @@ type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
 function timelineToRange(timeline: Timeline): { from: string; to: string } {
   const today = new Date()
   const to = today.toISOString().slice(0, 10)
+  // `All` uses the backend's all-time sentinel `1900-01-01`.
+  if (timeline === 'All') return { from: '1900-01-01', to }
   const from = new Date(today)
   switch (timeline) {
     case 'YTD':

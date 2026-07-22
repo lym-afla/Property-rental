@@ -5,7 +5,11 @@
 //     return data from the MSW default handlers.
 //   - Mutation hooks (`useCreateProperty`, `useUpdateProperty`,
 //     `useDeleteProperty`) call the right endpoint AND invalidate the
-//     cascade keys (`properties.all` + `properties.withStats`).
+//     cascade keys (`properties.all` + `properties.withStats()`). The
+//     with-stats key is now a factory (so the cache can hold multiple
+//     variants keyed by `asOf`/`currency`); invalidation passes the
+//     factory's no-arg form, which is a prefix that matches every
+//     with-stats variant.
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -88,7 +92,7 @@ describe('useCreateProperty', () => {
       queryKey: queryKeys.properties.all,
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.properties.withStats,
+      queryKey: queryKeys.properties.withStats(),
     })
   })
 })
@@ -109,7 +113,7 @@ describe('useUpdateProperty', () => {
       queryKey: queryKeys.properties.all,
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.properties.withStats,
+      queryKey: queryKeys.properties.withStats(),
     })
   })
 })
@@ -129,7 +133,7 @@ describe('useDeleteProperty', () => {
       queryKey: queryKeys.properties.all,
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.properties.withStats,
+      queryKey: queryKeys.properties.withStats(),
     })
   })
 })

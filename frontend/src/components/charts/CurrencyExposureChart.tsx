@@ -11,7 +11,12 @@
 //   - group/sort by `p.currency` (native) for the Y axis labels
 //   - format the values with `p.stats_currency` (USD) so the symbol matches
 //     the underlying amounts
-import { useMemo } from 'react'
+//
+// Task: an "as of" Select lets the user pick the snapshot date — Current
+// (today), 1Y ago, 3Y ago, or All time (1900-01-01 sentinel). The choice is
+// forwarded to `usePropertiesWithStats` as the `asOf` query param so the
+// backend recomputes the aggregates through that date.
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -19,6 +24,13 @@ import { ChartCard } from './ChartCard'
 import { usePropertiesWithStats } from '@/api/properties'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { colorForCategory } from './_chartTheme'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type ExposureRow = {
   currency: string         // native currency (RUB/GBP) — Y axis label
@@ -26,8 +38,34 @@ type ExposureRow = {
   value: number
 }
 
+// "As of" options for the snapshot date. The values are ISO dates computed
+// once at module load; All time uses the backend's `1900-01-01` sentinel
+// (the chart-data service rewrites it to the property set's earliest
+// transaction date, and with_stats interprets it the same way for the
+// end-date window — effectively "include everything").
+const AS_OF_OPTIONS = [
+  { value: 'current', label: 'Current' },
+  { value: '1Y', label: '1 year ago' },
+  { value: '3Y', label: '3 years ago' },
+  { value: 'All', label: 'All time' },
+] as const
+
+type AsOf = (typeof AS_OF_OPTIONS)[number]['value']
+
+function asOfToIso(asOf: AsOf): string | undefined {
+  const today = new Date()
+  if (asOf === 'current') return undefined // omit param; backend defaults to today
+  if (asOf === 'All') return '1900-01-01'
+  const d = new Date(today)
+  if (asOf === '1Y') d.setFullYear(d.getFullYear() - 1)
+  else if (asOf === '3Y') d.setFullYear(d.getFullYear() - 3)
+  return d.toISOString().slice(0, 10)
+}
+
 export function CurrencyExposureChart() {
-  const properties = usePropertiesWithStats()
+  const [asOf, setAsOf] = useState<AsOf>('current')
+  const asOfIso = useMemo(() => asOfToIso(asOf), [asOf])
+  const properties = usePropertiesWithStats(asOfIso)
 
   const chartData = useMemo(() => {
     const byCurrency = new Map<string, ExposureRow>()
@@ -64,9 +102,28 @@ export function CurrencyExposureChart() {
     [chartData, axisCurrency],
   )
 
+  const controls: ReactNode = (
+    <Select value={asOf} onValueChange={(v) => setAsOf(v as AsOf)}>
+      <SelectTrigger className="h-8 w-[150px]" aria-label="Currency exposure as of">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {AS_OF_OPTIONS.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
   if (properties.isLoading) {
     return (
-      <ChartCard title="Currency exposure" description="Net income by currency">
+      <ChartCard
+        title="Currency exposure"
+        description="Net income by currency"
+        controls={controls}
+      >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           Loading…
         </div>
@@ -76,7 +133,11 @@ export function CurrencyExposureChart() {
 
   if (chartData.length === 0) {
     return (
-      <ChartCard title="Currency exposure" description="Net income by currency">
+      <ChartCard
+        title="Currency exposure"
+        description="Net income by currency"
+        controls={controls}
+      >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           No data
         </div>
@@ -88,6 +149,7 @@ export function CurrencyExposureChart() {
     <ChartCard
       title="Currency exposure"
       description="Net income by currency"
+      controls={controls}
       tableData={tableData}
     >
       <ResponsiveContainer width="100%" height="100%">

@@ -75,16 +75,38 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 import type { PropertyValuation } from '@/types/propertyValuation'
 
 // Number of recent transactions shown in the Overview tab. The full list
-// lives on the Transactions page; the detail page only surfaces a taste so
-// the P&L panel has supporting context.
-const RECENT_TRANSACTIONS_LIMIT = 20
+// lives on the Transactions page; the detail page only surfaces the most
+// recent activity for at-a-glance context.
+const RECENT_TRANSACTIONS_LIMIT = 5
 
 // Income vs expense classification — mirrors `rentals/constants.py`.
 const INCOME_CATEGORIES = ['rent', 'other_income']
+
+// Whitelist of valid transaction categories (mirrors
+// `rentals/constants.py::TRANSACTION_CATEGORIES`). The property
+// chart-data endpoint returns Debt + Equity datasets (for the
+// ValuationChart), which would otherwise leak into the P&L table as
+// bogus "expense" rows. Filtering to this whitelist keeps the P&L
+// limited to real transaction categories.
+const TRANSACTION_CATEGORY_KEYS = [
+  'rent',
+  'tax',
+  'capex',
+  'management',
+  'electricity',
+  'utilities',
+  'internet',
+  'other_income',
+  'other_expenses',
+]
+
+function isTransactionCategory(label: string): boolean {
+  return TRANSACTION_CATEGORY_KEYS.includes(label)
+}
 
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -216,6 +238,10 @@ export function PropertyDetailPage() {
     for (const ds of datasets) {
       const label = ds.label ?? ''
       if (label === '') continue // skip unlabeled "value" series
+      // Skip non-transaction datasets (the property chart-data endpoint
+      // also returns Debt + Equity series for the ValuationChart; those
+      // are not P&L categories and must not appear here).
+      if (!isTransactionCategory(label)) continue
       const byYear: Record<string, number> = {}
       for (let i = 0; i < years.length; i++) {
         const year = years[i]
@@ -536,7 +562,7 @@ export function PropertyDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(Number(t.amount), t.currency)}
+                          {formatAccounting(t.amount, t.currency)}
                         </TableCell>
                       </TableRow>
                     ))}

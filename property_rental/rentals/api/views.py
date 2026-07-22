@@ -112,6 +112,38 @@ def _parse_as_of(query_params):
         return date.today()
 
 
+def _native_sum(prop, window, transaction_type):
+    """Sum a property's transactions at face value (no FX conversion).
+
+    Used by ``PropertyViewSet.with_stats`` when ``currency=native`` (or
+    omitted). Each ``Transaction.amount`` is stored in its own currency;
+    for a single-property native-currency roll-up the per-row currency
+    is the property currency in practice, so a plain SQL ``Sum`` matches
+    what the FX-aware path would produce without the FX round-trip.
+
+    Args:
+        prop: The Property instance to sum within.
+        window: Either a ``date`` (interpreted as "through this date" —
+            all-time) or a ``(start_date, end_date)`` tuple (the YTD
+            window).
+        transaction_type: ``"income"`` or ``"expense"`` — filters on the
+            derived ``Transaction.type`` field.
+
+    Returns:
+        ``Decimal`` (``0`` when no rows match — the ORM ``Sum`` returns
+        ``None`` for an empty queryset, which we coerce to ``0``).
+    """
+    from django.db.models import Sum
+
+    qs = Transaction.objects.filter(property=prop, type=transaction_type)
+    if isinstance(window, tuple):
+        start_date, end_date = window
+        qs = qs.filter(date__range=(start_date, end_date))
+    else:
+        qs = qs.filter(date__lte=window)
+    return qs.aggregate(total=Sum("amount"))["total"] or 0
+
+
 # ---------------------------------------------------------------------------
 # ViewSets
 # ---------------------------------------------------------------------------
@@ -158,11 +190,19 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
         Returns this landlord's properties augmented with per-property
         P&L aggregates (income / expense / net, both all-time and
-        year-to-date) in ``currency`` as of ``as_of``. The aggregates
-        are computed by the financial-aggregation service
-        (:func:`rentals.services.financials.aggregate`) via the
-        :meth:`Transaction.financials` delegate — same code path the
-        legacy ``table_data`` view used, so the math is identical.
+        year-to-date) denominated in ``currency`` as of ``as_of``.
+
+        Currency handling:
+
+        * ``currency=native`` (or omitted) — each property's aggregates
+          are computed in its OWN native currency (no FX conversion). The
+          sums are raw ``Transaction.amount`` totals filtered by sign.
+          The frontend uses this for the Properties page and Currency
+          Exposure chart, where mixing currencies via FX would obscure
+          the per-property picture.
+        * ``currency=USD`` (or any other code) — aggregates are
+          FX-converted into that currency via
+          :func:`rentals.services.financials.aggregate`.
 
         Returned shape (one entry per owned property)::
 
@@ -179,8 +219,12 @@ class PropertyViewSet(viewsets.ModelViewSet):
               "expenses_ytd": float,
               "net_income_ytd": float,
               "stats_currency": "USD"             # currency the aggregates are
-                                                    # FX-converted into (defaults
-                                                    # to ``USD``).
+                                                    # denominated in. Equals the
+                                                    # request ``currency`` param
+                                                    # when one is given; equals
+                                                    # the property's NATIVE
+                                                    # currency when ``native``
+                                                    # (or no param) is given.
             }
 
         Expenses carry their negative sign through from the underlying
@@ -189,61 +233,74 @@ class PropertyViewSet(viewsets.ModelViewSet):
         the absolute expense, matching what the legacy
         ``handle_element`` view rendered.
         """
-        # Lazy import: ``services.financials`` references ``rentals.models``
-        # lazily at call time but avoids an import-time cycle by deferring
-        # the model import — this side of the boundary imports cleanly at
-        # module load, but the lazy pattern matches the rest of the API
-        # layer (and is cheaper to reason about if the services module's
-        # import graph changes later).
         from rentals.services.financials import aggregate
 
         as_of = _parse_as_of(request.query_params)
-        currency = request.query_params.get("currency", "USD")
+        requested_currency = request.query_params.get("currency")
+        # ``native`` (or omitted) => sum each property in its own currency
+        # with no FX conversion. Any other value => FX-convert into that
+        # currency via the financials service.
+        use_native = not requested_currency or requested_currency == "native"
         year_start = date(as_of.year, 1, 1)
         year_end = date(as_of.year, 12, 31)
 
         properties = self.get_queryset()
         result = []
         for prop in properties:
-            gross_income_all = aggregate(
-                Transaction,
-                end_date=as_of,
-                target_currency=currency,
-                properties=[prop],
-                transaction_type="income",
-            )
-            expenses_all = aggregate(
-                Transaction,
-                end_date=as_of,
-                target_currency=currency,
-                properties=[prop],
-                transaction_type="expense",
-            )
-            gross_income_ytd = aggregate(
-                Transaction,
-                end_date=year_end,
-                start_date=year_start,
-                target_currency=currency,
-                properties=[prop],
-                transaction_type="income",
-            )
-            expenses_ytd = aggregate(
-                Transaction,
-                end_date=year_end,
-                start_date=year_start,
-                target_currency=currency,
-                properties=[prop],
-                transaction_type="expense",
-            )
+            # The currency the aggregates will be denominated in. For the
+            # native path this is the property's own currency; for the FX
+            # path it's the requested target currency.
+            stats_currency = prop.currency if use_native else requested_currency
+
+            if use_native:
+                # Raw face-value sums filtered to this property. The
+                # ``rentals.services.financials.aggregate`` helper requires
+                # a non-None target currency (it raises ValueError
+                # otherwise), so for the native path we sum directly via
+                # the ORM. Income = positive amounts, expense = negative.
+                gross_income_all = _native_sum(prop, as_of, "income")
+                expenses_all = _native_sum(prop, as_of, "expense")
+                gross_income_ytd = _native_sum(prop, (year_start, year_end), "income")
+                expenses_ytd = _native_sum(prop, (year_start, year_end), "expense")
+            else:
+                gross_income_all = aggregate(
+                    Transaction,
+                    end_date=as_of,
+                    target_currency=stats_currency,
+                    properties=[prop],
+                    transaction_type="income",
+                )
+                expenses_all = aggregate(
+                    Transaction,
+                    end_date=as_of,
+                    target_currency=stats_currency,
+                    properties=[prop],
+                    transaction_type="expense",
+                )
+                gross_income_ytd = aggregate(
+                    Transaction,
+                    end_date=year_end,
+                    start_date=year_start,
+                    target_currency=stats_currency,
+                    properties=[prop],
+                    transaction_type="income",
+                )
+                expenses_ytd = aggregate(
+                    Transaction,
+                    end_date=year_end,
+                    start_date=year_start,
+                    target_currency=stats_currency,
+                    properties=[prop],
+                    transaction_type="expense",
+                )
 
             data = PropertySerializer(prop).data
             # Preserve the property's native ``currency`` (RUB/GBP/etc.) so
             # the frontend can group by it for the Currency Exposure chart.
             # The FX-converted currency the aggregates are denominated in
-            # is exposed separately as ``stats_currency`` (almost always
-            # ``USD``) — previously this view overwrote ``currency`` with
-            # the target currency, which collapsed every property to USD
-            # in the exposure chart.
+            # is exposed separately as ``stats_currency`` — previously this
+            # view overwrote ``currency`` with the target currency, which
+            # collapsed every property to USD in the exposure chart.
             data.update(
                 {
                     "gross_income_all_time": float(gross_income_all),
@@ -252,7 +309,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
                     "gross_income_ytd": float(gross_income_ytd),
                     "expenses_ytd": float(expenses_ytd),
                     "net_income_ytd": float(gross_income_ytd + expenses_ytd),
-                    "stats_currency": currency,
+                    "stats_currency": stats_currency,
                 }
             )
             result.append(data)
@@ -332,7 +389,10 @@ class TenantViewSet(viewsets.ModelViewSet):
         :func:`rentals.services.financials.convert_transactions` when the
         tenant's property currency differs). ``debt`` is computed in the
         tenant's property currency and converted via the FX service at
-        the request date.
+        the request date. When ``currency=native`` (or omitted), all
+        aggregates are returned in the tenant's property currency with
+        no FX conversion — ``stats_currency`` then equals the property
+        currency.
 
         Returned shape (one entry per owned tenant)::
 
@@ -353,37 +413,45 @@ class TenantViewSet(viewsets.ModelViewSet):
         from rentals.services import fx as fx_service
 
         as_of = _parse_as_of(request.query_params)
-        currency = request.query_params.get("currency", "USD")
+        requested_currency = request.query_params.get("currency")
+        # ``native`` (or omitted) => compute in the tenant's property
+        # currency without FX conversion. Any other value => FX-convert.
+        use_native = not requested_currency or requested_currency == "native"
         year_start = date(as_of.year, 1, 1)
         year_end = date(as_of.year, 12, 31)
 
         tenants = self.get_queryset()
         result = []
         for tenant in tenants:
+            # Target currency the aggregates will be denominated in. For
+            # the native path it's the tenant's property currency; for
+            # the FX path it's the requested currency.
+            stats_currency = tenant.property.currency if use_native else requested_currency
             lease_rent = tenant.lease_rent(as_of)
             revenue_all_time = tenant.rent_total(
                 as_of,
-                target_currency=currency,
+                target_currency=stats_currency,
                 include_post_vacation=True,
             )
             revenue_ytd = tenant.rent_total(
                 start_date=year_start,
                 end_date=year_end,
-                target_currency=currency,
+                target_currency=stats_currency,
                 include_post_vacation=True,
             )
             debt_value = tenant.debt(as_of)
-            # ``debt`` is denominated in the tenant's property currency
-            # (rent_total inside ``scheduler.debt`` short-circuits to
-            # face value when ``target_currency`` is None — the property
-            # currency path). Convert into the requested currency here
-            # so the field matches the revenue fields.
-            debt_converted = fx_service.convert(
-                debt_value,
-                tenant.property.currency,
-                currency,
-                as_of,
-            )
+            # ``debt`` is denominated in the tenant's property currency.
+            # In the native path we pass it through unchanged; in the FX
+            # path we convert into the requested currency at ``as_of``.
+            if use_native:
+                debt_converted = debt_value
+            else:
+                debt_converted = fx_service.convert(
+                    debt_value,
+                    tenant.property.currency,
+                    stats_currency,
+                    as_of,
+                )
 
             rent_rate = (
                 lease_rent
@@ -398,7 +466,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                     "revenue_all_time": float(revenue_all_time),
                     "revenue_ytd": float(revenue_ytd),
                     "debt": float(debt_converted),
-                    "stats_currency": currency,
+                    "stats_currency": stats_currency,
                 }
             )
             result.append(data)
@@ -555,9 +623,21 @@ class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
     permission_classes = _OWNER_PERMS
 
     def get_queryset(self):
-        return Property_capital_structure.objects.filter(
+        # Base scope: only capital-structure rows whose ``property`` is
+        # owned by the requesting user (the per-user scoping invariant
+        # every other ViewSet in this module enforces).
+        qs = Property_capital_structure.objects.filter(
             property__owned_by__user=self.request.user
         )
+        # Honor an optional ``?property=<id>`` query param so callers can
+        # narrow to one property (the property detail page does this for
+        # its Valuations tab). The param is scoped to the user's own
+        # properties via the base filter above, so a cross-landlord PK
+        # simply yields an empty list — no enumeration channel.
+        property_param = self.request.query_params.get("property")
+        if property_param:
+            qs = qs.filter(property_id=property_param)
+        return qs
 
     def perform_create(self, serializer):
         # Validate the property belongs to the requester before saving.

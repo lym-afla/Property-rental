@@ -27,7 +27,14 @@ export const queryKeys = {
 
   properties: {
     all: ['properties'] as const,
-    withStats: ['properties', 'with-stats'] as const,
+    // Include `asOf` + `currency` in the cache key so the same component
+    // tree can hold multiple with_stats responses (e.g. one in USD for the
+    // list page, one in native currency for a detail page, one at a
+    // different as-of date for the Currency Exposure chart) without one
+    // clobbering the other. Mutations still invalidate via the `all`
+    // parent key, so all variants refetch together.
+    withStats: (asOf?: string, currency?: string) =>
+      ['properties', 'with-stats', { asOf, currency }] as const,
     detail: (id: number) => ['properties', 'detail', id] as const,
   },
 
