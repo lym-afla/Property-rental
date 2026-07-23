@@ -50,7 +50,9 @@ type Props = {
   currency?: string
 }
 
-// Timeline options — mirrors the dashboard's TIMELINE_OPTIONS.
+// Timeline options — mirrors the dashboard's TIMELINE_OPTIONS. "All"
+// keeps every row (the parent request already spans 5Y, and the
+// ValuationChart filters client-side; "All" simply disables the cutoff).
 const TIMELINE_OPTIONS = [
   { value: 'YTD', label: 'Year to date' },
   { value: '3m', label: 'Last 3 months' },
@@ -58,14 +60,17 @@ const TIMELINE_OPTIONS = [
   { value: '12m', label: 'Last 12 months' },
   { value: '3Y', label: 'Last 3 years' },
   { value: '5Y', label: 'Last 5 years' },
+  { value: 'All', label: 'All time' },
 ] as const
 
 type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
 
 // Earliest row date we want to keep for a given timeline (rows older
-// than this are dropped before charting). The parent request is 5Y
-// monthly, so trimming covers every option without a refetch.
-function cutoffFor(timeline: Timeline): Date {
+// than this are dropped before charting). Returns `null` for "All" so
+// the caller knows to skip the cutoff entirely. The parent request is
+// 5Y monthly, so trimming covers every finite option without a refetch.
+function cutoffFor(timeline: Timeline): Date | null {
+  if (timeline === 'All') return null
   const today = new Date()
   const cutoff = new Date(today)
   switch (timeline) {
@@ -126,6 +131,8 @@ export function ValuationChart({ data, onBarClick, currency }: Props) {
       return { ...row, value: total }
     })
     .filter(row => {
+      // "All time" disables the cutoff — keep every row.
+      if (cutoff === null) return true
       const labelDate = parseMonthLabel(String(row.label))
       // Keep non-monthly labels (e.g. yearly aggregates) as-is.
       if (!labelDate) return true

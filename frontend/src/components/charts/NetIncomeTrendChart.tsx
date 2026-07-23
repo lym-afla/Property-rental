@@ -21,6 +21,7 @@ import {
 } from 'recharts'
 import type { ReactNode } from 'react'
 import { ChartCard } from './ChartCard'
+import { PaginatedTable } from './PaginatedTable'
 import { transformForRecharts } from './_chartAdapter'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
@@ -41,9 +42,13 @@ export function NetIncomeTrendChart({ data, controls }: Props) {
     net: series.reduce((acc, s) => acc + (Number(row[s.key]) || 0), 0),
   }))
 
+  // The "Table" view can span hundreds of periods when the user picks a
+  // long timeline, so we route it through PaginatedTable instead of the
+  // ChartCard default renderer. The raw numeric is kept in `rows` so the
+  // `formatRow` callback can apply currency formatting per cell.
   const tableData = {
     headers: ['Period', `Net income (${currency})`],
-    rows: netData.map(row => [row.label as string, formatCurrency(row.net, currency)]),
+    rows: netData.map(row => [row.label as string, row.net]),
   }
 
   return (
@@ -52,6 +57,13 @@ export function NetIncomeTrendChart({ data, controls }: Props) {
       description={`Net income trajectory (${currency})`}
       controls={controls}
       tableData={tableData}
+      tableRenderer={
+        <PaginatedTable
+          headers={tableData.headers}
+          rows={tableData.rows}
+          formatRow={(row) => [String(row[0]), formatCurrency(Number(row[1]), currency)]}
+        />
+      }
     >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={netData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>

@@ -1,22 +1,22 @@
 // frontend/src/components/charts/RentYieldChart.tsx
 //
-// Rent Yield line chart (Plan C Task 8). Shows rent yield per period,
-// defined as annualised net income in the period divided by the property's
-// current notional value, expressed as a percentage.
+// Rent Yield line chart (Plan C Task 8). Shows TWO yield series per
+// period:
+//   * Gross Yield = annualised revenue / property value
+//   * Net Yield   = annualised (revenue - expenses) / property value
+// Both annualised (monthly × 12, quarterly × 4, yearly × 1) so the
+// percentages are comparable across horizons.
 //
-// The chart-data endpoint for a property carries a `rent` series; the
-// property's value is taken from the latest PropertyValuation (or, if
-// no valuation exists, falls back to 1 so the chart still renders
-// without divide-by-zero noise). Yield % = annualised rent / value × 100.
-// Monthly data is multiplied by 12; quarterly by 4; yearly by 1.
+// The chart-data endpoint for a property carries a `rent` series (and
+// any other transaction categories); the property's value is taken from
+// the latest PropertyValuation (or 1 if none exists, so the chart still
+// renders without a divide-by-zero). Gross Yield sums income-category
+// series; Net Yield subtracts expense-category series from that total.
 //
-// Task 15: a time-horizon selector lets the user re-scope the window the
-// chart pulls from, and the chart description surfaces the property's
-// native currency alongside the notional value.
-//
-// Task 16: the "Table" toggle on the ChartCard renders the underlying
-// per-period yield numbers; the parent ChartCard already handles the
-// toggle UI, and `PaginatedTable` provides simple pagination.
+// X-axis formatting: when the selected horizon spans more than 12
+// months we collapse the per-month `Mon-yy` labels to `yyyy` so the
+// axis stays readable. An info icon (ⓘ) next to the title carries the
+// yield definition as a tooltip.
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   LineChart,
@@ -25,8 +25,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { Info } from 'lucide-react'
 import { ChartCard } from './ChartCard'
 import { PaginatedTable } from './PaginatedTable'
 import { transformForRecharts } from './_chartAdapter'
@@ -39,7 +41,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/format'
+
+// Income categories — mirrors `rentals/constants.py::INCOME_CATEGORIES`.
+const INCOME_CATEGORIES = ['rent', 'other_income']
 
 type Props = {
   // Pre-fetched chart data for the default window. The chart still uses
@@ -66,6 +77,27 @@ const TIMELINE_OPTIONS = [
 ] as const
 
 type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
+
+// Approximate month count for each timeline — used to decide whether to
+// collapse the X axis to year-only labels (`> 12 months`).
+function timelineMonths(timeline: Timeline): number {
+  switch (timeline) {
+    case 'YTD':
+      return Math.max(1, new Date().getMonth() + 1)
+    case '3m':
+      return 3
+    case '6m':
+      return 6
+    case '12m':
+      return 12
+    case '3Y':
+      return 36
+    case '5Y':
+      return 60
+    case 'All':
+      return Number.POSITIVE_INFINITY
+  }
+}
 
 function timelineToRange(timeline: Timeline): { from: string; to: string } {
   const today = new Date()
@@ -101,9 +133,22 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`
 }
 
+// Parse a chart-data monthly label (`Jan-24`) into a `yyyy` string for
+// the collapsed long-horizon axis. Returns the original label when it
+// doesn't match the monthly pattern (e.g. already-yearly labels).
+function toAxisLabel(label: string, collapseYears: boolean): string {
+  if (!collapseYears) return label
+  const m = label.match(/^([A-Za-z]{3})-(\d{2,4})$/)
+  if (!m) return label
+  let year = Number(m[2])
+  if (year < 100) year += 2000
+  return String(year)
+}
+
 export function RentYieldChart({ data, propertyId, currency }: Props) {
   const [timeline, setTimeline] = useState<Timeline>('5Y')
   const range = useMemo(() => timelineToRange(timeline), [timeline])
+  const collapseYears = timelineMonths(timeline) > 12
 
   // Re-fetch when the user changes the horizon. `data` is the default
   // (monthly, 5Y) payload supplied by the parent; we override it as soon
@@ -138,53 +183,91 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
     effectiveData ?? { labels: [], datasets: [], currency: currency ?? '' },
   )
 
-  // Sum of all series per period is interpreted as "rent received" for
-  // that period (the chart-data request for a property typically returns
-  // only the rent category, but we sum defensively so any extra series
-  // doesn't break the chart). Annualise by multiplying monthly values by
-  // 12 so the percentage is comparable across horizons.
+  // Split series into income vs expense so we can compute gross and net
+  // yield independently. Gross = sum of income series; Net = gross minus
+  // the absolute value of expense series (expenses come back negative,
+  // so subtracting them ADDS their magnitude to the denominator's
+  // numerator reduction — i.e. net = gross + expenses, where expenses
+  // are already negative).
+  const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
+  const incomeSeries = series.filter((s) => isIncome(s.label))
+  const expenseSeries = series.filter((s) => !isIncome(s.label))
+
   const yieldData = chartData.map(row => {
-    const rent = series.reduce((acc, s) => acc + (Number(row[s.key]) || 0), 0)
-    const annualised = rent * 12
+    const gross = incomeSeries.reduce(
+      (acc, s) => acc + (Number(row[s.key]) || 0),
+      0,
+    )
+    const expenses = expenseSeries.reduce(
+      (acc, s) => acc + (Number(row[s.key]) || 0),
+      0,
+    )
+    const grossAnnualised = gross * 12
+    // expenses is already negative; gross + expenses = gross - |expenses|.
+    const netAnnualised = (gross + expenses) * 12
     return {
-      label: row.label,
-      yield: value > 0 ? (annualised / value) * 100 : 0,
+      label: row.label as string,
+      axisLabel: toAxisLabel(String(row.label), collapseYears),
+      grossYield: value > 0 ? (grossAnnualised / value) * 100 : 0,
+      netYield: value > 0 ? (netAnnualised / value) * 100 : 0,
     }
   })
 
-  // Table payload — formatted value + yield per period. ChartCard wraps
-  // it in the Table/Chart toggle; PaginatedTable handles pagination.
+  // Table payload — gross + net yield per period. ChartCard wraps it in
+  // the Table/Chart toggle; PaginatedTable handles pagination.
   const tableData = {
-    headers: ['Period', 'Yield %'],
+    headers: ['Period', 'Gross yield %', 'Net yield %'],
     rows: yieldData.map(row => [
-      row.label as string,
-      Number(row.yield.toFixed(2)),
+      row.label,
+      Number(row.grossYield.toFixed(2)),
+      Number(row.netYield.toFixed(2)),
     ]),
   }
 
   const controls: ReactNode = (
-    <Select
-      value={timeline}
-      onValueChange={(v) => setTimeline(v as Timeline)}
-    >
-      <SelectTrigger className="h-8 w-[150px]" aria-label="Rent yield timeline">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {TIMELINE_OPTIONS.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <>
+      <Select
+        value={timeline}
+        onValueChange={(v) => setTimeline(v as Timeline)}
+      >
+        <SelectTrigger className="h-8 w-[150px]" aria-label="Rent yield timeline">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TIMELINE_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {/* Yield definition tooltip — clickable/hoverable info icon next
+          to the timeline selector. */}
+      <TooltipProvider>
+        <UiTooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Yield definition"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            Gross Yield = annualised gross rent ÷ property value.
+            Net Yield = (rent − expenses) ÷ property value.
+          </TooltipContent>
+        </UiTooltip>
+      </TooltipProvider>
+    </>
   )
 
   if (valuations.isLoading) {
     return (
       <ChartCard
         title="Rent yield"
-        description={`Annualised rent / value per period (${currency ?? ''})`}
+        description={`Gross & net yield per period (${currency ?? ''})`}
         controls={controls}
         tableData={tableData}
         tableRenderer={
@@ -194,6 +277,7 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
             formatRow={(row) => [
               String(row[0]),
               `${Number(row[1]).toFixed(2)}%`,
+              `${Number(row[2]).toFixed(2)}%`,
             ]}
           />
         }
@@ -208,7 +292,7 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
   return (
     <ChartCard
       title="Rent yield"
-      description={`Annualised rent / value per period (value: ${formatCurrency(
+      description={`Gross & net yield per period (value: ${formatCurrency(
         value,
         currency ?? '',
       )})`}
@@ -221,6 +305,7 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
           formatRow={(row) => [
             String(row[0]),
             `${Number(row[1]).toFixed(2)}%`,
+            `${Number(row[2]).toFixed(2)}%`,
           ]}
         />
       }
@@ -228,14 +313,29 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={yieldData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+          <XAxis dataKey="axisLabel" tick={{ fontSize: 12 }} />
           <YAxis tickFormatter={(v) => formatPercent(Number(v))} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(v) => formatPercent(Number(v))} />
+          <Tooltip
+            formatter={(v) => formatPercent(Number(v))}
+            labelFormatter={(_, payload) => {
+              const row = payload?.[0]?.payload as { label?: string } | undefined
+              return row?.label ?? ''
+            }}
+          />
+          <Legend />
           <Line
             type="monotone"
-            dataKey="yield"
-            name="Rent yield"
+            dataKey="grossYield"
+            name="Gross yield"
             stroke="#3b82f6"
+            strokeWidth={2}
+            dot={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="netYield"
+            name="Net yield"
+            stroke="#f97316"
             strokeWidth={2}
             dot={false}
           />

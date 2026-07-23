@@ -59,7 +59,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 
 // Frequency + timeline options that mirror the backend `chart_data` view's
 // `freq` and the `calculate_from_date` timelines. Keys must match the
@@ -213,11 +213,12 @@ export function HomePage() {
   )
 
   // ---- Data hooks ----------------------------------------------------------
-  // KPIs derive from the with_stats aggregations every other page already
-  // caches. We aggregate client-side across properties so a missing
-  // `currency` conversion on the dashboard doesn't crash the page (mixed
-  // currencies sum naively here — same caveat as CurrencyExposureChart).
-  const propertiesStats = usePropertiesWithStats()
+  // KPIs derive from the with_stats aggregations. The dashboard sums every
+  // property into a single portfolio number, so we request stats FX-
+  // converted into USD (the user's `default_currency`) — summing native
+  // RUB + GBP figures into one total would mix units. The Properties PAGE
+  // stays native-currency per row; this dashboard hook is USD-scoped.
+  const propertiesStats = usePropertiesWithStats(undefined, 'USD')
   const tenantsStats = useTenantsWithStats()
 
   // One chart-data request for the headline bar chart; the same response
@@ -331,8 +332,9 @@ export function HomePage() {
 
   // Sum each dataset's `data` array to get the category total for the
   // requested window. The chart-data service returns negatives for
-  // expenses, so we sum the signed values and report `Math.abs` for
-  // display (the P&L table presents expenses as positive magnitudes).
+  // expenses (transactions store expense amounts as negative); we keep
+  // the sign through to the table and format via `formatAccounting`,
+  // which renders negatives as `$(-1,234)`.
   const pnlRows = useMemo(() => {
     const sum = (datasets: { label?: string; data: number[] }[], predicate: (label: string) => boolean) => {
       const rows: { label: string; total: number }[] = []
@@ -342,16 +344,17 @@ export function HomePage() {
         const total = (ds.data ?? []).reduce((acc, v) => acc + (Number(v) || 0), 0)
         rows.push({ label, total })
       }
-      // Stable display order: income categories in the canonical order,
-      // then expense categories alphabetically.
-      return rows.sort((a, b) => a.label.localeCompare(b.label))
+      return rows
     }
+    const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
     const allTimeDatasets = pnlAllTimeQuery.data?.datasets ?? []
     const ytdDatasets = pnlYtdQuery.data?.datasets ?? []
-    const incomeAllTime = sum(allTimeDatasets, (l) => INCOME_CATEGORIES.includes(l))
-    const expenseAllTime = sum(allTimeDatasets, (l) => !INCOME_CATEGORIES.includes(l) && l.length > 0)
-    const incomeYtd = sum(ytdDatasets, (l) => INCOME_CATEGORIES.includes(l))
-    const expenseYtd = sum(ytdDatasets, (l) => !INCOME_CATEGORIES.includes(l) && l.length > 0)
+    const incomeAllTime = sum(allTimeDatasets, isIncome)
+    // Expense categories come back negative from chart-data; keep the
+    // sign so `formatAccounting` can render the brackets.
+    const expenseAllTime = sum(allTimeDatasets, (l) => !isIncome(l) && l.length > 0)
+    const incomeYtd = sum(ytdDatasets, isIncome)
+    const expenseYtd = sum(ytdDatasets, (l) => !isIncome(l) && l.length > 0)
     const totalIncomeAll = incomeAllTime.reduce((acc, r) => acc + r.total, 0)
     const totalIncomeYtd = incomeYtd.reduce((acc, r) => acc + r.total, 0)
     const totalExpenseAll = expenseAllTime.reduce((acc, r) => acc + r.total, 0)
@@ -563,7 +566,11 @@ export function HomePage() {
       {/* Per-category P&L breakdown with All-time + YTD columns. The chart-data
           request gives us one dataset per category; we sum each one to get
           the totals displayed here. Currency is the backend's `stats_currency`
-          (USD by default) since chart-data FX-converts everything. */}
+          (USD by default) since chart-data FX-converts everything. Layout:
+          income categories first, then "Total revenue", then expense
+          categories (alphabetical, kept negative), then "Total expenses"
+          and "Net income". `formatAccounting` renders negatives as
+          `$(-1,234)` so the sign convention is unambiguous. */}
       <Card>
         <CardHeader>
           <CardTitle>Profit &amp; Loss</CardTitle>
@@ -590,22 +597,10 @@ export function HomePage() {
           ) : (
             <Table>
               <TableHeader>
-                {/* Super-header row: "All time" + "YTD" each span two
-                    sub-columns (Category label sits alone on the left). */}
                 <TableRow>
-                  <TableHead rowSpan={2}>Category</TableHead>
-                  <TableHead colSpan={2} className="text-center border-l">
-                    All time
-                  </TableHead>
-                  <TableHead colSpan={2} className="text-center border-l">
-                    YTD
-                  </TableHead>
-                </TableRow>
-                <TableRow>
-                  <TableHead className="text-right border-l">Income</TableHead>
-                  <TableHead className="text-right">Expense</TableHead>
-                  <TableHead className="text-right border-l">Income</TableHead>
-                  <TableHead className="text-right">Expense</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">All time</TableHead>
+                  <TableHead className="text-right">YTD</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -619,87 +614,67 @@ export function HomePage() {
                       <TableCell className="font-medium capitalize">
                         {row.label}
                       </TableCell>
-                      <TableCell className="text-right border-l">
-                        {formatCurrency(Math.abs(row.total), kpiCurrency)}
+                      <TableCell className="text-right">
+                        {formatAccounting(row.total, kpiCurrency)}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        —
-                      </TableCell>
-                      <TableCell className="text-right border-l">
-                        {formatCurrency(
-                          Math.abs(ytdMatch?.total ?? 0),
-                          kpiCurrency,
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        —
+                      <TableCell className="text-right">
+                        {formatAccounting(ytdMatch?.total ?? 0, kpiCurrency)}
                       </TableCell>
                     </TableRow>
                   )
                 })}
-                {/* Expense section — one row per expense category. Expenses
-                    come back negative from chart-data, so we display the
-                    absolute value in the Expense column. */}
-                {pnlRows.expenseAllTime.map((row, idx) => {
-                  const ytdMatch = pnlRows.expenseYtd.find(
-                    (r) => r.label === row.label,
-                  )
-                  return (
-                    <TableRow key={`expense-${row.label}-${idx}`}>
-                      <TableCell className="font-medium capitalize">
-                        {row.label}
-                      </TableCell>
-                      <TableCell className="text-right border-l text-muted-foreground">
-                        —
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(Math.abs(row.total), kpiCurrency)}
-                      </TableCell>
-                      <TableCell className="text-right border-l text-muted-foreground">
-                        —
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(
-                          Math.abs(ytdMatch?.total ?? 0),
-                          kpiCurrency,
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {/* Total income row. */}
-                <TableRow className="border-t-2">
-                  <TableCell className="font-bold">Total income</TableCell>
-                  <TableCell className="text-right border-l font-bold">
-                    {formatCurrency(pnlRows.totalIncomeAll, kpiCurrency)}
+                {/* Total revenue row. */}
+                <TableRow className="border-t">
+                  <TableCell className="font-bold">Total revenue</TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatAccounting(pnlRows.totalIncomeAll, kpiCurrency)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">—</TableCell>
-                  <TableCell className="text-right border-l font-bold">
-                    {formatCurrency(pnlRows.totalIncomeYtd, kpiCurrency)}
+                  <TableCell className="text-right font-bold">
+                    {formatAccounting(pnlRows.totalIncomeYtd, kpiCurrency)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">—</TableCell>
                 </TableRow>
-                {/* Total expenses row (display magnitude — chart-data sends
-                    negatives, so we negate for display). */}
-                <TableRow>
+                {/* Expense section — one row per expense category. Expenses
+                    come back negative from chart-data, kept negative so
+                    `formatAccounting` renders brackets. Sorted
+                    alphabetically by label. */}
+                {[...pnlRows.expenseAllTime]
+                  .sort((a, b) => a.label.localeCompare(b.label))
+                  .map((row, idx) => {
+                    const ytdMatch = pnlRows.expenseYtd.find(
+                      (r) => r.label === row.label,
+                    )
+                    return (
+                      <TableRow key={`expense-${row.label}-${idx}`}>
+                        <TableCell className="font-medium capitalize">
+                          {row.label}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatAccounting(row.total, kpiCurrency)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatAccounting(ytdMatch?.total ?? 0, kpiCurrency)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                {/* Total expenses row (kept negative). */}
+                <TableRow className="border-t">
                   <TableCell className="font-bold">Total expenses</TableCell>
-                  <TableCell className="text-right border-l text-muted-foreground">—</TableCell>
                   <TableCell className="text-right font-bold">
-                    {formatCurrency(Math.abs(pnlRows.totalExpenseAll), kpiCurrency)}
+                    {formatAccounting(pnlRows.totalExpenseAll, kpiCurrency)}
                   </TableCell>
-                  <TableCell className="text-right border-l text-muted-foreground">—</TableCell>
                   <TableCell className="text-right font-bold">
-                    {formatCurrency(Math.abs(pnlRows.totalExpenseYtd), kpiCurrency)}
+                    {formatAccounting(pnlRows.totalExpenseYtd, kpiCurrency)}
                   </TableCell>
                 </TableRow>
                 {/* Net income row. */}
                 <TableRow className="border-t-2">
                   <TableCell className="font-bold">Net income</TableCell>
-                  <TableCell colSpan={2} className="text-right border-l font-bold">
-                    {formatCurrency(pnlRows.netIncomeAll, kpiCurrency)}
+                  <TableCell className="text-right font-bold">
+                    {formatAccounting(pnlRows.netIncomeAll, kpiCurrency)}
                   </TableCell>
-                  <TableCell colSpan={2} className="text-right border-l font-bold">
-                    {formatCurrency(pnlRows.netIncomeYtd, kpiCurrency)}
+                  <TableCell className="text-right font-bold">
+                    {formatAccounting(pnlRows.netIncomeYtd, kpiCurrency)}
                   </TableCell>
                 </TableRow>
               </TableBody>

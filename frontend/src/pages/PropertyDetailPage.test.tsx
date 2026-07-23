@@ -58,7 +58,10 @@ describe('PropertyDetailPage', () => {
 
   it('renders the Overview tab with P&L labels', async () => {
     renderPage()
-    expect(await screen.findByText(/gross income/i)).toBeInTheDocument()
+    // The aggregate Stat tiles were removed; the P&L card now carries a
+    // "Total revenue" / "Total expenses" / "Net income" summary plus
+    // per-category rows derived from the property's transactions.
+    expect(await screen.findByText(/profit & loss/i)).toBeInTheDocument()
     expect(screen.getByText(/net income/i)).toBeInTheDocument()
   })
 

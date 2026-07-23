@@ -1,21 +1,24 @@
 // frontend/src/components/charts/CurrencyExposureChart.tsx
 //
 // Horizontal bar chart showing portfolio exposure grouped by currency.
-// Uses lifetime net income per property (from with_stats) as the value proxy,
-// grouped by each property's native currency.
 //
-// IMPORTANT: the stats values returned by `with_stats` are FX-converted into
-// a single target currency (almost always USD, exposed as `stats_currency`).
-// The chart's grouping key is the property's NATIVE `currency` (RUB/GBP/etc.),
-// but the BAR VALUES are denominated in `stats_currency`. We therefore:
-//   - group/sort by `p.currency` (native) for the Y axis labels
-//   - format the values with `p.stats_currency` (USD) so the symbol matches
-//     the underlying amounts
+// The chart fetches TWO `with_stats` snapshots:
+//   - `currency='USD'`  -> FX-converted totals so every bar sits on the
+//                          same `$` axis and is directly comparable.
+//   - `currency='native'` -> each property's native-currency total so the
+//                            table can show the face-value amount per
+//                            currency group alongside the USD figure.
 //
-// Task: an "as of" Select lets the user pick the snapshot date — Current
-// (today), 1Y ago, 3Y ago, or All time (1900-01-01 sentinel). The choice is
-// forwarded to `usePropertiesWithStats` as the `asOf` query param so the
-// backend recomputes the aggregates through that date.
+// Grouping key is the property's NATIVE `currency` (RUB/GBP/etc.) — that
+// is what the user thinks of as "exposure to currency X". The BAR VALUES
+// are USD though, so the chart is a single-currency comparison rather
+// than a mix of ₽/£/$ amounts that can't be visually ranked.
+//
+// Timeline options match the rest of the dashboard (YTD / 3m / 6m /
+// 12m / 3Y / 5Y / All). The choice is translated to an `as_of` ISO date
+// and forwarded to `usePropertiesWithStats`; "All" uses `as_of=today`
+// (the backend's all-time default — `as_of` is an upper bound, so today
+// includes every transaction).
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -32,83 +35,115 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-type ExposureRow = {
-  currency: string         // native currency (RUB/GBP) — Y axis label
-  statsCurrency: string    // currency the value is denominated in (USD)
-  value: number
-}
-
-// "As of" options for the snapshot date. The values are ISO dates computed
-// once at module load; All time uses the backend's `1900-01-01` sentinel
-// (the chart-data service rewrites it to the property set's earliest
-// transaction date, and with_stats interprets it the same way for the
-// end-date window — effectively "include everything").
-const AS_OF_OPTIONS = [
-  { value: 'current', label: 'Current' },
-  { value: '1Y', label: '1 year ago' },
-  { value: '3Y', label: '3 years ago' },
+// Timeline options — mirrors the dashboard's TIMELINE_OPTIONS so the
+// currency-exposure selector reads identically to Cash Flow / Net
+// Income Trend.
+const TIMELINE_OPTIONS = [
+  { value: 'YTD', label: 'Year to date' },
+  { value: '3m', label: 'Last 3 months' },
+  { value: '6m', label: 'Last 6 months' },
+  { value: '12m', label: 'Last 12 months' },
+  { value: '3Y', label: 'Last 3 years' },
+  { value: '5Y', label: 'Last 5 years' },
   { value: 'All', label: 'All time' },
 ] as const
 
-type AsOf = (typeof AS_OF_OPTIONS)[number]['value']
+type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
 
-function asOfToIso(asOf: AsOf): string | undefined {
+// Translate a timeline selection into the `as_of` ISO date the
+// `with_stats` endpoint expects. `as_of` is the upper bound of the
+// all-time window; "All" therefore maps to today (the backend default),
+// NOT to 1900-01-01 — passing a date in 1900 asked the backend to sum
+// "through 1900", which produced zeros.
+function timelineToAsOf(timeline: Timeline): string | undefined {
   const today = new Date()
-  if (asOf === 'current') return undefined // omit param; backend defaults to today
-  if (asOf === 'All') return '1900-01-01'
+  if (timeline === 'All') return undefined // backend defaults to today
   const d = new Date(today)
-  if (asOf === '1Y') d.setFullYear(d.getFullYear() - 1)
-  else if (asOf === '3Y') d.setFullYear(d.getFullYear() - 3)
+  switch (timeline) {
+    case 'YTD':
+      d.setMonth(0, 1) // Jan 1 of current year (covers YTD window)
+      break
+    case '3m':
+      d.setMonth(d.getMonth() - 3)
+      break
+    case '6m':
+      d.setMonth(d.getMonth() - 6)
+      break
+    case '12m':
+      d.setFullYear(d.getFullYear() - 1)
+      break
+    case '3Y':
+      d.setFullYear(d.getFullYear() - 3)
+      break
+    case '5Y':
+      d.setFullYear(d.getFullYear() - 5)
+      break
+  }
   return d.toISOString().slice(0, 10)
 }
 
+type ExposureRow = {
+  currency: string    // native currency (RUB/GBP) — Y axis label + table key
+  nativeValue: number // sum of native-currency net income across properties
+  usdValue: number    // same sum, FX-converted to USD (the chart value)
+}
+
+const USD = 'USD'
+
 export function CurrencyExposureChart() {
-  const [asOf, setAsOf] = useState<AsOf>('current')
-  const asOfIso = useMemo(() => asOfToIso(asOf), [asOf])
-  const properties = usePropertiesWithStats(asOfIso)
+  const [timeline, setTimeline] = useState<Timeline>('All')
+  const asOf = useMemo(() => timelineToAsOf(timeline), [timeline])
+
+  // Two parallel snapshots: USD-converted (for the chart axis) and
+  // native (for the table's "face value" column). React Query dedupes
+  // them by query key, so flipping the timeline only re-fires the two
+  // affected requests.
+  const usdStats = usePropertiesWithStats(asOf, USD)
+  const nativeStats = usePropertiesWithStats(asOf, 'native')
 
   const chartData = useMemo(() => {
     const byCurrency = new Map<string, ExposureRow>()
-    for (const p of properties.data ?? []) {
+    // USD-converted values drive the bar lengths; group properties by
+    // their NATIVE currency so the Y axis still labels the exposure the
+    // user cares about.
+    for (const p of usdStats.data ?? []) {
       const cur = p.currency || '???'
-      // Stats are FX-converted to USD on the backend; preserve that fact so
-      // the value formatting uses the right symbol below.
-      const statsCurrency = p.stats_currency ?? 'USD'
-      // Use lifetime net income as the value proxy.
-      const value = Math.abs(p.net_income_all_time ?? 0)
+      const usdValue = Math.abs(p.net_income_all_time ?? 0)
       const existing = byCurrency.get(cur)
-      if (existing) {
-        existing.value += value
-      } else {
-        byCurrency.set(cur, { currency: cur, statsCurrency, value })
-      }
+      if (existing) existing.usdValue += usdValue
+      else byCurrency.set(cur, { currency: cur, nativeValue: 0, usdValue })
     }
-    return Array.from(byCurrency.values()).sort((a, b) => b.value - a.value)
-  }, [properties.data])
-
-  // All properties share the same stats currency (USD), so the axis
-  // formatter uses the first row's statsCurrency — falling back to USD if
-  // there's no data.
-  const axisCurrency = chartData[0]?.statsCurrency ?? 'USD'
+    // Native-currency totals fill the table's "face value" column.
+    for (const p of nativeStats.data ?? []) {
+      const cur = p.currency || '???'
+      const nativeValue = Math.abs(p.net_income_all_time ?? 0)
+      const existing = byCurrency.get(cur)
+      if (existing) existing.nativeValue += nativeValue
+      else byCurrency.set(cur, { currency: cur, nativeValue, usdValue: 0 })
+    }
+    return Array.from(byCurrency.values()).sort((a, b) => b.usdValue - a.usdValue)
+  }, [usdStats.data, nativeStats.data])
 
   const tableData = useMemo(
     () => ({
-      headers: ['Currency', `Net income (${axisCurrency})`],
+      // Two value columns: native-currency face value + USD-converted.
+      headers: ['Currency', 'Native', 'USD'],
       rows: chartData.map(row => [
         row.currency,
-        formatCurrency(row.value, row.statsCurrency),
+        formatCurrency(row.nativeValue, row.currency),
+        formatCurrency(row.usdValue, USD),
       ]),
     }),
-    [chartData, axisCurrency],
+    [chartData],
   )
 
   const controls: ReactNode = (
-    <Select value={asOf} onValueChange={(v) => setAsOf(v as AsOf)}>
-      <SelectTrigger className="h-8 w-[150px]" aria-label="Currency exposure as of">
+    <Select value={timeline} onValueChange={(v) => setTimeline(v as Timeline)}>
+      <SelectTrigger className="h-8 w-[150px]" aria-label="Currency exposure timeline">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {AS_OF_OPTIONS.map((o) => (
+        {TIMELINE_OPTIONS.map((o) => (
           <SelectItem key={o.value} value={o.value}>
             {o.label}
           </SelectItem>
@@ -117,11 +152,11 @@ export function CurrencyExposureChart() {
     </Select>
   )
 
-  if (properties.isLoading) {
+  if (usdStats.isLoading || nativeStats.isLoading) {
     return (
       <ChartCard
         title="Currency exposure"
-        description="Net income by currency"
+        description="Net income by currency (USD-converted)"
         controls={controls}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -135,7 +170,7 @@ export function CurrencyExposureChart() {
     return (
       <ChartCard
         title="Currency exposure"
-        description="Net income by currency"
+        description="Net income by currency (USD-converted)"
         controls={controls}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -148,22 +183,17 @@ export function CurrencyExposureChart() {
   return (
     <ChartCard
       title="Currency exposure"
-      description="Net income by currency"
+      description="Net income by currency (USD-converted)"
       controls={controls}
       tableData={tableData}
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis type="number" tickFormatter={(v) => formatCurrencyAxis(v, axisCurrency)} tick={{ fontSize: 12 }} />
+          <XAxis type="number" tickFormatter={(v) => formatCurrencyAxis(v, USD)} tick={{ fontSize: 12 }} />
           <YAxis type="category" dataKey="currency" tick={{ fontSize: 12 }} width={50} />
-          <Tooltip formatter={(v, _name, item) => {
-            const num = Number(v)
-            const row = (item?.payload as ExposureRow | undefined) ?? chartData.find(d => d.value === num)
-            const cur = row?.statsCurrency ?? axisCurrency
-            return formatCurrency(num, cur)
-          }} />
-          <Bar dataKey="value" name="Net income">
+          <Tooltip formatter={(v) => formatCurrency(Number(v), USD)} />
+          <Bar dataKey="usdValue" name="Net income (USD)">
             {chartData.map((entry, i) => (
               <Cell key={`cell-${i}`} fill={colorForCategory(entry.currency, i)} />
             ))}

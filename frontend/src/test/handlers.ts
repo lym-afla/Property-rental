@@ -145,8 +145,20 @@ const defaultHandlers = [
   }),
 
   // ---- Transactions -----------------------------------------------------
-  // Returns the full fixture list; per-test handlers can override to filter.
-  http.get(`${API}/transactions/`, () => HttpResponse.json(fixtureTransactions)),
+  // Returns the full fixture list, optionally narrowed by `?property=<id>`
+  // to mirror `TransactionViewSet.get_queryset`'s property filter (the
+  // property detail page's Recent Transactions panel relies on it).
+  http.get(`${API}/transactions/`, ({ request }) => {
+    const url = new URL(request.url)
+    const propertyId = url.searchParams.get('property')
+    if (propertyId !== null) {
+      const filtered = fixtureTransactions.filter(
+        (t) => t.property === Number(propertyId),
+      )
+      return HttpResponse.json(filtered)
+    }
+    return HttpResponse.json(fixtureTransactions)
+  }),
   http.get(`${API}/transactions/:id/`, ({ params }) => {
     const id = Number(params.id)
     if (fixtureTransactionIncome.id === id) {

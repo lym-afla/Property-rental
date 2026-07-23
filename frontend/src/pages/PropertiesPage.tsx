@@ -47,7 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency } from '@/lib/format'
+import { formatAccounting, formatCurrency } from '@/lib/format'
 
 export function PropertiesPage() {
   const navigate = useNavigate()
@@ -160,24 +160,22 @@ export function PropertiesPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   {/* Expenses come back as negative numbers from the
-                      backend; show the absolute value (the P&L table
-                      presents expenses as positive magnitudes). */}
-                  {formatCurrency(
-                    Math.abs(row.expenses_all_time),
-                    row.currency,
-                  )}
+                      backend; `formatAccounting` renders them with
+                      brackets (e.g. `₽(1,018,954)`) so the sign
+                      convention is visually unambiguous. */}
+                  {formatAccounting(row.expenses_all_time, row.currency)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(row.net_income_all_time, row.currency)}
+                  {formatAccounting(row.net_income_all_time, row.currency)}
                 </TableCell>
                 <TableCell className="text-right border-l">
                   {formatCurrency(row.gross_income_ytd, row.currency)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(Math.abs(row.expenses_ytd), row.currency)}
+                  {formatAccounting(row.expenses_ytd, row.currency)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(row.net_income_ytd, row.currency)}
+                  {formatAccounting(row.net_income_ytd, row.currency)}
                 </TableCell>
               </TableRow>
             ))}

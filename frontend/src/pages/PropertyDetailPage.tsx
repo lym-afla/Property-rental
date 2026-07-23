@@ -86,28 +86,6 @@ const RECENT_TRANSACTIONS_LIMIT = 5
 // Income vs expense classification — mirrors `rentals/constants.py`.
 const INCOME_CATEGORIES = ['rent', 'other_income']
 
-// Whitelist of valid transaction categories (mirrors
-// `rentals/constants.py::TRANSACTION_CATEGORIES`). The property
-// chart-data endpoint returns Debt + Equity datasets (for the
-// ValuationChart), which would otherwise leak into the P&L table as
-// bogus "expense" rows. Filtering to this whitelist keeps the P&L
-// limited to real transaction categories.
-const TRANSACTION_CATEGORY_KEYS = [
-  'rent',
-  'tax',
-  'capex',
-  'management',
-  'electricity',
-  'utilities',
-  'internet',
-  'other_income',
-  'other_expenses',
-]
-
-function isTransactionCategory(label: string): boolean {
-  return TRANSACTION_CATEGORY_KEYS.includes(label)
-}
-
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -137,18 +115,6 @@ export function PropertyDetailPage() {
     type: 'property',
     elementId: propertyId,
     frequency: 'M',
-    start: fiveYearsAgo,
-    end: todayStr,
-  })
-
-  // Annual P&L chart-data request (for the per-year + YTD P&L table).
-  // Five-year window matches the chart history; labels come back as
-  // `2022`, `2023`, ... and one dataset per category. YTD is computed
-  // client-side against the current year's transactions.
-  const annualPnlQuery = useChartData({
-    type: 'property',
-    elementId: propertyId,
-    frequency: 'Y',
     start: fiveYearsAgo,
     end: todayStr,
   })
@@ -186,19 +152,52 @@ export function PropertyDetailPage() {
 
   // P&L breakdown computed client-side from the property's transactions.
   // `Transaction.amount` is a stringified decimal (positive = income,
-  // negative = expense); we sum by sign so a mis-coded sign on an expense
-  // doesn't silently inflate income.
-  const pnl = useMemo(() => {
+  // negative = expense); we group by category and split into all-time vs
+  // YTD windows so the P&L table matches the dashboard's two-column
+  // layout. The backend `chart-data` `property` branch only emits Debt +
+  // Equity (it does not emit per-category totals), so we derive the P&L
+  // here from the already-fetched transactions list rather than firing a
+  // chart-data round-trip that would return empty categories.
+  const pnlRows = useMemo(() => {
     const txns = transactionsQuery.data ?? []
-    let income = 0
-    let expenses = 0
+    const currentYear = new Date().getFullYear()
+    const byCatAll = new Map<string, number>()
+    const byCatYtd = new Map<string, number>()
     for (const t of txns) {
       const amount = Number(t.amount)
       if (!Number.isFinite(amount)) continue
-      if (amount >= 0) income += amount
-      else expenses += Math.abs(amount)
+      const cat = t.category || 'other'
+      byCatAll.set(cat, (byCatAll.get(cat) ?? 0) + amount)
+      const year = parseInt(String(t.period || t.date).slice(0, 4), 10)
+      if (year === currentYear) {
+        byCatYtd.set(cat, (byCatYtd.get(cat) ?? 0) + amount)
+      }
     }
-    return { income, expenses, net: income - expenses }
+    const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
+    const build = (income: boolean, map: Map<string, number>) =>
+      Array.from(map.entries())
+        .filter(([label]) => isIncome(label) === income)
+        .map(([label, total]) => ({ label, total }))
+    const incomeAll = build(true, byCatAll).sort((a, b) => a.label.localeCompare(b.label))
+    const expenseAll = build(false, byCatAll).sort((a, b) => a.label.localeCompare(b.label))
+    const incomeYtd = build(true, byCatYtd)
+    const expenseYtd = build(false, byCatYtd)
+    const totalIncomeAll = incomeAll.reduce((acc, r) => acc + r.total, 0)
+    const totalIncomeYtd = incomeYtd.reduce((acc, r) => acc + r.total, 0)
+    const totalExpenseAll = expenseAll.reduce((acc, r) => acc + r.total, 0)
+    const totalExpenseYtd = expenseYtd.reduce((acc, r) => acc + r.total, 0)
+    return {
+      incomeAll,
+      expenseAll,
+      incomeYtd,
+      expenseYtd,
+      totalIncomeAll,
+      totalIncomeYtd,
+      totalExpenseAll,
+      totalExpenseYtd,
+      netIncomeAll: totalIncomeAll + totalExpenseAll,
+      netIncomeYtd: totalIncomeYtd + totalExpenseYtd,
+    }
   }, [transactionsQuery.data])
 
   // Most-recent first; the API may or may not pre-sort, so we sort here to
@@ -210,86 +209,6 @@ export function PropertyDetailPage() {
     txns.sort((a, b) => b.date.localeCompare(a.date))
     return txns.slice(0, RECENT_TRANSACTIONS_LIMIT)
   }, [transactionsQuery.data])
-
-  // Annual + YTD P&L table (Task 14). The annual chart-data response gives
-  // us one dataset per category with `data[i]` aligned to `labels[i]`
-  // (year strings). We pivot that into a per-category row keyed by year,
-  // plus a synthetic "YTD" column derived from the current year's slice
-  // of the same dataset (the chart-data service clamps the upper bound
-  // to today for `property`-typed requests, so the last column is YTD).
-  const pnlTable = useMemo(() => {
-    const labels = annualPnlQuery.data?.labels ?? []
-    const datasets = annualPnlQuery.data?.datasets ?? []
-    const years = labels.filter((l) => /^\d{4}$/.test(String(l)))
-    // YTD column — current calendar year. If the response already
-    // includes the current year, treat its value as YTD; otherwise show
-    // em-dashes per row (no data yet this year).
-    const currentYear = String(new Date().getFullYear())
-    const ytdInLabels = years.includes(currentYear)
-
-    const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
-    const categoryRows: {
-      label: string
-      isIncome: boolean
-      byYear: Record<string, number>
-      ytd: number
-    }[] = []
-
-    for (const ds of datasets) {
-      const label = ds.label ?? ''
-      if (label === '') continue // skip unlabeled "value" series
-      // Skip non-transaction datasets (the property chart-data endpoint
-      // also returns Debt + Equity series for the ValuationChart; those
-      // are not P&L categories and must not appear here).
-      if (!isTransactionCategory(label)) continue
-      const byYear: Record<string, number> = {}
-      for (let i = 0; i < years.length; i++) {
-        const year = years[i]
-        byYear[year] = Number(ds.data?.[i] ?? 0)
-      }
-      // YTD = the current year's column if present, else 0.
-      const ytd = ytdInLabels ? Number(byYear[currentYear] ?? 0) : 0
-      categoryRows.push({ label, isIncome: isIncome(label), byYear, ytd })
-    }
-
-    // Stable sort: income categories first (canonical order), then
-    // expenses alphabetically.
-    categoryRows.sort((a, b) => {
-      if (a.isIncome !== b.isIncome) return a.isIncome ? -1 : 1
-      return a.label.localeCompare(b.label)
-    })
-
-    // Totals per year + YTD.
-    const totalIncomeByYear: Record<string, number> = {}
-    const totalExpenseByYear: Record<string, number> = {}
-    let totalIncomeYtd = 0
-    let totalExpenseYtd = 0
-    for (const year of years) {
-      totalIncomeByYear[year] = categoryRows
-        .filter((r) => r.isIncome)
-        .reduce((acc, r) => acc + (r.byYear[year] ?? 0), 0)
-      totalExpenseByYear[year] = categoryRows
-        .filter((r) => !r.isIncome)
-        .reduce((acc, r) => acc + (r.byYear[year] ?? 0), 0)
-    }
-    totalIncomeYtd = categoryRows
-      .filter((r) => r.isIncome)
-      .reduce((acc, r) => acc + r.ytd, 0)
-    totalExpenseYtd = categoryRows
-      .filter((r) => !r.isIncome)
-      .reduce((acc, r) => acc + r.ytd, 0)
-
-    return {
-      years,
-      currentYear,
-      ytdInLabels,
-      categoryRows,
-      totalIncomeByYear,
-      totalExpenseByYear,
-      totalIncomeYtd,
-      totalExpenseYtd,
-    }
-  }, [annualPnlQuery.data])
 
   // Valuation columns are built inline so the edit/delete handlers can
   // close over component state. `property` is set implicitly from the
@@ -456,54 +375,33 @@ export function PropertyDetailPage() {
             <CardHeader>
               <CardTitle>Profit &amp; Loss</CardTitle>
               <CardDescription>
-                Per-category breakdown by year + YTD. All values in{' '}
-                {property.currency}.
+                Per-category breakdown, all-time + YTD. All values in{' '}
+                {property.currency}. Expenses show as{' '}
+                <code className="rounded bg-muted px-1">{property.currency}(1,234)</code>{' '}
+                (accounting format).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Headline summary tiles — gross income / expenses / net for
-                  the property's lifetime. Mirrors the previous P&L card so
-                  the at-a-glance numbers stay above the new detailed table. */}
-              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Stat
-                  label="Gross income (all-time)"
-                  value={formatCurrency(pnl.income, property.currency)}
-                />
-                <Stat
-                  label="Expenses (all-time)"
-                  value={formatCurrency(pnl.expenses, property.currency)}
-                />
-                <Stat
-                  label="Net income (all-time)"
-                  value={formatCurrency(pnl.net, property.currency)}
-                />
-              </dl>
-
-              {/* Annual + YTD breakdown table (Task 14). One row per
-                  category, one column per year (last 5), plus a YTD
-                  column. Totals at the bottom. Renders an em-dash cell
-                  when the chart-data response has no data for a year. */}
-              {annualPnlQuery.isLoading ? (
+              {/* Per-category P&L table. Two columns (All-time + YTD).
+                  Income categories first, then "Total revenue", then
+                  expense categories (kept negative), then "Total
+                  expenses" and "Net income". Derived client-side from
+                  the property's transactions (the chart-data `property`
+                  branch only emits Debt + Equity, not category totals). */}
+              {transactionsQuery.isLoading ? (
                 <Skeleton className="h-40 w-full" />
-              ) : annualPnlQuery.isError ? (
+              ) : transactionsQuery.isError ? (
                 <ErrorState
-                  message="Failed to load annual P&L"
-                  onRetry={() => annualPnlQuery.refetch()}
+                  message="Failed to load P&L"
+                  onRetry={() => transactionsQuery.refetch()}
                 />
-              ) : pnlTable.categoryRows.length === 0 ? (
+              ) : pnlRows.incomeAll.length === 0 &&
+                pnlRows.expenseAll.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No category data available for this property yet.
                 </p>
               ) : (
-                <PnLTable
-                  years={pnlTable.years}
-                  rows={pnlTable.categoryRows}
-                  totalIncomeByYear={pnlTable.totalIncomeByYear}
-                  totalExpenseByYear={pnlTable.totalExpenseByYear}
-                  totalIncomeYtd={pnlTable.totalIncomeYtd}
-                  totalExpenseYtd={pnlTable.totalExpenseYtd}
-                  currency={property.currency}
-                />
+                <PropertyPnLTable rows={pnlRows} currency={property.currency} />
               )}
             </CardContent>
           </Card>
@@ -583,6 +481,16 @@ export function PropertyDetailPage() {
             </Button>
           </div>
 
+          {/* Valuation chart (Plan C). Rendered ABOVE the capital-structure
+              table so the trend is the first thing the user reads, with the
+              raw rows below for detail. The chart-data request feeds Debt +
+              Equity series; the chart overlays the sum (total value) as a
+              line. Currency comes from the property's native currency. */}
+          <ValuationChart
+            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
+            currency={property.currency}
+          />
+
           {valuationsQuery.isLoading ? (
             <Skeleton className="h-40 w-full" />
           ) : valuationsQuery.isError ? (
@@ -600,16 +508,6 @@ export function PropertyDetailPage() {
               data={valuationsQuery.data}
             />
           )}
-
-          {/* Valuation chart (Plan C). Sits under the capital-structure
-              table so users can read the same numbers as a trend. The
-              chart-data request feeds Debt + Equity series; the chart
-              overlays the sum (total value) as a line. Currency comes from
-              the property's native currency (Task 19). */}
-          <ValuationChart
-            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
-            currency={property.currency}
-          />
         </TabsContent>
       </Tabs>
 
@@ -789,129 +687,105 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-// Annual P&L table (Task 14). Renders one row per category (income first,
-// then expenses), a Total income / Total expenses pair, and a Net income
-// row. Columns are the years returned by the chart-data request plus a
-// YTD column at the end (YTD = the current year's column from the same
-// response, since chart-data clamps the upper bound to today).
-type PnLRow = {
-  label: string
-  isIncome: boolean
-  byYear: Record<string, number>
-  ytd: number
+// Per-property P&L table. Two columns (All-time + YTD), same layout as
+// the dashboard P&L: income categories first, then "Total revenue", then
+// expense categories (kept negative), then "Total expenses" and
+// "Net income". `formatAccounting` renders negatives as `(1,234)` so the
+// sign convention is unambiguous. Rows are derived client-side from the
+// property's transactions (see `pnlRows` above).
+type PropertyPnLCategoryRow = { label: string; total: number }
+
+type PropertyPnLRows = {
+  incomeAll: PropertyPnLCategoryRow[]
+  expenseAll: PropertyPnLCategoryRow[]
+  incomeYtd: PropertyPnLCategoryRow[]
+  expenseYtd: PropertyPnLCategoryRow[]
+  totalIncomeAll: number
+  totalIncomeYtd: number
+  totalExpenseAll: number
+  totalExpenseYtd: number
+  netIncomeAll: number
+  netIncomeYtd: number
 }
 
-function PnLTable({
-  years,
+function PropertyPnLTable({
   rows,
-  totalIncomeByYear,
-  totalExpenseByYear,
-  totalIncomeYtd,
-  totalExpenseYtd,
   currency,
 }: {
-  years: string[]
-  rows: PnLRow[]
-  totalIncomeByYear: Record<string, number>
-  totalExpenseByYear: Record<string, number>
-  totalIncomeYtd: number
-  totalExpenseYtd: number
+  rows: PropertyPnLRows
   currency: string
 }) {
-  const headers = [...years, 'YTD']
-  const incomeRows = rows.filter((r) => r.isIncome)
-  const expenseRows = rows.filter((r) => !r.isIncome)
-  const netByYear: Record<string, number> = {}
-  for (const year of years) {
-    netByYear[year] =
-      (totalIncomeByYear[year] ?? 0) + (totalExpenseByYear[year] ?? 0)
-  }
-  const netYtd = totalIncomeYtd + totalExpenseYtd
-
+  const ytdFor = (ytdRows: PropertyPnLCategoryRow[], label: string) =>
+    ytdRows.find((r) => r.label === label)?.total ?? 0
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Category</TableHead>
-            {headers.map((h) => (
-              <TableHead key={h} className="text-right">
-                {h}
-              </TableHead>
-            ))}
+            <TableHead className="text-right">All time</TableHead>
+            <TableHead className="text-right">YTD</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {/* Income rows */}
-          {incomeRows.map((row) => (
+          {rows.incomeAll.map((row) => (
             <TableRow key={`income-${row.label}`}>
               <TableCell className="font-medium capitalize">
                 {row.label}
               </TableCell>
-              {headers.map((h) => (
-                <TableCell key={h} className="text-right">
-                  {h === 'YTD'
-                    ? formatCurrency(Math.abs(row.ytd), currency)
-                    : formatCurrency(
-                        Math.abs(row.byYear[h] ?? 0),
-                        currency,
-                      )}
-                </TableCell>
-              ))}
+              <TableCell className="text-right">
+                {formatAccounting(row.total, currency)}
+              </TableCell>
+              <TableCell className="text-right">
+                {formatAccounting(ytdFor(rows.incomeYtd, row.label), currency)}
+              </TableCell>
             </TableRow>
           ))}
-          {/* Expense rows — display the absolute value (chart-data returns
-              negatives for expenses). */}
-          {expenseRows.map((row) => (
+          {/* Total revenue */}
+          <TableRow className="border-t">
+            <TableCell className="font-bold">Total revenue</TableCell>
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.totalIncomeAll, currency)}
+            </TableCell>
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.totalIncomeYtd, currency)}
+            </TableCell>
+          </TableRow>
+          {/* Expense rows — kept negative so formatAccounting renders
+              brackets. */}
+          {rows.expenseAll.map((row) => (
             <TableRow key={`expense-${row.label}`}>
               <TableCell className="font-medium capitalize">
                 {row.label}
               </TableCell>
-              {headers.map((h) => (
-                <TableCell key={h} className="text-right">
-                  {h === 'YTD'
-                    ? formatCurrency(Math.abs(row.ytd), currency)
-                    : formatCurrency(
-                        Math.abs(row.byYear[h] ?? 0),
-                        currency,
-                      )}
-                </TableCell>
-              ))}
+              <TableCell className="text-right">
+                {formatAccounting(row.total, currency)}
+              </TableCell>
+              <TableCell className="text-right">
+                {formatAccounting(ytdFor(rows.expenseYtd, row.label), currency)}
+              </TableCell>
             </TableRow>
           ))}
-          {/* Totals */}
-          <TableRow className="border-t-2">
-            <TableCell className="font-bold">Total income</TableCell>
-            {headers.map((h) => (
-              <TableCell key={h} className="text-right font-bold">
-                {h === 'YTD'
-                  ? formatCurrency(totalIncomeYtd, currency)
-                  : formatCurrency(totalIncomeByYear[h] ?? 0, currency)}
-              </TableCell>
-            ))}
-          </TableRow>
-          <TableRow>
+          {/* Total expenses (kept negative). */}
+          <TableRow className="border-t">
             <TableCell className="font-bold">Total expenses</TableCell>
-            {headers.map((h) => (
-              <TableCell key={h} className="text-right font-bold">
-                {h === 'YTD'
-                  ? formatCurrency(Math.abs(totalExpenseYtd), currency)
-                  : formatCurrency(
-                      Math.abs(totalExpenseByYear[h] ?? 0),
-                      currency,
-                    )}
-              </TableCell>
-            ))}
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.totalExpenseAll, currency)}
+            </TableCell>
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.totalExpenseYtd, currency)}
+            </TableCell>
           </TableRow>
+          {/* Net income */}
           <TableRow className="border-t-2">
             <TableCell className="font-bold">Net income</TableCell>
-            {headers.map((h) => (
-              <TableCell key={h} className="text-right font-bold">
-                {h === 'YTD'
-                  ? formatCurrency(netYtd, currency)
-                  : formatCurrency(netByYear[h] ?? 0, currency)}
-              </TableCell>
-            ))}
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.netIncomeAll, currency)}
+            </TableCell>
+            <TableCell className="text-right font-bold">
+              {formatAccounting(rows.netIncomeYtd, currency)}
+            </TableCell>
           </TableRow>
         </TableBody>
       </Table>

@@ -395,6 +395,29 @@ def test_transaction_list_excludes_other_landlords(auth_client, sample_property,
 
 
 @pytest.mark.django_db
+def test_transaction_list_filters_by_property(auth_client, landlord_user):
+    """GET /transactions/?property=<id> narrows to that property only.
+
+    The property detail page's Recent Transactions panel relies on this
+    filter; without it the panel would show every transaction across the
+    landlord's portfolio rather than the one property the user is
+    viewing. A cross-landlord PK still yields an empty list (no
+    enumeration channel) because the base queryset is user-scoped.
+    """
+    prop_a = PropertyFactory(owned_by=landlord_user.landlord)
+    prop_b = PropertyFactory(owned_by=landlord_user.landlord)
+    txn_a1 = TransactionFactory(property=prop_a)
+    txn_a2 = TransactionFactory(property=prop_a)
+    txn_b = TransactionFactory(property=prop_b)
+
+    resp = auth_client.get(f"/api/v1/transactions/?property={prop_a.id}")
+    assert resp.status_code == 200
+    ids = {t["id"] for t in _results(resp)}
+    assert {txn_a1.id, txn_a2.id} <= ids
+    assert txn_b.id not in ids
+
+
+@pytest.mark.django_db
 def test_create_transaction_rejects_other_landlords_property(
     auth_client, other_landlord_user
 ):

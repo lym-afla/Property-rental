@@ -5,9 +5,13 @@
 // (`lease_start` <= period end AND (no `lease_end` OR `lease_end` >=
 // period start)) and the total property count, bucketed monthly.
 //
-// The bucket set is generated from the union of lease_start / today so
-// the chart always spans the tenant history; properties with no tenants
-// still appear as a baseline vacant band.
+// The bucket set is generated as a CONTINUOUS monthly range so the
+// timeline selector actually changes the data: for a finite `monthsBack`
+// we walk back N months from today; for `undefined` we span from the
+// earliest lease_start through today. Generating every month in the
+// window (instead of only months that appear as a lease_start) means
+// picking "Last 24 months" vs "Last 12 months" produces a visibly
+// different x-axis even when leases are sparse.
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -24,27 +28,46 @@ import { ChartCard } from './ChartCard'
 import { useProperties } from '@/api/properties'
 import { useTenants } from '@/api/tenants'
 
-// Build a sorted, de-duplicated list of `YYYY-MM` month buckets covering
-// every tenant's lease_start through today.
-function buildMonthBuckets(dates: string[]): string[] {
-  const set = new Set<string>()
-  const today = new Date()
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-  set.add(todayKey)
-  for (const d of dates) {
-    if (!d) continue
-    const dt = new Date(d)
-    if (Number.isNaN(dt.getTime())) continue
-    set.add(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`)
-  }
-  return Array.from(set).sort()
-}
-
 function monthKeyOf(dateStr: string): string | null {
   if (!dateStr) return null
   const dt = new Date(dateStr)
   if (Number.isNaN(dt.getTime())) return null
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Generate a continuous list of `YYYY-MM` month keys covering the
+// requested window ending at the current month. `monthsBack` undefined
+// => span from `earliestStart` (the earliest lease_start in the tenant
+// set) through today.
+function buildMonthBuckets(
+  monthsBack: number | undefined,
+  earliestStart: string | null,
+): string[] {
+  const today = new Date()
+  const end = new Date(today.getFullYear(), today.getMonth(), 1)
+  let start: Date
+  if (monthsBack && monthsBack > 0) {
+    start = new Date(end.getFullYear(), end.getMonth() - (monthsBack - 1), 1)
+  } else if (earliestStart) {
+    const dt = new Date(earliestStart)
+    start = Number.isNaN(dt.getTime())
+      ? new Date(end.getFullYear(), end.getMonth() - 11, 1)
+      : new Date(dt.getFullYear(), dt.getMonth(), 1)
+  } else {
+    // No tenants and no explicit window: default to last 12 months so
+    // the chart still renders a vacant baseline rather than a single
+    // point.
+    start = new Date(end.getFullYear(), end.getMonth() - 11, 1)
+  }
+  const keys: string[] = []
+  const cur = new Date(start)
+  while (cur <= end) {
+    keys.push(
+      `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`,
+    )
+    cur.setMonth(cur.getMonth() + 1)
+  }
+  return keys
 }
 
 // A tenant is "active" during a `YYYY-MM` bucket when their lease_start
@@ -82,12 +105,16 @@ export function OccupancyChart({ monthsBack, controls }: Props = {}) {
     const tenantList = tenants.data ?? []
     const totalUnits = properties.data?.length ?? 0
 
-    let buckets = buildMonthBuckets(tenantList.map(t => t.lease_start))
-    // Trim to the last `monthsBack` months when a finite window is
-    // requested. Buckets are sorted ascending, so slice from the end.
-    if (monthsBack !== undefined && monthsBack > 0) {
-      buckets = buckets.slice(-monthsBack)
+    // Earliest lease_start drives the "all history" span.
+    let earliestStart: string | null = null
+    for (const t of tenantList) {
+      if (!t.lease_start) continue
+      if (earliestStart === null || t.lease_start < earliestStart) {
+        earliestStart = t.lease_start
+      }
     }
+
+    const buckets = buildMonthBuckets(monthsBack, earliestStart)
     return buckets.map(bucket => {
       const occupied = tenantList.filter(t =>
         leaseActiveIn(bucket, t.lease_start, t.lease_end),

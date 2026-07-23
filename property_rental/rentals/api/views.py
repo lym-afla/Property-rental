@@ -516,7 +516,20 @@ class TransactionViewSet(viewsets.ModelViewSet):
     permission_classes = _OWNER_PERMS
 
     def get_queryset(self):
-        return Transaction.objects.filter(property__owned_by__user=self.request.user)
+        # Base scope: only transactions whose ``property`` is owned by the
+        # requesting user (the per-user scoping invariant every ViewSet
+        # enforces).
+        qs = Transaction.objects.filter(property__owned_by__user=self.request.user)
+        # Honor an optional ``?property=<id>`` query param so callers can
+        # narrow to one property (the property detail page does this for
+        # its Recent Transactions panel). The param is scoped to the
+        # user's own properties via the base filter above, so a
+        # cross-landlord PK simply yields an empty list — no enumeration
+        # channel.
+        property_param = self.request.query_params.get("property")
+        if property_param:
+            qs = qs.filter(property_id=property_param)
+        return qs
 
     def _validate_and_save(self, serializer):
         # Validate ``property`` ownership via the scoped queryset (404).
