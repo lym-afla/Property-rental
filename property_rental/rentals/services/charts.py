@@ -45,6 +45,8 @@ Latent quirks preserved (NOT fixed here — pinned by
   ``currency`` is None — preserved verbatim.
 """
 
+from datetime import date
+
 from dateutil.relativedelta import relativedelta
 from django.db import models
 from django.shortcuts import get_object_or_404
@@ -106,8 +108,29 @@ def get_chart_data(type, element_id, frequency, from_date, to_date, currency, pr
             single_dataset_data = {'label': category, 'data': []}  # Initialize for each category
 
             for d in dates:
-                start_date = d - relativedelta(months = time_delta[frequency])
-                transactions = Transaction.financials(end_date = d, target_currency=currency, properties=properties, start_date=start_date, category=category)
+                if frequency == 'Y':
+                    # Calendar-year window: the yearly bucket for date ``d``
+                    # (which ``chart_dates`` emits as Jan 1 of each year)
+                    # covers Jan 1 .. Dec 31 of ``d.year`` (NOT a rolling
+                    # 12-month window ending at ``d``). This matches what a
+                    # user expects a "2024" bar to contain -- all of 2024,
+                    # not 2023-01-01..2024-01-01. We override BOTH ends of
+                    # the aggregation window so ``Transaction.financials``
+                    # sees the full calendar year (passing only start_date
+                    # would leave end_date at Jan 1 and filter to a single
+                    # day).
+                    year_start = date(d.year, 1, 1)
+                    year_end = date(d.year, 12, 31)
+                    transactions = Transaction.financials(
+                        end_date=year_end,
+                        target_currency=currency,
+                        properties=properties,
+                        start_date=year_start,
+                        category=category,
+                    )
+                else:
+                    start_date = d - relativedelta(months = time_delta[frequency])
+                    transactions = Transaction.financials(end_date = d, target_currency=currency, properties=properties, start_date=start_date, category=category)
                 single_dataset_data['data'].append(round(transactions, 0))
 
             chart_data['datasets'].append(single_dataset_data)

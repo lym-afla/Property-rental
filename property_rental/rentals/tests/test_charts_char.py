@@ -253,21 +253,27 @@ def test_get_chart_data_homepage_yearly(db):
         currency="USD",
         properties=properties,
     )
-    # Captured verbatim. freq='Y' yields a single chart point d=2024-01-01
-    # (chart_dates replaces both ends with Jan 1 of their year). Each
-    # dataset's value is financials(end_date=2024-01-01, start_date=d -
-    # 12 months = 2023-01-01). The only rent transaction in
-    # 2023-01-01..2024-01-01 is the 2024-01-01 row ($1000); Feb/Apr rents
-    # fall outside the window. PINNED VERBATIM; flag if Task 12 changes
-    # how the yearly window is computed.
+    # freq='Y' yields a single chart point d=2024-01-01 (chart_dates
+    # replaces both ends with Jan 1 of their year). The yearly bucket
+    # covers the CALENDAR YEAR Jan 1 .. Dec 31 of d.year (T5 fix; was a
+    # rolling 12-month window ending at d=2024-01-01, which only
+    # captured the 2024-01-01 rent row). With the calendar-year window
+    # the bucket now captures every 2024 transaction:
+    #   rent        = 4 * $1000 (Jan..Apr)               = $4000
+    #   tax         = $200 (2024-01-15)                   = $200
+    #   utilities   = $100 (2024-02-15)                   = $100
+    #   electricity = $50  (2024-03-15)                   = $50
+    #   management  = $75  (2024-04-15)                   = $75
+    # Decimal-vs-int mixing preserved (non-empty buckets come back as
+    # Decimal, empty ones as int 0).
     EXPECTED = {
         'labels': ['2024'],
         'datasets': [
-            {'label': 'rent', 'data': [Decimal('1000')]},
-            {'label': 'tax', 'data': [0]},
-            {'label': 'utilities', 'data': [0]},
-            {'label': 'electricity', 'data': [0]},
-            {'label': 'management', 'data': [0]},
+            {'label': 'rent', 'data': [Decimal('4000')]},
+            {'label': 'tax', 'data': [Decimal('200')]},
+            {'label': 'utilities', 'data': [Decimal('100')]},
+            {'label': 'electricity', 'data': [Decimal('50')]},
+            {'label': 'management', 'data': [Decimal('75')]},
         ],
         'currency': '$',
     }

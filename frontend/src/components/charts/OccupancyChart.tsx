@@ -88,6 +88,23 @@ function leaseActiveIn(
   return true
 }
 
+// A property is "in rental mode" (counted toward capacity) for a given
+// `YYYY-MM` bucket when at least one of its tenants had `lease_start`
+// on or before that month. Properties that have never been rented by
+// that month should NOT inflate the vacancy line — they aren't part of
+// the rentable inventory yet. Mirrors the spec: capacity = count of
+// properties that have at least one tenant with lease_start <= month.
+function propertyActiveIn(
+  bucket: string,
+  tenantsForProperty: { lease_start: string }[],
+): boolean {
+  for (const t of tenantsForProperty) {
+    const startKey = monthKeyOf(t.lease_start)
+    if (startKey && startKey <= bucket) return true
+  }
+  return false
+}
+
 type Props = {
   // How many months of history to show. `undefined` means "all history"
   // (the full tenant lease span). Defaults to undefined for backwards
@@ -103,7 +120,17 @@ export function OccupancyChart({ monthsBack, controls }: Props = {}) {
 
   const chartData = useMemo(() => {
     const tenantList = tenants.data ?? []
-    const totalUnits = properties.data?.length ?? 0
+    const propertyList = properties.data ?? []
+    // Index tenants by their property id so we can answer "which tenants
+    // ever lived in property P" without scanning the full tenant list for
+    // every (property, month) pair.
+    const tenantsByProperty = new Map<number, { lease_start: string }[]>()
+    for (const t of tenantList) {
+      if (!t.lease_start) continue
+      const arr = tenantsByProperty.get(t.property) ?? []
+      arr.push({ lease_start: t.lease_start })
+      tenantsByProperty.set(t.property, arr)
+    }
 
     // Earliest lease_start drives the "all history" span.
     let earliestStart: string | null = null
@@ -119,10 +146,18 @@ export function OccupancyChart({ monthsBack, controls }: Props = {}) {
       const occupied = tenantList.filter(t =>
         leaseActiveIn(bucket, t.lease_start, t.lease_end),
       ).length
+      // Capacity = count of properties that have at least one tenant
+      // whose lease_start is on/before this bucket's month. Using the
+      // property's first-ever rental date (rather than the static
+      // property count) means the Vacant line doesn't get inflated by
+      // properties that hadn't entered the rental inventory yet.
+      const capacity = propertyList.filter(p =>
+        propertyActiveIn(bucket, tenantsByProperty.get(p.id) ?? []),
+      ).length
       return {
         label: bucket,
         Occupied: occupied,
-        Vacant: Math.max(0, totalUnits - occupied),
+        Vacant: Math.max(0, capacity - occupied),
       }
     })
   }, [properties.data, tenants.data, monthsBack])

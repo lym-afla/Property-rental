@@ -542,6 +542,33 @@ class TransactionViewSet(viewsets.ModelViewSet):
         tenant_param = self.request.query_params.get("tenant")
         if tenant_param:
             qs = qs.filter(tenant_id=tenant_param)
+        # Honor an optional ``?category=<value>`` query param so callers
+        # can narrow to a single transaction category (the dashboard's
+        # Cash Flow drill-down links to /transactions/?category=rent and
+        # expects the list to reflect it). Without this filter the
+        # drill-down showed every category in the date range.
+        category_param = self.request.query_params.get("category")
+        if category_param:
+            qs = qs.filter(category=category_param)
+        # Honor the date-range filters. The frontend sends ``from`` /
+        # ``to`` (mirroring the URL query params the TransactionsPage
+        # reads), but we ALSO accept the DRF-idiomatic ``date__gte`` /
+        # ``date__lte`` aliases so the endpoint stays friendly to API
+        # clients that already speak Django lookups. The previous code
+        # did not filter on either, which silently no-op'd the date
+        # range in the Filter Bar.
+        date_from = (
+            self.request.query_params.get("from")
+            or self.request.query_params.get("date__gte")
+        )
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        date_to = (
+            self.request.query_params.get("to")
+            or self.request.query_params.get("date__lte")
+        )
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
         return qs
 
     def _validate_and_save(self, serializer):

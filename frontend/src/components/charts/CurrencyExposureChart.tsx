@@ -3,16 +3,21 @@
 // Horizontal bar chart showing portfolio exposure grouped by currency.
 //
 // The chart fetches TWO `with_stats` snapshots:
-//   - `currency='USD'`  -> FX-converted totals so every bar sits on the
-//                          same `$` axis and is directly comparable.
+//   - `currency=<userCurrency>` -> FX-converted totals so every bar sits
+//                                  on a single-currency axis and is
+//                                  directly comparable. `userCurrency` is
+//                                  the user's `default_currency` (USD by
+//                                  default).
 //   - `currency='native'` -> each property's native-currency total so the
 //                            table can show the face-value amount per
-//                            currency group alongside the USD figure.
+//                            currency group alongside the user-currency
+//                            figure.
 //
 // Grouping key is the property's NATIVE `currency` (RUB/GBP/etc.) — that
 // is what the user thinks of as "exposure to currency X". The BAR VALUES
-// are USD though, so the chart is a single-currency comparison rather
-// than a mix of ₽/£/$ amounts that can't be visually ranked.
+// are FX-converted into the user's `default_currency`, so the chart is a
+// single-currency comparison rather than a mix of ₽/£/$ amounts that
+// can't be visually ranked.
 //
 // Timeline options match the rest of the dashboard (YTD / 3m / 6m /
 // 12m / 3Y / 5Y / All). The choice is translated to an `as_of` ISO date
@@ -26,6 +31,7 @@ import {
 import { ChartCard } from './ChartCard'
 import { usePropertiesWithStats } from '@/api/properties'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
+import { useSession } from '@/context/SessionProvider'
 import { colorForCategory } from './_chartTheme'
 import {
   Select,
@@ -85,20 +91,23 @@ function timelineToAsOf(timeline: Timeline): string | undefined {
 type ExposureRow = {
   currency: string    // native currency (RUB/GBP) — Y axis label + table key
   nativeValue: number // sum of native-currency net income across properties
-  usdValue: number    // same sum, FX-converted to USD (the chart value)
+  usdValue: number    // same sum, FX-converted to user currency (the chart value)
 }
-
-const USD = 'USD'
 
 export function CurrencyExposureChart() {
   const [timeline, setTimeline] = useState<Timeline>('All')
   const asOf = useMemo(() => timelineToAsOf(timeline), [timeline])
+  // The user's preferred display currency drives the FX-converted totals
+  // (the bar values). Falls back to USD when the session has not loaded
+  // yet or the user never picked a currency.
+  const { user } = useSession()
+  const userCurrency = user?.default_currency || 'USD'
 
-  // Two parallel snapshots: USD-converted (for the chart axis) and
-  // native (for the table's "face value" column). React Query dedupes
+  // Two parallel snapshots: user-currency-converted (for the chart axis)
+  // and native (for the table's "face value" column). React Query dedupes
   // them by query key, so flipping the timeline only re-fires the two
   // affected requests.
-  const usdStats = usePropertiesWithStats(asOf, USD)
+  const usdStats = usePropertiesWithStats(asOf, userCurrency)
   const nativeStats = usePropertiesWithStats(asOf, 'native')
 
   const chartData = useMemo(() => {
@@ -126,15 +135,15 @@ export function CurrencyExposureChart() {
 
   const tableData = useMemo(
     () => ({
-      // Two value columns: native-currency face value + USD-converted.
-      headers: ['Currency', 'Native', 'USD'],
+      // Two value columns: native-currency face value + user-currency.
+      headers: ['Currency', 'Native', userCurrency],
       rows: chartData.map(row => [
         row.currency,
         formatCurrency(row.nativeValue, row.currency),
-        formatCurrency(row.usdValue, USD),
+        formatCurrency(row.usdValue, userCurrency),
       ]),
     }),
-    [chartData],
+    [chartData, userCurrency],
   )
 
   const controls: ReactNode = (
@@ -156,7 +165,7 @@ export function CurrencyExposureChart() {
     return (
       <ChartCard
         title="Currency exposure"
-        description="Net income by currency (USD-converted)"
+        description={`Net income by currency (${userCurrency}-converted)`}
         controls={controls}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -170,7 +179,7 @@ export function CurrencyExposureChart() {
     return (
       <ChartCard
         title="Currency exposure"
-        description="Net income by currency (USD-converted)"
+        description={`Net income by currency (${userCurrency}-converted)`}
         controls={controls}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -183,17 +192,17 @@ export function CurrencyExposureChart() {
   return (
     <ChartCard
       title="Currency exposure"
-      description="Net income by currency (USD-converted)"
+      description={`Net income by currency (${userCurrency}-converted)`}
       controls={controls}
       tableData={tableData}
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis type="number" tickFormatter={(v) => formatCurrencyAxis(v, USD)} tick={{ fontSize: 12 }} />
+          <XAxis type="number" tickFormatter={(v) => formatCurrencyAxis(v, userCurrency)} tick={{ fontSize: 12 }} />
           <YAxis type="category" dataKey="currency" tick={{ fontSize: 12 }} width={50} />
-          <Tooltip formatter={(v) => formatCurrency(Number(v), USD)} />
-          <Bar dataKey="usdValue" name="Net income (USD)">
+          <Tooltip formatter={(v) => formatCurrency(Number(v), userCurrency)} />
+          <Bar dataKey="usdValue" name={`Net income (${userCurrency})`}>
             {chartData.map((entry, i) => (
               <Cell key={`cell-${i}`} fill={colorForCategory(entry.currency, i)} />
             ))}

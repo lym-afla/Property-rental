@@ -20,8 +20,12 @@ export function useTransactions(filters: TransactionFilters = {}) {
           tenant: filters.tenant,
           category: filters.category,
           type: filters.type,
-          start: filters.start,
-          end: filters.end,
+          // Backend reads ``from`` / ``to`` (the same keys the
+          // TransactionsPage URL uses). The previous code sent
+          // ``start``/``end`` which the ViewSet never filtered on, so
+          // the date range filter silently no-op'd.
+          from: filters.start,
+          to: filters.end,
           currency: filters.currency,
         },
       }),

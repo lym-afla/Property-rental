@@ -60,6 +60,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { useSession } from '@/context/SessionProvider'
 
 // Frequency + timeline options that mirror the backend `chart_data` view's
 // `freq` and the `calculate_from_date` timelines. Keys must match the
@@ -183,6 +184,11 @@ function occupancyPeriodToMonths(period: OccupancyPeriod): number | undefined {
 
 export function HomePage() {
   const navigate = useNavigate()
+  // User's preferred display currency drives every FX-converted number on
+  // this page (KPI cards, charts, P&L table). Falls back to USD when the
+  // session has not loaded yet or the user never picked a currency.
+  const { user } = useSession()
+  const userCurrency = user?.default_currency || 'USD'
 
   // Frequency + timeline drive the Cash Flow + Net Income Trend chart-data
   // requests. Default to monthly + last 12 months so the dashboard has
@@ -215,10 +221,11 @@ export function HomePage() {
   // ---- Data hooks ----------------------------------------------------------
   // KPIs derive from the with_stats aggregations. The dashboard sums every
   // property into a single portfolio number, so we request stats FX-
-  // converted into USD (the user's `default_currency`) — summing native
-  // RUB + GBP figures into one total would mix units. The Properties PAGE
-  // stays native-currency per row; this dashboard hook is USD-scoped.
-  const propertiesStats = usePropertiesWithStats(undefined, 'USD')
+  // converted into the user's `default_currency` — summing native RUB +
+  // GBP figures into one total would mix units. The Properties PAGE
+  // stays native-currency per row; this dashboard hook is user-currency-
+  // scoped.
+  const propertiesStats = usePropertiesWithStats(undefined, userCurrency)
   const tenantsStats = useTenantsWithStats()
 
   // One chart-data request for the headline bar chart; the same response
@@ -286,14 +293,17 @@ export function HomePage() {
 
   // Aggregate display currency for KPI values: stats are FX-converted to a
   // single target currency on the backend (exposed as `stats_currency`,
-  // almost always `USD`). The previous code picked the most common NATIVE
+  // which equals the request currency we sent, i.e. the user's
+  // `default_currency`). The previous code picked the most common NATIVE
   // `currency` across properties — which was wrong, because the stats
   // values themselves are denominated in `stats_currency`, not the native
-  // currency. We now use `stats_currency` so the symbol matches the number.
+  // currency. We fall back to `userCurrency` (rather than 'USD') so the
+  // symbol matches the number even before the first stats response
+  // resolves.
   const kpiCurrency = useMemo(() => {
     const first = (propertiesStats.data ?? [])[0]
-    return first?.stats_currency ?? 'USD'
-  }, [propertiesStats.data])
+    return first?.stats_currency ?? userCurrency
+  }, [propertiesStats.data, userCurrency])
 
   // ---- P&L per-category breakdown -----------------------------------------
   // The user wants the OLD-style P&L with every category line, not just
@@ -319,12 +329,14 @@ export function HomePage() {
     frequency: 'Y',
     start: '1900-01-01',
     end: todayIso,
+    currency: userCurrency,
   })
   const pnlYtdQuery = useChartData({
     type: 'homePage',
     frequency: 'Y',
     start: yearStart,
     end: yearEnd,
+    currency: userCurrency,
   })
 
   // Income vs expense classification — mirrors `rentals/constants.py`.

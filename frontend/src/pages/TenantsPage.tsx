@@ -59,7 +59,7 @@ import { EmptyState } from '@/components/states/EmptyState'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 import type { TenantWithStats } from '@/types/tenant'
 import type { Property } from '@/types/property'
 
@@ -239,13 +239,18 @@ export function TenantsPage() {
         // The previous logic colored positive debt red, which inverted
         // the meaning of the sign and made every credit look like a
         // liability.
+        //
+        // Display: use `formatAccounting` so negative debt renders as
+        // `Currency(85,000)` (accounting brackets) instead of
+        // `Currency-85,000` -- matches the Transactions table's amount
+        // column and the P&L table's treatment of negative rows.
         const cls =
           debt > 0
             ? 'font-medium text-emerald-600'
             : debt < 0
               ? 'font-medium text-destructive'
               : ''
-        return <span className={cls}>{formatCurrency(debt, cur)}</span>
+        return <span className={cls}>{formatAccounting(debt, cur)}</span>
       },
     },
     {
