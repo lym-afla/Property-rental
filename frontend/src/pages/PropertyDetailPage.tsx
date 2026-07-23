@@ -416,11 +416,14 @@ export function PropertyDetailPage() {
           {/* Rent yield chart (Plan C). Sits between the P&L card and the
               recent-transactions table so the yield trend is visible right
               after the summary numbers it derives from. The chart owns its
-              own loading/error states via ChartCard; we pass the chart-data
-              payload through and let the chart fetch its own valuations
-              (RentYieldChart calls usePropertyValuations internally). */}
+              own loading/error states via ChartCard; we pass the already-
+              loaded property transactions through (the chart-data
+              `property` branch only emits Debt + Equity, not per-category
+              rent, so yield must be derived from transactions). The chart
+              fetches its own valuations internally via
+              usePropertyValuations. */}
           <RentYieldChart
-            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
+            transactions={transactionsQuery.data ?? []}
             propertyId={propertyId}
             currency={property.currency}
           />

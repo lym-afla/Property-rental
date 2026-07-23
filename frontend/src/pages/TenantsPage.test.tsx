@@ -19,6 +19,7 @@ import { http, HttpResponse } from 'msw'
 import { TenantsPage } from './TenantsPage'
 import { server } from '@/test/handlers'
 import { fixtureTenantWithStats } from '@/__fixtures__/tenant'
+import { fixtureTenantsWithStats } from '@/__fixtures__/lists'
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -81,5 +82,49 @@ describe('TenantsPage', () => {
     expect(
       await waitFor(() => screen.getByRole('button', { name: /new tenant/i })),
     ).toBeInTheDocument()
+  })
+
+  it('renders negative debt with accounting brackets and the red class', async () => {
+    // debt() returns `paid - due`, so a negative value means the tenant
+    // is in arrears. We pin both the bracketed `$(250)` display AND the
+    // destructive (red) class so a future regression that flips the
+    // sign convention or drops the accounting format is caught.
+    server.use(
+      http.get('/api/v1/tenants/with_stats/', () =>
+        HttpResponse.json([
+          {
+            ...fixtureTenantsWithStats[0],
+            debt: -250,
+            stats_currency: 'USD',
+          },
+        ]),
+      ),
+    )
+    renderPage()
+    const debtCell = await screen.findByText('$(250)')
+    expect(debtCell).toBeInTheDocument()
+    // The cell's <span> carries the destructive class — its parent is
+    // the cell wrapper, so we assert on the matched element itself.
+    expect(debtCell.className).toContain('text-destructive')
+  })
+
+  it('renders positive debt as credit with the green class', async () => {
+    // Positive debt = tenant has overpaid (credit balance). Should
+    // render without brackets and use the emerald (green) class.
+    server.use(
+      http.get('/api/v1/tenants/with_stats/', () =>
+        HttpResponse.json([
+          {
+            ...fixtureTenantsWithStats[0],
+            debt: 500,
+            stats_currency: 'USD',
+          },
+        ]),
+      ),
+    )
+    renderPage()
+    const debtCell = await screen.findByText('$500')
+    expect(debtCell).toBeInTheDocument()
+    expect(debtCell.className).toContain('text-emerald-600')
   })
 })

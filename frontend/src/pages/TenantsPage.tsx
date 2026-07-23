@@ -231,23 +231,28 @@ export function TenantsPage() {
       header: 'Debt',
       cell: ({ row }) => {
         const cur = row.original.stats_currency ?? 'USD'
-        const debt = row.original.debt
-        // Sign convention (mirrors `services.scheduler.debt`):
+        // Coerce to number defensively — the type says `number`, but DRF
+        // occasionally returns decimals as strings in edge paths, and a
+        // string `"−250"` would otherwise pass `"−250" > 0` as `true`
+        // (lexicographic) and colour an arrear as credit. `Number()`
+        // collapses both representations to a real numeric comparison.
+        const debt = Number(row.original.debt)
+        // Sign convention (mirrors `services.scheduler.debt`, which
+        // returns `paid - due`):
         //   debt > 0  -> tenant has OVERPAID (credit balance; good) -> green
-        //   debt < 0  -> tenant is in ARREARS (owes money; bad)   -> red
-        //   debt == 0 -> settled                                       -> default
-        // The previous logic colored positive debt red, which inverted
-        // the meaning of the sign and made every credit look like a
-        // liability.
+        //   debt < 0  -> tenant is in ARREARS (owes money; bad)    -> red
+        //   debt == 0 -> settled                                    -> default
+        // The previous version (before this fix) inverted the meaning
+        // of the sign and coloured every credit like a liability.
         //
         // Display: use `formatAccounting` so negative debt renders as
-        // `Currency(85,000)` (accounting brackets) instead of
-        // `Currency-85,000` -- matches the Transactions table's amount
-        // column and the P&L table's treatment of negative rows.
+        // `£(250)` (accounting brackets) instead of `-£250` — matches
+        // the Transactions table's amount column and the P&L table's
+        // treatment of negative rows.
         const cls =
-          debt > 0
+          Number.isFinite(debt) && debt > 0
             ? 'font-medium text-emerald-600'
-            : debt < 0
+            : Number.isFinite(debt) && debt < 0
               ? 'font-medium text-destructive'
               : ''
         return <span className={cls}>{formatAccounting(debt, cur)}</span>

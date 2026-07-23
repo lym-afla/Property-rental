@@ -4,14 +4,27 @@
 // period:
 //   * Gross Yield = annualised revenue / property value
 //   * Net Yield   = annualised (revenue - expenses) / property value
-// Both annualised (monthly × 12, quarterly × 4, yearly × 1) so the
-// percentages are comparable across horizons.
+// Both annualised (monthly × 12) so the percentages are comparable
+// across horizons.
 //
-// The chart-data endpoint for a property carries a `rent` series (and
-// any other transaction categories); the property's value is taken from
-// the latest PropertyValuation (or 1 if none exists, so the chart still
-// renders without a divide-by-zero). Gross Yield sums income-category
-// series; Net Yield subtracts expense-category series from that total.
+// IMPORTANT (the "gross yield still zero" bug): the chart-data endpoint
+// for `type='property'` only emits `Debt` + `Equity` datasets — it does
+// NOT emit per-category totals (see the note in
+// `PropertyDetailPage::pnlRows` and the backend
+// `services/charts.py::get_chart_data` property branch). The previous
+// implementation tried to filter a `rent` series out of that payload,
+// found nothing, and silently rendered flat-zero yield lines. The fix
+// is to derive rent + expenses directly from the property's
+// transactions (already loaded by the detail page; we accept the same
+// `transactions` prop instead of re-fetching chart-data) and bucket
+// them per period.
+//
+// The property's value is taken from the latest PropertyValuation's
+// `capital_structure_value`. DRF serialises Decimals as strings, so we
+// parse with `Number()` before arithmetic (the previous code already
+// did this, but we keep the guard explicit). If no usable valuation
+// exists, we render an explicit empty state instead of dividing by a
+// synthetic 1.
 //
 // X-axis formatting: when the selected horizon spans more than 12
 // months we collapse the per-month `Mon-yy` labels to `yyyy` so the
@@ -31,10 +44,7 @@ import {
 import { Info } from 'lucide-react'
 import { ChartCard } from './ChartCard'
 import { PaginatedTable } from './PaginatedTable'
-import { transformForRecharts } from './_chartAdapter'
-import { useChartData } from '@/api/charts'
 import { usePropertyValuations } from '@/api/propertyValuations'
-import { useProperty } from '@/api/properties'
 import {
   Select,
   SelectContent,
@@ -49,6 +59,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/format'
+import type { Transaction } from '@/types/transaction'
 
 // Income categories — mirrors `rentals/constants.py::INCOME_CATEGORIES`.
 // Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
@@ -57,9 +68,11 @@ import { formatCurrency } from '@/lib/format'
 const INCOME_CATEGORIES = ['rent']
 
 type Props = {
-  // Pre-fetched chart data for the default window. The chart still uses
-  // `useChartData` to re-fetch when the user changes the time horizon.
-  data: ReturnType<typeof useChartData>['data']
+  // Pre-fetched transactions for this property. The chart buckets them
+  // per period (year / quarter / month) to compute gross + net yield.
+  // The parent already loads these for the P&L card; passing them in
+  // avoids a second round-trip and keeps the source of truth single.
+  transactions: Transaction[]
   propertyId: number
   // The property's native currency, forwarded by the parent so the
   // notional value + yield rows carry the right symbol without a second
@@ -103,11 +116,16 @@ function timelineMonths(timeline: Timeline): number {
   }
 }
 
-function timelineToRange(timeline: Timeline): { from: string; to: string } {
+function timelineToRange(timeline: Timeline): { from: Date; to: Date } {
   const today = new Date()
-  const to = today.toISOString().slice(0, 10)
-  // `All` uses the backend's all-time sentinel `1900-01-01`.
-  if (timeline === 'All') return { from: '1900-01-01', to }
+  const to = today
+  if (timeline === 'All') {
+    // Sentinel start: any date earlier than the first transaction will
+    // include everything; we use 1900-01-01 (matches the backend's
+    // all-time sentinel).
+    const from = new Date('1900-01-01')
+    return { from, to }
+  }
   const from = new Date(today)
   switch (timeline) {
     case 'YTD':
@@ -129,12 +147,49 @@ function timelineToRange(timeline: Timeline): { from: string; to: string } {
       from.setFullYear(from.getFullYear() - 5)
       break
   }
-  return { from: from.toISOString().slice(0, 10), to }
+  return { from, to }
 }
 
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return '—'
   return `${value.toFixed(1)}%`
+}
+
+// Render a chart-data period label. We emit monthly `Mon-yy` for <= 12
+// months and yearly `yyyy` for longer horizons.
+function periodLabel(d: Date, monthly: boolean): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  if (monthly) {
+    const yy = String(d.getFullYear()).slice(-2)
+    return `${months[d.getMonth()]}-${yy}`
+  }
+  return String(d.getFullYear())
+}
+
+// Generate the per-period anchor dates for the chart. Mirrors the
+// backend's `chart_dates` windowing (calendar months for `M`, calendar
+// years for `Y`). Monthly buckets use the first day of each month;
+// yearly buckets use Jan 1 of each year.
+function bucketAnchors(from: Date, to: Date, monthly: boolean): Date[] {
+  const out: Date[] = []
+  if (monthly) {
+    const cursor = new Date(from.getFullYear(), from.getMonth(), 1)
+    const end = new Date(to.getFullYear(), to.getMonth(), 1)
+    while (cursor <= end) {
+      out.push(new Date(cursor))
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+  } else {
+    const startYear = from.getFullYear()
+    const endYear = to.getFullYear()
+    for (let y = startYear; y <= endYear; y++) {
+      out.push(new Date(y, 0, 1))
+    }
+  }
+  // Cap to a sane maximum so the "All" horizon doesn't try to render
+  // decades of monthly buckets. 120 points covers 10 years of monthly
+  // data or 120 years of yearly data — both well past realistic use.
+  return out.slice(-120)
 }
 
 // Parse a chart-data monthly label (`Jan-24`) into a `yyyy` string for
@@ -149,38 +204,23 @@ function toAxisLabel(label: string, collapseYears: boolean): string {
   return String(year)
 }
 
-export function RentYieldChart({ data, propertyId, currency: currencyProp }: Props) {
+export function RentYieldChart({ transactions, propertyId, currency: currencyProp }: Props) {
   const [timeline, setTimeline] = useState<Timeline>('5Y')
   const range = useMemo(() => timelineToRange(timeline), [timeline])
-  const collapseYears = timelineMonths(timeline) > 12
-
-  // Re-fetch when the user changes the horizon. `data` is the default
-  // (monthly, 5Y) payload supplied by the parent; we override it as soon
-  // as the user picks a different horizon so the chart reflects their
-  // choice without a parent re-render.
-  const scopedQuery = useChartData({
-    type: 'property',
-    elementId: propertyId,
-    frequency: 'M',
-    start: range.from,
-    end: range.to,
-  })
-  const effectiveData = scopedQuery.data ?? data
-
-  // Fetch the property directly so we can read its native currency for
-  // display (T6). The parent may still pass `currency` as a fallback
-  // (used while the property query is loading).
-  const propertyQuery = useProperty(propertyId)
-  const currency = currencyProp ?? propertyQuery.data?.currency ?? ''
+  const monthly = timelineMonths(timeline) <= 12
+  const collapseYears = !monthly
 
   const valuations = usePropertyValuations(propertyId)
+  const currency = currencyProp ?? ''
 
-  // Latest valuation = highest capital_structure_date. T6: the property
+  // Latest valuation = highest capital_structure_date. The property
   // value comes from the latest `Property_capital_structure` entry's
-  // `capital_structure_value`. If no valuations exist, we render an
-  // explicit "No valuation data" state instead of dividing by a
-  // synthetic 1 (which previously produced a flat yield of rent / 1 —
-  // misleading because the percentages were gigantic for any real rent).
+  // `capital_structure_value`. DRF returns decimals as strings, so we
+  // parse via `Number()` (NaN-safe). If no valuations exist (or the
+  // value is non-positive / unparseable), we render an explicit
+  // "No valuation data" state instead of dividing by a synthetic 1
+  // (which previously produced gigantic rent/1 percentages that
+  // masqueraded as real data).
   const latestValue = useMemo(() => {
     const list = valuations.data ?? []
     if (list.length === 0) return null
@@ -194,39 +234,44 @@ export function RentYieldChart({ data, propertyId, currency: currencyProp }: Pro
   const hasValuation = latestValue !== null
   const value = hasValuation ? (latestValue as number) : 0
 
-  const { chartData, series } = transformForRecharts(
-    effectiveData ?? { labels: [], datasets: [], currency: currency ?? '' },
-  )
-
-  // Split series into income vs expense so we can compute gross and net
-  // yield independently. Gross = sum of income series; Net = gross minus
-  // the absolute value of expense series (expenses come back negative,
-  // so subtracting them ADDS their magnitude to the denominator's
-  // numerator reduction — i.e. net = gross + expenses, where expenses
-  // are already negative).
-  const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
-  const incomeSeries = series.filter((s) => isIncome(s.label))
-  const expenseSeries = series.filter((s) => !isIncome(s.label))
-
-  const yieldData = chartData.map(row => {
-    const gross = incomeSeries.reduce(
-      (acc, s) => acc + (Number(row[s.key]) || 0),
-      0,
-    )
-    const expenses = expenseSeries.reduce(
-      (acc, s) => acc + (Number(row[s.key]) || 0),
-      0,
-    )
-    const grossAnnualised = gross * 12
-    // expenses is already negative; gross + expenses = gross - |expenses|.
-    const netAnnualised = (gross + expenses) * 12
-    return {
-      label: row.label as string,
-      axisLabel: toAxisLabel(String(row.label), collapseYears),
-      grossYield: value > 0 ? (grossAnnualised / value) * 100 : 0,
-      netYield: value > 0 ? (netAnnualised / value) * 100 : 0,
-    }
-  })
+  // Bucket transactions per period (month for <= 12m horizons, year for
+  // longer horizons). Rent category => income; everything else =>
+  // expense (expenses come back negative from the serializer, so
+  // summing the raw amount already nets them out).
+  const yieldData = useMemo(() => {
+    const isIncome = (cat: string) => INCOME_CATEGORIES.includes(cat)
+    const anchors = bucketAnchors(range.from, range.to, monthly)
+    return anchors.map((anchor) => {
+      let gross = 0
+      let expenses = 0
+      for (const t of transactions) {
+        const amount = Number(t.amount)
+        if (!Number.isFinite(amount)) continue
+        const d = new Date(t.date)
+        if (Number.isNaN(d.getTime())) continue
+        // Bucket key: same year (and same month when monthly).
+        const samePeriod = monthly
+          ? d.getFullYear() === anchor.getFullYear() &&
+            d.getMonth() === anchor.getMonth()
+          : d.getFullYear() === anchor.getFullYear()
+        if (!samePeriod) continue
+        if (isIncome(t.category || '')) gross += amount
+        else expenses += amount // already negative for expenses
+      }
+      // Annualisation factor: monthly × 12, yearly × 1.
+      const annualFactor = monthly ? 12 : 1
+      const grossAnnualised = gross * annualFactor
+      // expenses is already negative; gross + expenses = gross - |expenses|.
+      const netAnnualised = (gross + expenses) * annualFactor
+      const label = periodLabel(anchor, monthly)
+      return {
+        label,
+        axisLabel: toAxisLabel(label, collapseYears),
+        grossYield: value > 0 ? (grossAnnualised / value) * 100 : 0,
+        netYield: value > 0 ? (netAnnualised / value) * 100 : 0,
+      }
+    })
+  }, [transactions, range.from, range.to, monthly, collapseYears, value])
 
   // Table payload — gross + net yield per period. ChartCard wraps it in
   // the Table/Chart toggle; PaginatedTable handles pagination.
@@ -282,7 +327,7 @@ export function RentYieldChart({ data, propertyId, currency: currencyProp }: Pro
     return (
       <ChartCard
         title="Rent yield"
-        description={`Gross & net yield per period (${currency ?? ''})`}
+        description={`Gross & net yield per period (${currency})`}
         controls={controls}
         tableData={tableData}
         tableRenderer={
@@ -304,7 +349,7 @@ export function RentYieldChart({ data, propertyId, currency: currencyProp }: Pro
     )
   }
 
-  // T6: no valuation data -> the yield denominator is unknown, so any
+  // No valuation data -> the yield denominator is unknown, so any
   // percentage we rendered would be meaningless (previously the chart
   // silently fell back to value=1, producing gigantic rent/1 percentages
   // that looked like real data). Show an explicit empty state instead.
@@ -312,7 +357,7 @@ export function RentYieldChart({ data, propertyId, currency: currencyProp }: Pro
     return (
       <ChartCard
         title="Rent yield"
-        description={`Gross & net yield per period (${currency ?? ''})`}
+        description={`Gross & net yield per period (${currency})`}
         controls={controls}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -327,7 +372,7 @@ export function RentYieldChart({ data, propertyId, currency: currencyProp }: Pro
       title="Rent yield"
       description={`Gross & net yield per period (value: ${formatCurrency(
         value,
-        currency ?? '',
+        currency,
       )})`}
       controls={controls}
       tableData={tableData}

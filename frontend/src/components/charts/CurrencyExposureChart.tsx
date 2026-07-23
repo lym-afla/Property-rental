@@ -19,12 +19,16 @@
 // single-currency comparison rather than a mix of ₽/£/$ amounts that
 // can't be visually ranked.
 //
-// Timeline options match the rest of the dashboard (YTD / 3m / 6m /
-// 12m / 3Y / 5Y / All). The choice is translated to an `as_of` ISO date
-// and forwarded to `usePropertiesWithStats`; "All" uses `as_of=today`
-// (the backend's all-time default — `as_of` is an upper bound, so today
-// includes every transaction).
-import { useMemo, useState, type ReactNode } from 'react'
+// Honest about what `with_stats` supports: the endpoint only computes
+// ALL-TIME and YTD aggregates — it does NOT support arbitrary date
+// ranges. The previous version exposed a timeline selector (YTD / 3m /
+// 6m / 12m / 3Y / 5Y / All) that mapped to an `as_of` param, but
+// `as_of` is only the upper bound of the all-time window — it does NOT
+// produce "last 3 months" totals. The selector was therefore misleading
+// (a "Last 3 months" click returned all-time net income), so it has
+// been removed. The chart now shows ALL-TIME net income by currency
+// with a clear title.
+import { useMemo } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -33,60 +37,6 @@ import { usePropertiesWithStats } from '@/api/properties'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { useSession } from '@/context/SessionProvider'
 import { colorForCategory } from './_chartTheme'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-
-// Timeline options — mirrors the dashboard's TIMELINE_OPTIONS so the
-// currency-exposure selector reads identically to Cash Flow / Net
-// Income Trend.
-const TIMELINE_OPTIONS = [
-  { value: 'YTD', label: 'Year to date' },
-  { value: '3m', label: 'Last 3 months' },
-  { value: '6m', label: 'Last 6 months' },
-  { value: '12m', label: 'Last 12 months' },
-  { value: '3Y', label: 'Last 3 years' },
-  { value: '5Y', label: 'Last 5 years' },
-  { value: 'All', label: 'All time' },
-] as const
-
-type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
-
-// Translate a timeline selection into the `as_of` ISO date the
-// `with_stats` endpoint expects. `as_of` is the upper bound of the
-// all-time window; "All" therefore maps to today (the backend default),
-// NOT to 1900-01-01 — passing a date in 1900 asked the backend to sum
-// "through 1900", which produced zeros.
-function timelineToAsOf(timeline: Timeline): string | undefined {
-  const today = new Date()
-  if (timeline === 'All') return undefined // backend defaults to today
-  const d = new Date(today)
-  switch (timeline) {
-    case 'YTD':
-      d.setMonth(0, 1) // Jan 1 of current year (covers YTD window)
-      break
-    case '3m':
-      d.setMonth(d.getMonth() - 3)
-      break
-    case '6m':
-      d.setMonth(d.getMonth() - 6)
-      break
-    case '12m':
-      d.setFullYear(d.getFullYear() - 1)
-      break
-    case '3Y':
-      d.setFullYear(d.getFullYear() - 3)
-      break
-    case '5Y':
-      d.setFullYear(d.getFullYear() - 5)
-      break
-  }
-  return d.toISOString().slice(0, 10)
-}
 
 type ExposureRow = {
   currency: string    // native currency (RUB/GBP) — Y axis label + table key
@@ -95,8 +45,6 @@ type ExposureRow = {
 }
 
 export function CurrencyExposureChart() {
-  const [timeline, setTimeline] = useState<Timeline>('All')
-  const asOf = useMemo(() => timelineToAsOf(timeline), [timeline])
   // The user's preferred display currency drives the FX-converted totals
   // (the bar values). Falls back to USD when the session has not loaded
   // yet or the user never picked a currency.
@@ -105,10 +53,11 @@ export function CurrencyExposureChart() {
 
   // Two parallel snapshots: user-currency-converted (for the chart axis)
   // and native (for the table's "face value" column). React Query dedupes
-  // them by query key, so flipping the timeline only re-fires the two
-  // affected requests.
-  const usdStats = usePropertiesWithStats(asOf, userCurrency)
-  const nativeStats = usePropertiesWithStats(asOf, 'native')
+  // them by query key. `asOf` is intentionally omitted — `with_stats`
+  // defaults to today, which (as the upper bound of the all-time window)
+  // includes every transaction.
+  const usdStats = usePropertiesWithStats(undefined, userCurrency)
+  const nativeStats = usePropertiesWithStats(undefined, 'native')
 
   const chartData = useMemo(() => {
     const byCurrency = new Map<string, ExposureRow>()
@@ -146,27 +95,12 @@ export function CurrencyExposureChart() {
     [chartData, userCurrency],
   )
 
-  const controls: ReactNode = (
-    <Select value={timeline} onValueChange={(v) => setTimeline(v as Timeline)}>
-      <SelectTrigger className="h-8 w-[150px]" aria-label="Currency exposure timeline">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {TIMELINE_OPTIONS.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-
   if (usdStats.isLoading || nativeStats.isLoading) {
     return (
       <ChartCard
-        title="Currency exposure"
-        description={`Net income by currency (${userCurrency}-converted)`}
-        controls={controls}
+        title="Net income by currency"
+        description={`All-time net income (${userCurrency}-converted)`}
+        tableData={tableData}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           Loading…
@@ -178,9 +112,9 @@ export function CurrencyExposureChart() {
   if (chartData.length === 0) {
     return (
       <ChartCard
-        title="Currency exposure"
-        description={`Net income by currency (${userCurrency}-converted)`}
-        controls={controls}
+        title="Net income by currency"
+        description={`All-time net income (${userCurrency}-converted)`}
+        tableData={tableData}
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           No data
@@ -191,9 +125,8 @@ export function CurrencyExposureChart() {
 
   return (
     <ChartCard
-      title="Currency exposure"
-      description={`Net income by currency (${userCurrency}-converted)`}
-      controls={controls}
+      title="Net income by currency"
+      description={`All-time net income (${userCurrency}-converted)`}
       tableData={tableData}
     >
       <ResponsiveContainer width="100%" height="100%">
