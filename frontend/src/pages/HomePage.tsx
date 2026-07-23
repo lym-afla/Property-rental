@@ -340,7 +340,10 @@ export function HomePage() {
   })
 
   // Income vs expense classification — mirrors `rentals/constants.py`.
-  const INCOME_CATEGORIES = ['rent', 'other_income']
+  // Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
+  // is an expense-category offset (positive amount that nets against the
+  // other expense categories), so it lives on the expense side.
+  const INCOME_CATEGORIES = ['rent']
 
   // Sum each dataset's `data` array to get the category total for the
   // requested window. The chart-data service returns negatives for
@@ -356,7 +359,10 @@ export function HomePage() {
         const total = (ds.data ?? []).reduce((acc, v) => acc + (Number(v) || 0), 0)
         rows.push({ label, total })
       }
-      return rows
+      // T12: filter out categories with zero total so empty buckets (e.g.
+      // a category that exists in the choices but has no transactions in
+      // the window) don't appear as a stray row in the P&L.
+      return rows.filter((r) => r.total !== 0)
     }
     const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
     const allTimeDatasets = pnlAllTimeQuery.data?.datasets ?? []

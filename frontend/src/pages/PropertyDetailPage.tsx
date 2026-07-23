@@ -84,7 +84,10 @@ import type { PropertyValuation } from '@/types/propertyValuation'
 const RECENT_TRANSACTIONS_LIMIT = 5
 
 // Income vs expense classification — mirrors `rentals/constants.py`.
-const INCOME_CATEGORIES = ['rent', 'other_income']
+// Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
+// is an expense-category offset (positive amount that nets against the
+// other expense categories).
+const INCOME_CATEGORIES = ['rent']
 
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -177,6 +180,10 @@ export function PropertyDetailPage() {
     const build = (income: boolean, map: Map<string, number>) =>
       Array.from(map.entries())
         .filter(([label]) => isIncome(label) === income)
+        // T12: drop categories with zero total so empty buckets (e.g.
+        // `other_income` after the recategorization to
+        // `cost_reimbursement`) don't appear as a stray row in the P&L.
+        .filter(([, total]) => total !== 0)
         .map(([label, total]) => ({ label, total }))
     const incomeAll = build(true, byCatAll).sort((a, b) => a.label.localeCompare(b.label))
     const expenseAll = build(false, byCatAll).sort((a, b) => a.label.localeCompare(b.label))

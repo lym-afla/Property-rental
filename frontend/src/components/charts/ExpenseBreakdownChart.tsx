@@ -12,8 +12,11 @@ import { transformForRecharts } from './_chartAdapter'
 import { formatCurrency } from '@/lib/format'
 import type { ChartDataResponse } from '@/api/charts'
 
-// Known income categories — exclude from expense breakdown
-const INCOME_CATEGORIES = ['rent', 'other_income', 'capax', 'capex']
+// Known income categories — exclude from expense breakdown.
+// `cost_reimbursement` (formerly `other_income`) is also excluded: it
+// represents reimbursements that offset expenses (positive amounts), so
+// including it in the donut would mislabel it as an expense slice.
+const INCOME_CATEGORIES = ['rent', 'other_income', 'cost_reimbursement', 'capax', 'capex']
 
 type Props = {
   data: ChartDataResponse

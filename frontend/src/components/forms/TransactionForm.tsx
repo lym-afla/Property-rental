@@ -44,7 +44,7 @@ export const TRANSACTION_CATEGORY_OPTIONS = [
   'electricity',
   'utilities',
   'internet',
-  'other_income',
+  'cost_reimbursement',
   'other_expenses',
 ] as const
 

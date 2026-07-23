@@ -34,6 +34,7 @@ import { PaginatedTable } from './PaginatedTable'
 import { transformForRecharts } from './_chartAdapter'
 import { useChartData } from '@/api/charts'
 import { usePropertyValuations } from '@/api/propertyValuations'
+import { useProperty } from '@/api/properties'
 import {
   Select,
   SelectContent,
@@ -50,7 +51,10 @@ import {
 import { formatCurrency } from '@/lib/format'
 
 // Income categories — mirrors `rentals/constants.py::INCOME_CATEGORIES`.
-const INCOME_CATEGORIES = ['rent', 'other_income']
+// Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
+// is an expense-category offset (positive amount that nets against the
+// other expense categories).
+const INCOME_CATEGORIES = ['rent']
 
 type Props = {
   // Pre-fetched chart data for the default window. The chart still uses
@@ -145,7 +149,7 @@ function toAxisLabel(label: string, collapseYears: boolean): string {
   return String(year)
 }
 
-export function RentYieldChart({ data, propertyId, currency }: Props) {
+export function RentYieldChart({ data, propertyId, currency: currencyProp }: Props) {
   const [timeline, setTimeline] = useState<Timeline>('5Y')
   const range = useMemo(() => timelineToRange(timeline), [timeline])
   const collapseYears = timelineMonths(timeline) > 12
@@ -163,21 +167,32 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
   })
   const effectiveData = scopedQuery.data ?? data
 
+  // Fetch the property directly so we can read its native currency for
+  // display (T6). The parent may still pass `currency` as a fallback
+  // (used while the property query is loading).
+  const propertyQuery = useProperty(propertyId)
+  const currency = currencyProp ?? propertyQuery.data?.currency ?? ''
+
   const valuations = usePropertyValuations(propertyId)
 
-  // Latest valuation = highest capital_structure_date. Fall back to 1 so
-  // we never divide by zero; if there are zero valuations the chart
-  // simply renders a flat yield of rent / 1, which is still meaningful
-  // as a "rent received" trend.
-  const value = useMemo(() => {
+  // Latest valuation = highest capital_structure_date. T6: the property
+  // value comes from the latest `Property_capital_structure` entry's
+  // `capital_structure_value`. If no valuations exist, we render an
+  // explicit "No valuation data" state instead of dividing by a
+  // synthetic 1 (which previously produced a flat yield of rent / 1 —
+  // misleading because the percentages were gigantic for any real rent).
+  const latestValue = useMemo(() => {
     const list = valuations.data ?? []
-    if (list.length === 0) return 1
+    if (list.length === 0) return null
     const latest = [...list].sort((a, b) =>
       a.capital_structure_date < b.capital_structure_date ? 1 : -1,
     )[0]
     const parsed = Number(latest?.capital_structure_value)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+    if (!Number.isFinite(parsed) || parsed <= 0) return null
+    return parsed
   }, [valuations.data])
+  const hasValuation = latestValue !== null
+  const value = hasValuation ? (latestValue as number) : 0
 
   const { chartData, series } = transformForRecharts(
     effectiveData ?? { labels: [], datasets: [], currency: currency ?? '' },
@@ -284,6 +299,24 @@ export function RentYieldChart({ data, propertyId, currency }: Props) {
       >
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
           Loading…
+        </div>
+      </ChartCard>
+    )
+  }
+
+  // T6: no valuation data -> the yield denominator is unknown, so any
+  // percentage we rendered would be meaningless (previously the chart
+  // silently fell back to value=1, producing gigantic rent/1 percentages
+  // that looked like real data). Show an explicit empty state instead.
+  if (!hasValuation) {
+    return (
+      <ChartCard
+        title="Rent yield"
+        description={`Gross & net yield per period (${currency ?? ''})`}
+        controls={controls}
+      >
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          No valuation data
         </div>
       </ChartCard>
     )

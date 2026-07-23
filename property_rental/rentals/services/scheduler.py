@@ -42,6 +42,7 @@ resolve exactly as before.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 
@@ -161,11 +162,26 @@ def debt(tenant, as_of_date=None, method='standard'):
             rent_is_due = False
 
         if rent_is_due:
-            # Get the rent rate for this month (the most recent rate
-            # set on or before the payday).
-            monthly_rate_obj = tenant.rent_history.filter(date_rent_set__lte=due_date).order_by('-date_rent_set').first()
-            if monthly_rate_obj:
-                total_rent_due += monthly_rate_obj.rent
+            # T11: rent rate AS OF this month — call ``lease_rent`` per
+            # month instead of using a single current rate for every
+            # historical month. ``lease_rent(d)`` returns the latest
+            # ``Lease_rent`` entry with ``date_rent_set <= d``, i.e. the
+            # rate actually in effect that month. Without this, a tenant
+            # whose rate changed mid-lease (e.g. Jose: £1450 -> £1700 in
+            # Feb 2026) would have the CURRENT rate retroactively
+            # applied to all historical months, which masks the real
+            # current-month debt behind an accumulated historical
+            # underpayment credit. Using the per-month rate keeps each
+            # month's "due" amount aligned with what the tenant actually
+            # owed that month.
+            #
+            # ``lease_rent`` returns a string sentinel ("Tenant
+            # vacated" / "No rent history for the Tenant") in edge
+            # cases; we treat those as "no rent due for this month"
+            # (skip) so the accumulator only ever sees numeric rates.
+            monthly_rate = tenant.lease_rent(due_date)
+            if isinstance(monthly_rate, (int, Decimal)):
+                total_rent_due += monthly_rate
 
         # Move to next month.
         if current_month.month == 12:
