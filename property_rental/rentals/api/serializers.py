@@ -16,6 +16,7 @@ from rest_framework import serializers
 
 from rentals.models import (
     FX,
+    Lease_rent,
     Property,
     Property_capital_structure,
     Tenant,
@@ -129,6 +130,31 @@ class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
             "capital_structure_date",
             "capital_structure_value",
             "capital_structure_debt",
+        ]
+
+
+class LeaseRentSerializer(serializers.ModelSerializer):
+    """Serializer for the ``Lease_rent`` model.
+
+    Backs the ``/api/v1/lease-rents/`` ViewSet — the write path the
+    tenant detail page's "Update rent" dialog uses to push a new
+    effective-date rent entry (the read path is already covered by
+    ``TenantViewSet.with_stats``'s ``rent_rate`` aggregate, which calls
+    ``Tenant.lease_rent``).
+
+    Field names mirror the model definition in ``rentals/models.py``:
+    ``tenant`` (FK), ``date_rent_set`` (effective date), ``rent``
+    (decimal), ``currency`` (the rent's currency, defaults to ``USD``).
+    """
+
+    class Meta:
+        model = Lease_rent
+        fields = [
+            "id",
+            "tenant",
+            "date_rent_set",
+            "rent",
+            "currency",
         ]
 
 

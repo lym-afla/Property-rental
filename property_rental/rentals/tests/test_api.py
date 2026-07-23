@@ -791,3 +791,109 @@ def test_fx_update_endpoint(auth_client, sample_property):
         resp = auth_client.post("/api/v1/fx/update/")
         assert resp.status_code == 200
         assert mock_update.called
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/lease-rents/ — write path for the tenant detail page's
+# "Update rent" dialog (POST creates a new effective-date rent entry).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_lease_rent_list_requires_auth(db, client):
+    """Unauthenticated GET on /api/v1/lease-rents/ -> 401/403."""
+    resp = client.get("/api/v1/lease-rents/")
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.django_db
+def test_lease_rent_list_returns_only_own(
+    auth_client, sample_property, other_landlord_user
+):
+    """LIST scoped by ownership path ``tenant.property.owned_by.user``."""
+    from rentals.tests.factories import LeaseRentFactory
+    tenant = TenantFactory(property=sample_property)
+    own = LeaseRentFactory(tenant=tenant, rent=Decimal("1200.00"))
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_property)
+    LeaseRentFactory(tenant=other_tenant, rent=Decimal("9999.00"))
+
+    resp = auth_client.get("/api/v1/lease-rents/")
+    assert resp.status_code == 200
+    ids = [lr["id"] for lr in _results(resp)]
+    assert own.id in ids
+    assert not any(
+        lr["rent"] == "9999.00" for lr in _results(resp)
+    )
+
+
+@pytest.mark.django_db
+def test_lease_rent_create_validates_tenant_ownership(
+    auth_client, sample_property, other_landlord_user
+):
+    """POST /lease-rents/ with another landlord's ``tenant`` FK -> 400.
+
+    Mirrors the IDOR defense ``TransactionViewSet`` uses for its
+    ``tenant`` FK: a client could point a Lease_rent at a tenant they
+    don't own (cross-landlord injection). The ViewSet must catch it.
+    """
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_property)
+    payload = {
+        "tenant": other_tenant.id,  # Attempted IDOR
+        "date_rent_set": "2024-01-01",
+        "rent": "1200.00",
+        "currency": "USD",
+    }
+    resp = auth_client.post(
+        "/api/v1/lease-rents/", payload, content_type="application/json"
+    )
+    assert resp.status_code == 400, resp.content
+    from rentals.models import Lease_rent
+    assert not Lease_rent.objects.filter(rent="1200.00").exists()
+
+
+@pytest.mark.django_db
+def test_lease_rent_create_for_own_tenant(auth_client, sample_property):
+    """POST /lease-rents/ with the caller's own tenant -> 201, persisted."""
+    tenant = TenantFactory(property=sample_property)
+    payload = {
+        "tenant": tenant.id,
+        "date_rent_set": "2024-01-01",
+        "rent": "1200.00",
+        "currency": "USD",
+    }
+    resp = auth_client.post(
+        "/api/v1/lease-rents/", payload, content_type="application/json"
+    )
+    assert resp.status_code == 201, resp.content
+    body = resp.json()
+    assert body["tenant"] == tenant.id
+    assert body["rent"] == "1200.00"
+    assert body["date_rent_set"] == "2024-01-01"
+
+
+@pytest.mark.django_db
+def test_transaction_list_filters_by_tenant(
+    auth_client, sample_property, landlord_user
+):
+    """GET /transactions/?tenant=<id> narrows to that tenant only.
+
+    The tenant detail page's Recent Transactions panel + per-tenant net
+    income + YTD roll-ups all depend on this filter; without it the page
+    would aggregate every transaction across the landlord's portfolio.
+    A cross-landlord tenant PK still yields an empty list (no
+    enumeration channel) because the base queryset is user-scoped via
+    ``property__owned_by__user``.
+    """
+    tenant_a = TenantFactory(property=sample_property)
+    tenant_b = TenantFactory(property=sample_property)
+    txn_a1 = TransactionFactory(property=sample_property, tenant=tenant_a)
+    txn_a2 = TransactionFactory(property=sample_property, tenant=tenant_a)
+    txn_b = TransactionFactory(property=sample_property, tenant=tenant_b)
+
+    resp = auth_client.get(f"/api/v1/transactions/?tenant={tenant_a.id}")
+    assert resp.status_code == 200
+    ids = {t["id"] for t in _results(resp)}
+    assert {txn_a1.id, txn_a2.id} <= ids
+    assert txn_b.id not in ids

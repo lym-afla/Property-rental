@@ -72,6 +72,13 @@ export const queryKeys = {
     detail: (id: number) => ['property-valuations', 'detail', id] as const,
   },
 
+  leaseRents: {
+    all: ['lease-rents'] as const,
+    byTenant: (tenantId: number) =>
+      ['lease-rents', 'by-tenant', tenantId] as const,
+    detail: (id: number) => ['lease-rents', 'detail', id] as const,
+  },
+
   // Charts derive from transactions, so any transaction mutation must also
   // invalidate `chart-data`. The shape mirrors the ChartDataView query
   // params (spec §5.2): `{ type, id, freq, start, end, currency }`.

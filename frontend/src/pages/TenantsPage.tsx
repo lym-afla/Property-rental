@@ -232,11 +232,20 @@ export function TenantsPage() {
       cell: ({ row }) => {
         const cur = row.original.stats_currency ?? 'USD'
         const debt = row.original.debt
-        return (
-          <span className={debt > 0 ? 'font-medium text-destructive' : ''}>
-            {formatCurrency(debt, cur)}
-          </span>
-        )
+        // Sign convention (mirrors `services.scheduler.debt`):
+        //   debt > 0  -> tenant has OVERPAID (credit balance; good) -> green
+        //   debt < 0  -> tenant is in ARREARS (owes money; bad)   -> red
+        //   debt == 0 -> settled                                       -> default
+        // The previous logic colored positive debt red, which inverted
+        // the meaning of the sign and made every credit look like a
+        // liability.
+        const cls =
+          debt > 0
+            ? 'font-medium text-emerald-600'
+            : debt < 0
+              ? 'font-medium text-destructive'
+              : ''
+        return <span className={cls}>{formatCurrency(debt, cur)}</span>
       },
     },
     {

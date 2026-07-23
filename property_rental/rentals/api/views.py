@@ -55,13 +55,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from rentals.models import FX, Landlord, Property, Property_capital_structure, Tenant, Transaction
+from rentals.models import FX, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.charts import get_chart_data as _get_chart_data
 
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     ChartDataResponseSerializer,
     FXSerializer,
+    LeaseRentSerializer,
     PropertyCapitalStructureSerializer,
     PropertySerializer,
     TenantSerializer,
@@ -529,6 +530,18 @@ class TransactionViewSet(viewsets.ModelViewSet):
         property_param = self.request.query_params.get("property")
         if property_param:
             qs = qs.filter(property_id=property_param)
+        # Honor an optional ``?tenant=<id>`` query param so the tenant
+        # detail page can narrow to that tenant's transactions (its
+        # Recent Transactions panel + the per-tenant net income + YTD
+        # roll-ups depend on this filter — without it the page would
+        # show every transaction across the landlord's portfolio).
+        # Cross-landlord PKs are scoped out by the base filter above
+        # (the join through ``property__owned_by__user`` excludes rows
+        # whose tenant belongs to another landlord), so this param
+        # cannot be used as an enumeration channel either.
+        tenant_param = self.request.query_params.get("tenant")
+        if tenant_param:
+            qs = qs.filter(tenant_id=tenant_param)
         return qs
 
     def _validate_and_save(self, serializer):
@@ -674,6 +687,72 @@ class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
                     {"property": "This property does not belong to you."}
                 )
         serializer.save()
+
+
+class LeaseRentViewSet(viewsets.ModelViewSet):
+    """CRUD for ``Lease_rent`` scoped via ``tenant.property.owned_by.user``.
+
+    Backs the ``/api/v1/lease-rents/`` endpoint — the write path the
+    tenant detail page's "Update rent" dialog uses to push a new
+    effective-date rent entry. The read path (current rent rate) is
+    already served by ``TenantViewSet.with_stats``'s ``rent_rate``
+    aggregate, but the spec previously deferred the write API; this
+    closes that gap.
+
+    * ``get_queryset`` — only lease-rent rows whose ``tenant.property``
+      is owned by the requesting user. An optional ``?tenant=<id>``
+      query param narrows further (used by future history views).
+    * ``perform_create`` / ``perform_update`` — validate the
+      client-supplied ``tenant`` FK belongs to the requester before save
+      (404 otherwise), preventing cross-landlord rent-history injection.
+      Mirrors the IDOR defense ``TenantViewSet`` /
+      ``TransactionViewSet`` already use.
+    """
+
+    serializer_class = LeaseRentSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = Lease_rent.objects.filter(
+            tenant__property__owned_by__user=self.request.user
+        )
+        # Optional ``?tenant=<id>`` filter — scoped to the user's own
+        # tenants via the base filter, so a cross-landlord PK yields an
+        # empty list (no enumeration channel).
+        tenant_param = self.request.query_params.get("tenant")
+        if tenant_param:
+            qs = qs.filter(tenant_id=tenant_param)
+        return qs
+
+    def _validate_and_save(self, serializer):
+        """Validate ``tenant`` ownership, then save the Lease_rent.
+
+        On PATCH (partial update) the client may omit ``tenant`` because
+        it is unchanged; fall back to the existing instance. DRF's
+        ``PrimaryKeyRelatedField`` resolves the FK to a model instance,
+        not an id, so ``tenant_obj`` is the appropriate name.
+        """
+        tenant_obj = serializer.validated_data.get("tenant") or getattr(
+            serializer.instance, "tenant", None
+        )
+        if tenant_obj is None:
+            raise ValidationError({"tenant": "This field is required."})
+        # Resolve via the user-scoped tenant queryset — raises 404 if
+        # the tenant belongs to another landlord (defeating enumeration).
+        tenant_qs = Tenant.objects.filter(
+            id=tenant_obj.id, property__owned_by__user=self.request.user
+        )
+        if not tenant_qs.exists():
+            raise ValidationError(
+                {"tenant": "Tenant does not belong to a property you own."}
+            )
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._validate_and_save(serializer)
+
+    def perform_update(self, serializer):
+        self._validate_and_save(serializer)
 
 
 # ---------------------------------------------------------------------------

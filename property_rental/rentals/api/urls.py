@@ -19,6 +19,9 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 * ``/api/v1/fx/...``                       — same shape
 * ``/api/v1/property-valuations/...``      — same shape (Task 5; retires
   ``handle_element``'s ``data_type='propertyValuation'`` branch)
+* ``/api/v1/lease-rents/...``              — same shape; backs the tenant
+  detail page's "Update rent" dialog (POST creates a new effective-date
+  rent entry on the tenant's ``Lease_rent`` history).
 * ``GET    /api/v1/chart-data/?type=&id=&freq=&start=&end=&currency=``
 """
 
@@ -36,6 +39,7 @@ from .auth import (
 from .views import (
     ChartDataView,
     FXViewSet,
+    LeaseRentViewSet,
     PropertyCapitalStructureViewSet,
     PropertyViewSet,
     TenantViewSet,
@@ -52,6 +56,7 @@ router.register(r"tenants", TenantViewSet, basename="tenant")
 router.register(r"transactions", TransactionViewSet, basename="transaction")
 router.register(r"fx", FXViewSet, basename="fx")
 router.register(r"property-valuations", PropertyCapitalStructureViewSet, basename="property-valuation")
+router.register(r"lease-rents", LeaseRentViewSet, basename="lease-rent")
 
 urlpatterns = [
     # Auth (Task 4 / Task 5) — session-cookie endpoints consumed by the

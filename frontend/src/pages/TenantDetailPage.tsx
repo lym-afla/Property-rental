@@ -4,22 +4,14 @@
 //
 // Layout:
 //   - Header card: tenant name + property name + lease dates + rent rate
-//     + debt + status badge, with Edit / Vacate actions for the tenant.
-//   - Tabs (shadcn):
-//       * "Overview" — recent transactions subset for this tenant
-//         (`?tenant=<id>` filter), plus a debt summary panel with a chart
-//         placeholder reserved for Plan C.
-//       * "Lease timeline" — a chronological list of lease events derived
-//         from the tenant's own fields (lease_start, lease_end) and the
-//         rent-category transactions (each rent payment is functionally
-//         a "lease rent applied" event). Plan B1 does not expose a
-//         dedicated `Lease_rent` history endpoint, so we derive the
-//         timeline client-side from the data we already have; the slot
-//         is structured so a future `useLeaseRentHistory(id)` hook can
-//         replace the derived rows without touching the page layout.
+//     + debt + status badge, with Edit / Update rent / Vacate actions.
+//   - Overview section: Rent & debt card (revenue + net income all-time
+//     and YTD), TenantRentChart, and the 5 most-recent transactions for
+//     THIS tenant (filtered server-side via `?tenant=<id>`).
 //
-// Charts (Plan C): the Overview tab mounts TenantRentChart (rent received
-// per period), wired to useChartData({type: 'tenant', elementId: id}).
+// Charts (Plan C): the Overview section mounts TenantRentChart (rent
+// received per period), wired to useChartData({type: 'tenant',
+// elementId: id}).
 //
 // B1 adaptation notes (vs the original task-5 brief):
 //   - `useTenant(id)` returns the plain `Tenant` shape, but the header
@@ -32,6 +24,9 @@
 //     the cache is shared across pages.
 //   - Transactions come from `useTransactions({ tenant: id })` — the
 //     filter is applied server-side by the ViewSet.
+//   - "Update rent" POSTs a new `Lease_rent` entry via
+//     `/api/v1/lease-rents/` (see `UpdateRentDialog`); the mutation
+//     invalidates the tenants cache so `rent_rate` refetches.
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, LogOut } from 'lucide-react'
@@ -48,6 +43,7 @@ import { useChartData } from '@/api/charts'
 import { TenantRentChart } from '@/components/charts/TenantRentChart'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
+import { UpdateRentDialog } from '@/components/modals/UpdateRentDialog'
 import { TenantForm } from '@/components/forms/TenantForm'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -61,7 +57,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -103,15 +98,6 @@ const STATUS_VARIANT: Record<
   active: 'secondary',
   'will-vacate': 'default',
   vacated: 'outline',
-}
-
-// One row in the lease timeline. `kind` discriminates the event source;
-// `date` is the canonical sort key (ISO `YYYY-MM-DD`).
-type LeaseEvent = {
-  date: string
-  label: string
-  detail?: string
-  kind: 'lease-start' | 'lease-end' | 'rent-payment'
 }
 
 export function TenantDetailPage() {
@@ -170,42 +156,6 @@ export function TenantDetailPage() {
   // `propertyPreview.data`.
   const property = propertyPreview.data
   const currency = property?.currency ?? ''
-
-  // Build a lease timeline: lease_start, every rent payment, lease_end.
-  // Most-recent-first so the most actionable events (upcoming vacate,
-  // latest payment) sit at the top.
-  const leaseEvents = useMemo<LeaseEvent[]>(() => {
-    const events: LeaseEvent[] = []
-    if (tenant?.lease_start) {
-      events.push({
-        date: tenant.lease_start,
-        label: 'Lease started',
-        detail: `Payday: day ${tenant.payday} of the month`,
-        kind: 'lease-start',
-      })
-    }
-    for (const t of transactionsQuery.data ?? []) {
-      if (t.category !== 'rent') continue
-      events.push({
-        date: t.date,
-        label: 'Rent payment',
-        detail: `${formatCurrency(Number(t.amount), t.currency)}${
-          t.comment ? ` — ${t.comment}` : ''
-        }`,
-        kind: 'rent-payment',
-      })
-    }
-    if (tenant?.lease_end) {
-      events.push({
-        date: tenant.lease_end,
-        label: 'Lease ends',
-        detail: 'Tenant marked as vacating as of this date.',
-        kind: 'lease-end',
-      })
-    }
-    events.sort((a, b) => b.date.localeCompare(a.date))
-    return events
-  }, [tenant, transactionsQuery.data])
 
   const recentTransactions = useMemo(() => {
     const txns = [...(transactionsQuery.data ?? [])]
@@ -283,13 +233,11 @@ export function TenantDetailPage() {
                 <Pencil className="h-4 w-4" />
                 Edit
               </Button>
-              {/* Task 24: rent rate management. The `Lease_rent` model
-                  does not yet have a write API endpoint (the spec
-                  explicitly defers that work), so for now this opens a
-                  small dialog that surfaces a "coming soon" note rather
-                  than wiring up a real POST. When the endpoint lands,
-                  this dialog is the natural place to host the date +
-                  amount form. */}
+              {/* Update rent — Task 24. Opens `UpdateRentDialog`, which
+                  POSTs a new `Lease_rent` entry (effective date +
+                  amount) via `/api/v1/lease-rents/`. The mutation
+                  invalidates `tenants.all` so the cached `rent_rate`
+                  refetches with the new rate. */}
               <Button
                 variant="outline"
                 size="sm"
@@ -335,8 +283,12 @@ export function TenantDetailPage() {
               value={
                 <span
                   className={
-                    stats && stats.debt > 0
-                      ? 'font-medium text-destructive'
+                    stats
+                      ? stats.debt > 0
+                        ? 'font-medium text-emerald-600'
+                        : stats.debt < 0
+                          ? 'font-medium text-destructive'
+                          : ''
                       : ''
                   }
                 >
@@ -348,32 +300,25 @@ export function TenantDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Tabs -------------------------------------------------------------- */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="timeline">Lease timeline</TabsTrigger>
-        </TabsList>
-
-        {/* Overview tab -------------------------------------------------- */}
-        <TabsContent value="overview" className="space-y-6 pt-4">
+      {/* Overview section -------------------------------------------------- */}
+      <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
               <CardDescription>
                 Lifetime revenue and net income for this tenant. Currency
-                shown in {currency || '—'}. Rent rate and Debt live in the
-                header card above (avoiding duplication).
+                shown in {currency || '—'}.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {/* Net income (all-time + YTD) shown alongside revenue.
                   Net income is computed client-side from this tenant's
-                  transactions (income minus expenses); the stats
-                  endpoint only exposes revenue + debt. Negative values
-                  (tenant's expenses exceeded rent collected in the
-                  window) render in accounting format with the currency
-                  sign (e.g. `₽(85,000)`), consistent with the
+                  transactions (income minus expenses, filtered to this
+                  tenant only via `useTransactions({ tenant: id })`); the
+                  stats endpoint only exposes revenue + debt. Negative
+                  values (tenant's expenses exceeded rent collected in
+                  the window) render in accounting format with the
+                  currency sign (e.g. `₽(85,000)`), consistent with the
                   Transactions page convention. */}
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat
@@ -427,10 +372,12 @@ export function TenantDetailPage() {
                 No transactions for this tenant yet.
               </p>
             ) : (
-              /* Task 25: filter is already applied via `useTransactions({
-                 tenant: id })`; pagination is removed (plain <Table>
-                 limited client-side to the last 20 — the full list lives
-                 on the Transactions page). */
+              /* The list is already filtered to THIS tenant via
+                 `useTransactions({ tenant: id })` (the ViewSet applies
+                 the `?tenant=<id>` filter server-side); pagination is
+                 removed and the list is sliced client-side to the last
+                 `RECENT_TRANSACTIONS_LIMIT` (5) — the full list lives on
+                 the Transactions page. */
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -464,51 +411,7 @@ export function TenantDetailPage() {
               </div>
             )}
           </div>
-        </TabsContent>
-
-        {/* Lease timeline tab -------------------------------------------- */}
-        <TabsContent value="timeline" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Lease timeline</CardTitle>
-              <CardDescription>
-                Lease milestones and rent payments in reverse-chronological
-                order.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {leaseEvents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No lease events recorded yet.
-                </p>
-              ) : (
-                <ol className="space-y-3">
-                  {leaseEvents.map((evt, idx) => (
-                    <li
-                      key={`${evt.kind}-${evt.date}-${idx}`}
-                      className="flex flex-col gap-1 border-l-2 border-muted pl-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          {evt.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(evt.date)}
-                        </span>
-                      </div>
-                      {evt.detail ? (
-                        <span className="text-sm text-muted-foreground">
-                          {evt.detail}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
 
       {/* ---- Dialogs ------------------------------------------------------ */}
 
@@ -561,25 +464,26 @@ export function TenantDetailPage() {
         tenantLabel={fullName}
       />
 
-      {/* Update rent rate — Task 24. The `Lease_rent` model does not yet
-          expose a write API (the brief explicitly defers that work), so
-          this dialog surfaces a "coming soon" note rather than wiring up
-          a real POST. When the endpoint lands, this is the natural host
-          for the date + rent-amount form (mirroring the valuation form
-          on the property detail page). */}
-      <EntityFormDialog
+      {/* Update rent rate — POSTs a new `Lease_rent` entry (effective
+          date + amount + property currency) via `/api/v1/lease-rents/`.
+          On success the mutation invalidates `tenants.all` so the
+          header's `rent_rate` (sourced from `with_stats`) refetches. */}
+      <UpdateRentDialog
         open={updateRentOpen}
         onOpenChange={setUpdateRentOpen}
-        title="Update rent rate"
-        description={`Rent rate management for ${fullName}.`}
-      >
-        <p className="text-sm text-muted-foreground">
-          Rent rate management coming soon. Creating a new{' '}
-          <code className="rounded bg-muted px-1">Lease_rent</code> entry
-          (effective date + amount) requires a dedicated backend endpoint
-          that is not yet available.
-        </p>
-      </EntityFormDialog>
+        tenantId={tenant.id}
+        currency={currency}
+        defaultRent={
+          stats && typeof stats.rent_rate === 'number'
+            ? String(stats.rent_rate)
+            : typeof stats?.rent_rate === 'string' &&
+                /^-?\d+(\.\d+)?$/.test(stats.rent_rate)
+              ? stats.rent_rate
+              : undefined
+        }
+        tenantLabel={fullName}
+        onSuccess={() => setUpdateRentOpen(false)}
+      />
     </div>
   )
 }
