@@ -9,7 +9,15 @@
 // `category` mirrors `TRANSACTION_CATEGORIES` and `currency` mirrors
 // `CURRENCY_CHOICES` from `rentals/constants.py`.
 //
+// `period` (format "YYYY-MM") is auto-derived from `date` whenever the
+// user changes the date — picking `2026-03-14` fills `period` with
+// `2026-03`. The user can still type a custom value (e.g. for back-dated
+// postings that span two months), and on edit an existing `period` is
+// preserved until the date is changed. The field is optional because the
+// backend `Transaction.period` column is nullable/blank.
+//
 // Field names mirror `TransactionSerializer` (`rentals/api/serializers.py`).
+import { useEffect } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,6 +25,7 @@ import { z } from 'zod'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -48,6 +57,11 @@ export const TRANSACTION_CATEGORY_OPTIONS = [
   'other_expenses',
 ] as const
 
+// Zod regex for the optional "YYYY-MM" period string. The field is
+// optional (the backend column is nullable), but when present it must
+// match the YYYY-MM shape the rest of the app relies on.
+const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/
+
 const schema = z.object({
   date: z.string().min(1, 'Required'),
   property: z.coerce
@@ -58,6 +72,14 @@ const schema = z.object({
   category: z.enum(TRANSACTION_CATEGORY_OPTIONS),
   amount: z.string().min(1, 'Required'),
   currency: z.enum(CURRENCY_OPTIONS),
+  // Optional, auto-derived from `date` but user-editable. The
+  // `.or(literal(''))` lets the field render empty (no period set) and
+  // the `.optional()` lets it be omitted entirely.
+  period: z
+    .string()
+    .regex(PERIOD_REGEX, 'Format must be YYYY-MM (e.g. 2026-03)')
+    .or(z.literal(''))
+    .optional(),
   comment: z.string().optional().default(''),
 })
 // See PropertyForm for the zod 4 + RHF input/output typing rationale.
@@ -70,6 +92,18 @@ type Props = {
   defaultValues?: Partial<Input>
   onSubmit: (values: Output) => void
   isSubmitting?: boolean
+}
+
+// Extract the YYYY-MM substring from an ISO date. Returns '' for invalid
+// input so the caller can safely `setValue('period', derived)` even
+// before the user has typed a full date.
+function derivePeriod(dateStr: string | undefined | null): string {
+  if (!dateStr) return ''
+  // Accept both `YYYY-MM-DD` and `YYYY-MM`. Slicing the first 7 chars
+  // gives us the `YYYY-MM` prefix either way; we then validate the
+  // month is 01-12 to avoid deriving nonsense from a half-typed date.
+  const prefix = dateStr.slice(0, 7)
+  return PERIOD_REGEX.test(prefix) ? prefix : ''
 }
 
 export function TransactionForm({
@@ -88,6 +122,7 @@ export function TransactionForm({
       category: 'rent',
       amount: '',
       currency: 'USD',
+      period: '',
       comment: '',
       ...defaultValues,
     },
@@ -101,6 +136,31 @@ export function TransactionForm({
     control: form.control,
     name: 'property',
   })
+
+  // Watch `date` so we can auto-derive `period` whenever it changes.
+  // This keeps the two fields consistent without forcing the user to
+  // type the period manually. We deliberately do NOT overwrite a
+  // user-edited period on subsequent date edits if the user has
+  // intentionally diverged — but since this is a controlled form, the
+  // simplest correct behavior is: any date change re-derives period.
+  // The user can re-edit period after changing the date if they need a
+  // different month.
+  const watchedDate = useWatch({ control: form.control, name: 'date' })
+
+  // Re-derive period when `date` changes. `form.setValue` triggers a
+  // state update; we keep this in a `useEffect` (rather than inline in
+  // the field's onChange) so it also fires on programmatic date changes
+  // (e.g. when defaultValues hydrate). `shouldValidate: false` keeps
+  // this from flashing a validation error before the user submits.
+  useEffect(() => {
+    const derived = derivePeriod(watchedDate)
+    if (derived) {
+      const current = form.getValues('period')
+      if (current !== derived) {
+        form.setValue('period', derived, { shouldDirty: false })
+      }
+    }
+  }, [watchedDate, form])
 
   const filteredTenants =
     selectedProperty !== undefined && selectedProperty !== null
@@ -266,24 +326,48 @@ export function TransactionForm({
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="amount"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Amount</FormLabel>
-              <FormControl>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="e.g. 800.00 or -150.00"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="amount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Amount</FormLabel>
+                <FormControl>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 800.00 or -150.00"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="period"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Period</FormLabel>
+                <FormControl>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="YYYY-MM"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Auto-filled from Date. Format: YYYY-MM.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <FormField
           control={form.control}

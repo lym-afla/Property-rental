@@ -161,6 +161,15 @@ export function PropertyDetailPage() {
   // Equity (it does not emit per-category totals), so we derive the P&L
   // here from the already-fetched transactions list rather than firing a
   // chart-data round-trip that would return empty categories.
+  //
+  // YTD window: `Transaction.date` is the authoritative accounting date —
+  // the optional `period` field is just a label that can drift out of
+  // sync (especially for back-dated or forward-dated rent postings). The
+  // previous code fell back to `period` first, which let a transaction
+  // with a current-year `period` but a prior-year `date` leak into YTD,
+  // inflating the YTD revenue vs the dashboard summary (which sums
+  // server-side by `date`). We now always derive the YTD window from
+  // `date` only.
   const pnlRows = useMemo(() => {
     const txns = transactionsQuery.data ?? []
     const currentYear = new Date().getFullYear()
@@ -171,8 +180,12 @@ export function PropertyDetailPage() {
       if (!Number.isFinite(amount)) continue
       const cat = t.category || 'other'
       byCatAll.set(cat, (byCatAll.get(cat) ?? 0) + amount)
-      const year = parseInt(String(t.period || t.date).slice(0, 4), 10)
-      if (year === currentYear) {
+      // YTD is by `date`, NOT `period`. `period` is a free-text label the
+      // user can leave blank or edit independently of `date`; the
+      // dashboard's gross income figures (and the backend `with_stats`
+      // YTD aggregates) sum by `date__year`, so we match that here.
+      const txnYear = parseInt(String(t.date || '').slice(0, 4), 10)
+      if (txnYear === currentYear) {
         byCatYtd.set(cat, (byCatYtd.get(cat) ?? 0) + amount)
       }
     }

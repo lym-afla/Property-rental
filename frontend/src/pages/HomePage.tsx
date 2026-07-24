@@ -583,8 +583,11 @@ export function HomePage() {
       {/* ---- P&L table -------------------------------------------------- */}
       {/* Per-category P&L breakdown with All-time + YTD columns. The chart-data
           request gives us one dataset per category; we sum each one to get
-          the totals displayed here. Currency is the backend's `stats_currency`
-          (USD by default) since chart-data FX-converts everything. Layout:
+          the totals displayed here. Currency follows the user's
+          `default_currency` (`kpiCurrency`): both chart-data requests below
+          pass `currency: userCurrency`, and `kpiCurrency` resolves to the
+          user's display currency (falling back to USD only when the session
+          has not loaded yet or the user never picked one). Layout:
           income categories first, then "Total revenue", then expense
           categories (alphabetical, kept negative), then "Total expenses"
           and "Net income". `formatAccounting` renders negatives as
@@ -593,8 +596,8 @@ export function HomePage() {
         <CardHeader>
           <CardTitle>Profit &amp; Loss</CardTitle>
           <p className="text-xs text-muted-foreground">
-            All values in {kpiCurrency}. Per-category breakdown across all owned
-            properties, FX-converted on the backend.
+            All values in {kpiCurrency}, your display currency. Per-category
+            breakdown across all owned properties, FX-converted on the backend.
           </p>
         </CardHeader>
         <CardContent>

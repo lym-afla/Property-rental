@@ -322,39 +322,40 @@ export function TransactionsPage() {
             title="Transaction"
             mode="edit"
           >
-            <TransactionForm
-              properties={propertiesQuery.data ?? []}
-              tenants={tenantsQuery.data ?? []}
-              defaultValues={{
-                date: editTarget.date,
-                property: editTarget.property,
-                tenant: editTarget.tenant,
-                category: editTarget.category as
-                  | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
-                  | undefined,
-                amount: editTarget.amount,
-                currency: editTarget.currency as never,
-                comment: editTarget.comment ?? '',
-              }}
-              onSubmit={(values) =>
-                updateTransaction.mutate(
-                  { id: editTarget.id, data: values },
-                  {
-                    onSuccess: () => {
-                      toast.success('Transaction updated')
-                      setEditTarget(null)
-                    },
-                    onError: () => toast.error('Failed to update transaction'),
+          <TransactionForm
+            properties={propertiesQuery.data ?? []}
+            tenants={tenantsQuery.data ?? []}
+            defaultValues={{
+              date: editTarget.date,
+              property: editTarget.property,
+              tenant: editTarget.tenant,
+              category: editTarget.category as
+                | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
+                | undefined,
+              amount: editTarget.amount,
+              currency: editTarget.currency as never,
+              period: editTarget.period ?? '',
+              comment: editTarget.comment ?? '',
+            }}
+            onSubmit={(values) =>
+              updateTransaction.mutate(
+                { id: editTarget.id, data: values },
+                {
+                  onSuccess: () => {
+                    toast.success('Transaction updated')
+                    setEditTarget(null)
                   },
-                )
-              }
-              isSubmitting={updateTransaction.isPending}
-            />
-          </EntityFormDialog>
-        )}
-      </div>
-    )
-  }
+                  onError: () => toast.error('Failed to update transaction'),
+                },
+              )
+            }
+            isSubmitting={updateTransaction.isPending}
+          />
+        </EntityFormDialog>
+      )}
+    </div>
+  )
+}
 
   return (
     <div className="space-y-4">
@@ -410,20 +411,21 @@ export function TransactionsPage() {
           title="Transaction"
           mode="edit"
         >
-          <TransactionForm
-            properties={propertiesQuery.data ?? []}
-            tenants={tenantsQuery.data ?? []}
-            defaultValues={{
-              date: editTarget.date,
-              property: editTarget.property,
-              tenant: editTarget.tenant,
-              category: editTarget.category as
-                | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
-                | undefined,
-              amount: editTarget.amount,
-              currency: editTarget.currency as never,
-              comment: editTarget.comment ?? '',
-            }}
+            <TransactionForm
+              properties={propertiesQuery.data ?? []}
+              tenants={tenantsQuery.data ?? []}
+              defaultValues={{
+                date: editTarget.date,
+                property: editTarget.property,
+                tenant: editTarget.tenant,
+                category: editTarget.category as
+                  | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
+                  | undefined,
+                amount: editTarget.amount,
+                currency: editTarget.currency as never,
+                period: editTarget.period ?? '',
+                comment: editTarget.comment ?? '',
+              }}
             onSubmit={(values) =>
               updateTransaction.mutate(
                 { id: editTarget.id, data: values },
