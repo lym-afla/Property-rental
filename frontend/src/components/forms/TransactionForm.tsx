@@ -25,7 +25,6 @@ import { z } from 'zod'
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -354,15 +353,11 @@ export function TransactionForm({
                 <FormLabel>Period</FormLabel>
                 <FormControl>
                   <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="YYYY-MM"
+                    type="month"
                     {...field}
+                    value={field.value || ''}
                   />
                 </FormControl>
-                <FormDescription>
-                  Auto-filled from Date. Format: YYYY-MM.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

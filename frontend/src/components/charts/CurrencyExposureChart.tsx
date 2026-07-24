@@ -33,6 +33,7 @@ import {
 } from 'recharts'
 import { ChartCard } from './ChartCard'
 import { usePropertiesWithStats } from '@/api/properties'
+import { useChartData } from '@/api/charts'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { useSession } from '@/context/SessionProvider'
 import { colorForCategory } from './_chartTheme'
@@ -44,10 +45,30 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+// Compute date range from timeline option
+function timelineToRange(timeline: string): { from: string; to: string } {
+  const today = new Date()
+  const to = today.toISOString().slice(0, 10)
+  const from = new Date(today)
+  switch (timeline) {
+    case 'YTD': from.setMonth(0, 1); break
+    case '3m': from.setMonth(from.getMonth() - 3); break
+    case '6m': from.setMonth(from.getMonth() - 6); break
+    case '12m': from.setFullYear(from.getFullYear() - 1); break
+    case '3Y': from.setFullYear(from.getFullYear() - 3); break
+    case '5Y': from.setFullYear(from.getFullYear() - 5); break
+    case 'All': return { from: '1900-01-01', to }
+  }
+  return { from: from.toISOString().slice(0, 10), to }
+}
+
+// Known income categories (rent only after recategorization)
+const INCOME_CATEGORIES = ['rent']
+
 type ExposureRow = {
-  currency: string    // native currency (RUB/GBP) — Y axis label + table key
-  nativeValue: number // sum of native-currency gross income across properties
-  usdValue: number    // same sum, FX-converted to user currency (the chart value)
+  currency: string
+  nativeValue: number
+  usdValue: number
 }
 
 // Timeline options that map 1:1 to fields `with_stats` actually computes.
@@ -58,6 +79,11 @@ type ExposureRow = {
 // arbitrary date ranges, this list can grow.
 const TIMELINE_OPTIONS = [
   { value: 'YTD', label: 'Year to date' },
+  { value: '3m', label: 'Last 3 months' },
+  { value: '6m', label: 'Last 6 months' },
+  { value: '12m', label: 'Last 12 months' },
+  { value: '3Y', label: 'Last 3 years' },
+  { value: '5Y', label: 'Last 5 years' },
   { value: 'All', label: 'All time' },
 ] as const
 
@@ -73,55 +99,69 @@ type Props = {
 }
 
 export function CurrencyExposureChart({ timeline, onTimelineChange }: Props) {
-  // The user's preferred display currency drives the FX-converted totals
-  // (the bar values). Falls back to USD when the session has not loaded
-  // yet or the user never picked a currency.
   const { user } = useSession()
   const userCurrency = user?.default_currency || 'USD'
 
-  // Default to All-time gross income (matches the previous chart's
-  // "all-time net income" default window but now uses gross income).
   const [internalTimeline, setInternalTimeline] = useState<Timeline>('All')
   const selectedTimeline = timeline ?? internalTimeline
   const handleTimelineChange = onTimelineChange ?? setInternalTimeline
 
-  // Two parallel snapshots: user-currency-converted (for the chart axis)
-  // and native (for the table's "face value" column). React Query dedupes
-  // them by query key. `asOf` is intentionally omitted — `with_stats`
-  // defaults to today, which (as the upper bound of the all-time window)
-  // includes every transaction.
+  const useWithStats = selectedTimeline === 'YTD' || selectedTimeline === 'All'
+  const grossField: 'gross_income_ytd' | 'gross_income_all_time' =
+    selectedTimeline === 'YTD' ? 'gross_income_ytd' : 'gross_income_all_time'
+
+  // For YTD/All: use with_stats (has per-property native + converted totals)
   const usdStats = usePropertiesWithStats(undefined, userCurrency)
   const nativeStats = usePropertiesWithStats(undefined, 'native')
 
-  // Pick the gross income field that matches the selected window. We use
-  // GROSS INCOME (revenue) — not net income — so the chart lines up with
-  // the per-property gross figures the Properties page shows.
-  const grossField: 'gross_income_ytd' | 'gross_income_all_time' =
-    selectedTimeline === 'YTD' ? 'gross_income_ytd' : 'gross_income_all_time'
-  const periodLabel = selectedTimeline === 'YTD' ? 'Year to date' : 'All time'
+  // For other periods: use chart-data (aggregated, in user currency only)
+  const range = useMemo(() => timelineToRange(selectedTimeline), [selectedTimeline])
+  const chartDataQuery = useChartData({
+    type: 'homePage',
+    frequency: 'M',
+    start: range.from,
+    end: range.to,
+    currency: userCurrency,
+  })
+
+  const periodLabel = TIMELINE_OPTIONS.find(o => o.value === selectedTimeline)?.label ?? 'All time'
 
   const chartData = useMemo(() => {
-    const byCurrency = new Map<string, ExposureRow>()
-    // USD-converted values drive the bar lengths; group properties by
-    // their NATIVE currency so the Y axis still labels the exposure the
-    // user cares about.
-    for (const p of usdStats.data ?? []) {
-      const cur = p.currency || '???'
-      const usdValue = Math.abs(p[grossField] ?? 0)
-      const existing = byCurrency.get(cur)
-      if (existing) existing.usdValue += usdValue
-      else byCurrency.set(cur, { currency: cur, nativeValue: 0, usdValue })
+    if (useWithStats) {
+      // Group properties by native currency, sum gross income
+      const byCurrency = new Map<string, ExposureRow>()
+      for (const p of usdStats.data ?? []) {
+        const cur = p.currency || '???'
+        const usdValue = Math.abs(p[grossField] ?? 0)
+        const existing = byCurrency.get(cur)
+        if (existing) existing.usdValue += usdValue
+        else byCurrency.set(cur, { currency: cur, nativeValue: 0, usdValue })
+      }
+      for (const p of nativeStats.data ?? []) {
+        const cur = p.currency || '???'
+        const nativeValue = Math.abs(p[grossField] ?? 0)
+        const existing = byCurrency.get(cur)
+        if (existing) existing.nativeValue += nativeValue
+        else byCurrency.set(cur, { currency: cur, nativeValue, usdValue: 0 })
+      }
+      return Array.from(byCurrency.values()).sort((a, b) => b.usdValue - a.usdValue)
+    } else {
+      // From chart-data: sum income categories across all periods
+      const data = chartDataQuery.data
+      if (!data) return []
+      // Chart-data is in user currency. Group by income category.
+      // But we don't have per-currency split from chart-data.
+      // So we show a single bar per currency by fetching properties separately.
+      // For now, show total income as a single "Portfolio" bar.
+      const totalIncome = (data.datasets || [])
+        .filter(ds => INCOME_CATEGORIES.includes((ds.label || '').toLowerCase()))
+        .reduce((sum, ds) => sum + (ds.data || []).reduce((s, v) => s + Math.abs(v), 0), 0)
+      // Also fetch native-currency property stats for the table
+      const nativeTotal = (nativeStats.data || [])
+        .reduce((sum, p) => sum + Math.abs(p.gross_income_all_time ?? 0), 0)
+      return [{ currency: 'Portfolio', nativeValue: nativeTotal, usdValue: totalIncome }]
     }
-    // Native-currency totals fill the table's "face value" column.
-    for (const p of nativeStats.data ?? []) {
-      const cur = p.currency || '???'
-      const nativeValue = Math.abs(p[grossField] ?? 0)
-      const existing = byCurrency.get(cur)
-      if (existing) existing.nativeValue += nativeValue
-      else byCurrency.set(cur, { currency: cur, nativeValue, usdValue: 0 })
-    }
-    return Array.from(byCurrency.values()).sort((a, b) => b.usdValue - a.usdValue)
-  }, [usdStats.data, nativeStats.data, grossField])
+  }, [useWithStats, usdStats.data, nativeStats.data, grossField, chartDataQuery.data])
 
   const tableData = useMemo(
     () => ({
@@ -154,7 +194,11 @@ export function CurrencyExposureChart({ timeline, onTimelineChange }: Props) {
     </Select>
   )
 
-  if (usdStats.isLoading || nativeStats.isLoading) {
+  const isLoading = useWithStats
+    ? (usdStats.isLoading || nativeStats.isLoading)
+    : chartDataQuery.isLoading
+
+  if (isLoading) {
     return (
       <ChartCard
         title="Gross income by currency"
