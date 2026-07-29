@@ -25,6 +25,8 @@ describe('YieldComparisonChart', () => {
 
     expect(screen.queryByTestId('yield-point-2-gross')).not.toBeInTheDocument()
     expect(screen.getByTestId('yield-status-2')).toHaveTextContent('Missing valuation')
+    expect(screen.getByTestId('missing-valuation-callout')).toBeVisible()
+    expect(screen.getByTestId('missing-valuation-callout')).toHaveTextContent('Canal Court')
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Yield comparison exact values' })).toHaveTextContent('Missing valuation')
   })

@@ -33,6 +33,20 @@ describe('OccupancyRiskChart', () => {
     expect(screen.getByRole('table', { name: 'Occupancy risk exact values' })).toHaveTextContent('100%')
   })
 
+  it('caps an invalid above-100 endpoint value in its rendered rate and exact table', async () => {
+    const user = userEvent.setup()
+    const invalidRateData = {
+      ...data,
+      points: [{ ...data.points[0], occupancy_rate: 125 }],
+    }
+    render(<OccupancyRiskChart data={invalidRateData} />)
+
+    expect(screen.getByTestId('occupancy-rate-2026-01-01')).toHaveAttribute('data-rate', '100')
+    expect(screen.queryByText('125%')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByRole('table', { name: 'Occupancy risk exact values' })).toHaveTextContent('100%')
+  })
+
   it('keeps capacity context and a touch-sized table control available at 390 pixels', () => {
     vi.stubGlobal('innerWidth', 390)
     render(<OccupancyRiskChart data={data} />)

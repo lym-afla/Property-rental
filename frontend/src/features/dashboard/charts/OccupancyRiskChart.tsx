@@ -26,12 +26,17 @@ function formatRate(value: number | null | undefined) {
   return typeof value === 'number' ? `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : '—'
 }
 
+function boundedRate(value: string | number | null | undefined) {
+  return typeof value === 'number' ? Math.max(0, Math.min(100, value)) : value ?? null
+}
+
 export function OccupancyRiskChart(props: Props) {
   const { data } = props
   const state = occupancyState(props)
+  const points: OccupancyData['points'] = data?.points.map((point): OccupancyData['points'][number] => ({ ...point, occupancy_rate: boundedRate(point.occupancy_rate) })) ?? []
   const table = data ? {
     columns: [{ key: 'period', label: 'Period' }, { key: 'occupancy', label: 'Occupancy', numeric: true }, { key: 'occupied', label: 'Occupied', numeric: true }, { key: 'vacant', label: 'Vacant', numeric: true }, { key: 'capacity', label: 'Capacity', numeric: true }],
-    rows: data.points.map((point) => ({ period: formatDate(point.period_start), occupancy: formatRate(point.occupancy_rate as number | null), occupied: point.occupied ?? '—', vacant: point.vacant ?? '—', capacity: point.capacity ?? '—' })),
+    rows: points.map((point) => ({ period: formatDate(point.period_start), occupancy: formatRate(point.occupancy_rate as number | null), occupied: point.occupied ?? '—', vacant: point.vacant ?? '—', capacity: point.capacity ?? '—' })),
   } : undefined
 
   return (
@@ -45,15 +50,15 @@ export function OccupancyRiskChart(props: Props) {
       {state.status === 'success' && data && (
         <>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+            <LineChart data={points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
-              <YAxis domain={[0, 100]} unit="%" />
+              <YAxis domain={[0, 100]} allowDataOverflow unit="%" />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatRate(item.value as number) }))} /> : null} />
               <Line type="stepAfter" dataKey="occupancy_rate" name="Occupancy rate" stroke={chartVisualTokens.primary.color} strokeWidth={2.5} dot />
             </LineChart>
           </ResponsiveContainer>
-          <ul className="sr-only" aria-label="Occupancy risk values">{data.points.map((point) => <li key={point.period_start} data-testid={`occupancy-rate-${point.period_start}`} data-rate={point.occupancy_rate}>{formatDate(point.period_start)}: {formatRate(point.occupancy_rate as number | null)}, occupied {point.occupied}, vacant {point.vacant}, capacity {point.capacity}</li>)}</ul>
+          <ul className="sr-only" aria-label="Occupancy risk values">{points.map((point) => <li key={point.period_start} data-testid={`occupancy-rate-${point.period_start}`} data-rate={point.occupancy_rate}>{formatDate(point.period_start)}: {formatRate(point.occupancy_rate as number | null)}, occupied {point.occupied}, vacant {point.vacant}, capacity {point.capacity}</li>)}</ul>
         </>
       )}
     </AnalyticsChartCard>
