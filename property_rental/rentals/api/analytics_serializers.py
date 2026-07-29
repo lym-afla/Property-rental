@@ -108,3 +108,91 @@ class TimeSeriesResponseSerializer(StrictSerializer):
                     }
                 )
         return attrs
+
+
+class PortfolioSummarySerializer(StrictSerializer):
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    property_count = serializers.IntegerField(min_value=0)
+    rental_inventory_count = serializers.IntegerField(min_value=0)
+    occupied = serializers.IntegerField(min_value=0)
+    occupancy_rate = serializers.FloatField(min_value=0, max_value=100)
+    revenue = serializers.FloatField()
+    costs = serializers.FloatField(min_value=0)
+    net_income = serializers.FloatField()
+    property_value = serializers.FloatField(allow_null=True)
+    debt = serializers.FloatField()
+    equity = serializers.FloatField(allow_null=True)
+    valuation_status = serializers.ChoiceField(
+        choices=["ok", "stale_valuation", "missing_valuation"]
+    )
+
+
+class ContributionRowSerializer(StrictSerializer):
+    property_id = serializers.IntegerField(min_value=1)
+    property_name = serializers.CharField()
+    revenue = serializers.FloatField()
+    costs = serializers.FloatField(min_value=0)
+    net_income = serializers.FloatField()
+    portfolio_share = serializers.FloatField(allow_null=True)
+
+
+class ContributionResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["property_contribution"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    portfolio_net_income = serializers.FloatField()
+    rows = ContributionRowSerializer(many=True)
+
+
+class YieldRowSerializer(StrictSerializer):
+    property_id = serializers.IntegerField(min_value=1)
+    property_name = serializers.CharField()
+    valuation_date = ISODateField(
+        format="%Y-%m-%d", input_formats=["%Y-%m-%d"], allow_null=True
+    )
+    property_value = serializers.FloatField(allow_null=True)
+    annualized_revenue = serializers.FloatField(allow_null=True)
+    annualized_costs = serializers.FloatField(allow_null=True)
+    gross_yield = serializers.FloatField(allow_null=True)
+    net_yield = serializers.FloatField(allow_null=True)
+    status = serializers.ChoiceField(
+        choices=["ok", "stale_valuation", "missing_valuation", "zero_valuation"]
+    )
+
+
+class YieldResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["property_yields"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    rows = YieldRowSerializer(many=True)
+
+
+class ExposureCoverageSerializer(StrictSerializer):
+    period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    status = serializers.ChoiceField(
+        choices=[
+            "ok",
+            "stale_valuation",
+            "partial_valuation",
+            "missing_valuation",
+            "no_exposure",
+        ]
+    )
+
+
+class CurrencyExposureResponseSerializer(TimeSeriesResponseSerializer):
+    metric = serializers.ChoiceField(choices=["currency_exposure"])
+    measure = serializers.ChoiceField(
+        choices=["property_value", "debt", "rental_income"]
+    )
+    measure_label = serializers.CharField()
+    coverage = ExposureCoverageSerializer(many=True)

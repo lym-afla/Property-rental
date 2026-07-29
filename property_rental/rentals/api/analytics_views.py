@@ -1,19 +1,58 @@
 """Authenticated HTTP endpoints for portfolio analytics responses."""
 
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
 from rentals.analytics.filters import AnalyticsFilters
-from rentals.api.analytics_serializers import TimeSeriesResponseSerializer
+from rentals.analytics.portfolio import (
+    currency_exposure,
+    portfolio_occupancy,
+    portfolio_summary,
+    property_contribution,
+    property_yields,
+)
+from rentals.constants import CURRENCY_CHOICES
+from rentals.api.analytics_serializers import (
+    ContributionResponseSerializer,
+    CurrencyExposureResponseSerializer,
+    PortfolioSummarySerializer,
+    TimeSeriesResponseSerializer,
+    YieldResponseSerializer,
+)
 from rentals.utils import get_effective_date
 
 
 class _PortfolioAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def filters(self, request):
+    def filters(self, request, extra_query_params=()):
+        allowed = {
+            "start",
+            "end",
+            "grain",
+            "currency",
+            "comparison",
+            "property",
+            *extra_query_params,
+        }
+        unknown = set(request.query_params) - allowed
+        if unknown:
+            raise serializers.ValidationError(
+                {key: "Unknown filter." for key in sorted(unknown)}
+            )
+        if "comparison" in request.query_params:
+            raise serializers.ValidationError(
+                {"comparison": "Comparison is not supported by this endpoint."}
+            )
+        if "currency" in request.query_params:
+            supported_currencies = {code for code, _label in CURRENCY_CHOICES}
+            if request.query_params["currency"].upper() not in supported_currencies:
+                raise serializers.ValidationError(
+                    {"currency": "Unsupported reporting currency."}
+                )
         return AnalyticsFilters.from_query_params(
             request.query_params,
             default_currency=request.user.default_currency,
@@ -36,3 +75,40 @@ class PortfolioExpenseDriversView(_PortfolioAnalyticsView):
 
     def get(self, request):
         return self.response(expense_drivers(request.user, self.filters(request)))
+
+
+class PortfolioSummaryView(_PortfolioAnalyticsView):
+    def get(self, request):
+        result = portfolio_summary(request.user, self.filters(request))
+        return Response(PortfolioSummarySerializer(result).data)
+
+
+class PortfolioContributionView(_PortfolioAnalyticsView):
+    def get(self, request):
+        result = property_contribution(request.user, self.filters(request))
+        return Response(ContributionResponseSerializer(result).data)
+
+
+class PortfolioYieldsView(_PortfolioAnalyticsView):
+    def get(self, request):
+        result = property_yields(request.user, self.filters(request))
+        return Response(YieldResponseSerializer(result).data)
+
+
+class PortfolioCurrencyExposureView(_PortfolioAnalyticsView):
+    def get(self, request):
+        measure = request.query_params.get("measure", "property_value")
+        if measure not in {"property_value", "debt", "rental_income"}:
+            raise serializers.ValidationError({"measure": "Unsupported measure."})
+        result = currency_exposure(
+            request.user,
+            self.filters(request, extra_query_params=("measure",)),
+            measure=measure,
+        )
+        return Response(CurrencyExposureResponseSerializer(result).data)
+
+
+class PortfolioOccupancyView(_PortfolioAnalyticsView):
+    def get(self, request):
+        result = portfolio_occupancy(request.user, self.filters(request))
+        return self.response(result)

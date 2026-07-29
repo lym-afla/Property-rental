@@ -36,7 +36,15 @@ from .auth import (
     MeView,
     RegisterView,
 )
-from .analytics_views import PortfolioCashFlowView, PortfolioExpenseDriversView
+from .analytics_views import (
+    PortfolioCashFlowView,
+    PortfolioContributionView,
+    PortfolioCurrencyExposureView,
+    PortfolioExpenseDriversView,
+    PortfolioOccupancyView,
+    PortfolioSummaryView,
+    PortfolioYieldsView,
+)
 from .views import (
     ChartDataView,
     FXViewSet,
@@ -77,6 +85,17 @@ urlpatterns = [
     path("auth/csrf/", CsrfView.as_view()),
     path("analytics/portfolio/cash-flow/", PortfolioCashFlowView.as_view()),
     path("analytics/portfolio/expenses/", PortfolioExpenseDriversView.as_view()),
+    path("analytics/portfolio/summary/", PortfolioSummaryView.as_view()),
+    path(
+        "analytics/portfolio/property-contribution/",
+        PortfolioContributionView.as_view(),
+    ),
+    path("analytics/portfolio/yields/", PortfolioYieldsView.as_view()),
+    path(
+        "analytics/portfolio/currency-exposure/",
+        PortfolioCurrencyExposureView.as_view(),
+    ),
+    path("analytics/portfolio/occupancy/", PortfolioOccupancyView.as_view()),
     path("chart-data/", ChartDataView.as_view()),
 ]
 urlpatterns += router.urls
