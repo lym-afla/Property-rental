@@ -7,6 +7,7 @@ from rentals.analytics.contracts import SeriesDefinition, TimeSeriesResponse
 from rentals.constants import INCOME_CATEGORIES, TRANSACTION_CATEGORIES
 from rentals.models import Transaction
 from rentals.services.financials import convert_transactions
+from rentals.services.fx import preload_converter
 
 
 _CATEGORY_LABELS = dict(TRANSACTION_CATEGORIES)
@@ -78,10 +79,13 @@ def _expense_category_keys(transactions):
     )
 
 
-def _category_total(rows, currency, as_of):
+def _category_total(rows, category, currency, as_of, converter):
     if not rows:
         return 0.0
-    return float(convert_transactions(rows, currency, as_of))
+    total = float(
+        convert_transactions(rows, currency, as_of, converter=converter)
+    )
+    return total if category in INCOME_CATEGORIES else -abs(total)
 
 
 def _category_series(category_keys):
@@ -103,6 +107,7 @@ def portfolio_cash_flow(user, filters):
     in memory.  FX conversion stays in the established financial service.
     """
     transactions = _scoped_transactions(user, filters)
+    converter = preload_converter(transactions, filters.currency)
     category_keys = _category_keys(transactions, include_income=False)
     bucketed_transactions = _bucket_transactions(transactions, filters)
     periods = _calendar_periods(filters)
@@ -114,7 +119,11 @@ def portfolio_cash_flow(user, filters):
         point = {"period_start": period_start, "period_end": period_end}
         for category in category_keys:
             point[category] = _category_total(
-                category_rows[category], filters.currency, period_end
+                category_rows[category],
+                category,
+                filters.currency,
+                period_end,
+                converter,
             )
         total_income = sum(
             point[category] for category in category_keys if category in INCOME_CATEGORIES
@@ -155,6 +164,7 @@ def portfolio_cash_flow(user, filters):
 def expense_drivers(user, filters):
     """Return signed, backend-classified expense categories by calendar period."""
     transactions = _scoped_transactions(user, filters)
+    converter = preload_converter(transactions, filters.currency)
     category_keys = _expense_category_keys(transactions)
     bucketed_transactions = _bucket_transactions(transactions, filters)
     points = []
@@ -164,7 +174,11 @@ def expense_drivers(user, filters):
         point = {"period_start": period_start, "period_end": period_end}
         for category in category_keys:
             point[category] = _category_total(
-                category_rows[category], filters.currency, period_end
+                category_rows[category],
+                category,
+                filters.currency,
+                period_end,
+                converter,
             )
         points.append(point)
 

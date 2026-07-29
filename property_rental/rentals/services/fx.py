@@ -262,6 +262,81 @@ def convert(amount, from_currency, to_currency, as_of):
     return amount * get_rate(from_currency, to_currency, as_of)['FX']
 
 
+class PreloadedConverter:
+    """Resolve a batch of transaction conversions from one FX-row query.
+
+    The public ``get_rate`` function deliberately retains its legacy
+    query-per-hop behavior. Analytics needs the same graph/path/rate semantics
+    for many rows, so this resolver preloads every potentially relevant FX row
+    once and performs the identical dated graph traversal in memory.
+    """
+
+    def __init__(self, transactions, target_currency):
+        self.target_currency = target_currency
+        cross_currency_dates = [
+            transaction.date
+            for transaction in transactions
+            if transaction.currency != target_currency
+        ]
+        self._rows = ()
+        self._graphs = {}
+        if cross_currency_dates:
+            from rentals.models import FX
+
+            self._rows = tuple(
+                FX.objects.filter(
+                    date__lte=max(cross_currency_dates), rate__isnull=False
+                ).order_by("date", "id")
+            )
+
+    def _graph(self, as_of):
+        graph = self._graphs.get(as_of)
+        if graph is not None:
+            return graph
+
+        graph = nx.Graph()
+        for fx in self._rows:
+            if fx.date > as_of:
+                break
+            graph.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
+        self._graphs[as_of] = graph
+        return graph
+
+    def _latest_rate(self, source, target, as_of):
+        for fx in reversed(self._rows):
+            if fx.date > as_of:
+                continue
+            if (
+                (fx.from_currency == source and fx.to_currency == target)
+                or (fx.from_currency == target and fx.to_currency == source)
+            ):
+                return fx
+        raise ValueError(f"FX rate for {source} to {target} not found.")
+
+    def convert(self, amount, from_currency, to_currency, as_of):
+        if from_currency == to_currency:
+            return amount
+
+        cross_currency = nx.shortest_path(
+            self._graph(as_of), from_currency, to_currency, method="bellman-ford"
+        )
+        fx_rate = 1
+        for index in range(1, len(cross_currency)):
+            source = cross_currency[index - 1]
+            target = cross_currency[index]
+            fx = self._latest_rate(source, target, as_of)
+            if fx.from_currency == source and fx.to_currency == target:
+                fx_rate *= fx.rate
+            else:
+                fx_rate /= fx.rate
+        return amount * fx_rate
+
+
+def preload_converter(transactions, target_currency):
+    """Return an FX converter that needs at most one FX-row query for a batch."""
+    return PreloadedConverter(transactions, target_currency)
+
+
 def update_rates(property_id):
     """Back-fill FX rates for a property's transaction dates via
     yfinance. Body moved VERBATIM from ``FX.update_fx_rates`` (Task 9

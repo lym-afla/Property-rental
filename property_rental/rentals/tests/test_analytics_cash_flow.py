@@ -8,7 +8,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from rentals.analytics.filters import AnalyticsFilters, Grain
-from rentals.tests.factories import TransactionFactory
+from rentals.tests.factories import FXFactory, TransactionFactory
 
 
 def filters_for(start, end, grain=Grain.MONTH):
@@ -59,6 +59,37 @@ def test_cash_flow_returns_raw_signed_values(landlord_user, sample_property):
             "cumulative_net_income": 1700.0,
         },
     )
+
+
+@pytest.mark.django_db
+def test_cash_flow_normalizes_legacy_positive_expenses_to_negative(
+    landlord_user, sample_property
+):
+    """Passing through legacy-positive expenses would overstate portfolio net income."""
+    from rentals.analytics.cash_flow import portfolio_cash_flow
+
+    TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("2000.00"),
+        date=date(2026, 1, 10),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="utilities",
+        amount=Decimal("300.00"),
+        date=date(2026, 1, 12),
+        currency="USD",
+    )
+
+    result = portfolio_cash_flow(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    )
+
+    assert result.points[0]["utilities"] == -300.0
+    assert result.points[0]["total_expenses"] == -300.0
+    assert result.points[0]["net_income"] == 1700.0
 
 
 @pytest.mark.django_db
@@ -171,3 +202,36 @@ def test_cash_flow_query_count_does_not_grow_with_period_count(
 
     assert len(result.points) == 12
     assert len(queries) <= 1
+
+
+@pytest.mark.django_db
+def test_cash_flow_preloads_cross_currency_rates_for_long_ranges(
+    landlord_user, sample_property
+):
+    """Per-transaction FX lookups would make a long cross-currency trend N+1."""
+    from rentals.analytics.cash_flow import portfolio_cash_flow
+
+    FXFactory(
+        from_currency="GBP",
+        to_currency="USD",
+        rate=Decimal("1.25"),
+        date=date(2026, 1, 1),
+    )
+    for month in range(1, 13):
+        TransactionFactory(
+            property=sample_property,
+            category="rent",
+            amount=Decimal("100.00"),
+            date=date(2026, month, 1),
+            currency="GBP",
+        )
+
+    with CaptureQueriesContext(connection) as queries:
+        result = portfolio_cash_flow(
+            landlord_user, filters_for("2026-01-01", "2026-12-31")
+        )
+
+    assert len(result.points) == 12
+    assert result.points[0]["rent"] == 125.0
+    assert result.points[-1]["rent"] == 125.0
+    assert len(queries) <= 2

@@ -4,6 +4,7 @@ property_rental/AW-rental
 property_rental/property_rental/__pycache__/
 property_rental/property_rental/settings/__pycache__/
 property_rental/rentals/__pycache__/
+property_rental/rentals/analytics/__pycache__/
 property_rental/rentals/api/__pycache__/
 property_rental/rentals/migrations/__pycache__/
 property_rental/rentals/services/__pycache__/

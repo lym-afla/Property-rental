@@ -95,20 +95,22 @@ from django.db.models import Sum
 # and ``.date`` attributes, return the sum of (amount converted to
 # ``target_currency`` as of ``as_of``) across the iterable. Same-currency
 # rows skip FX entirely (the ``services.fx.convert`` short-circuit).
-def convert_transactions(transactions, target_currency, as_of):
+def convert_transactions(transactions, target_currency, as_of, converter=None):
     """Sum ``transactions`` into ``target_currency`` as of ``as_of``.
 
     Each row is multiplied by ``services.fx.get_rate(row.currency,
     target_currency, row.date)['FX']`` when the currencies differ, and
-    passed through unchanged when they match. Returns a ``Decimal`` (or
-    ``int`` 0 for an empty iterable, matching the
+    passed through unchanged when they match. ``converter`` may provide a
+    preloaded ``convert`` method for a batch while preserving those semantics.
+    Returns a ``Decimal`` (or ``int`` 0 for an empty iterable, matching the
     ``Transaction.financials`` ``total_amount = 0`` initializer).
     """
     from rentals.services import fx as fx_service
 
     total = 0
+    converter = converter or fx_service
     for transaction in transactions:
-        total += fx_service.convert(
+        total += converter.convert(
             transaction.amount,
             transaction.currency,
             target_currency,
