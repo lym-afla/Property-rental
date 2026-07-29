@@ -23,4 +23,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   await expect(page.getByText('Dollar House (negative contributor)')).toBeVisible()
   await expect(page.getByRole('button', { name: 'EUR' })).toBeVisible()
   await expect(page).toHaveScreenshot('investment-dashboard-populated.png', { fullPage: true, animations: 'disabled' })
+  await page.getByRole('button', { name: 'Table' }).first().click()
+  await expect(page.getByRole('table', { name: 'Net cash flow exact values' })).toBeVisible()
+  await expect(page).toHaveScreenshot('investment-dashboard-populated-table.png', { fullPage: true, animations: 'disabled' })
 })
