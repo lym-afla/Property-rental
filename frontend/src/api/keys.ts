@@ -20,6 +20,34 @@ type TransactionFilters = {
   currency?: string
 }
 
+type AnalyticsFilters = {
+  start?: string
+  end?: string
+  currency?: string
+  grain?: 'month' | 'quarter' | 'year'
+  comparison?: 'previous_period' | null
+  propertyIds?: readonly number[]
+}
+
+type CurrencyExposureFilters = AnalyticsFilters & {
+  measure: 'property_value' | 'debt' | 'rental_income'
+}
+
+function normalizePropertyIds(propertyIds: readonly number[] = []): number[] {
+  return [...new Set(propertyIds)].sort((left, right) => left - right)
+}
+
+function normalizeAnalyticsFilters(filters: AnalyticsFilters) {
+  return {
+    start: filters.start,
+    end: filters.end,
+    currency: filters.currency,
+    grain: filters.grain,
+    comparison: filters.comparison,
+    propertyIds: normalizePropertyIds(filters.propertyIds),
+  }
+}
+
 export const queryKeys = {
   auth: {
     me: ['auth', 'me'] as const,
@@ -93,6 +121,84 @@ export const queryKeys = {
       currency?: string
     }) => ['chart-data', 'filtered', filters] as const,
   },
+
+  analytics: {
+    all: ['analytics'] as const,
+    portfolio: {
+      all: ['analytics', 'portfolio'] as const,
+      summary: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'summary',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+      cashFlow: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'cash-flow',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+      expenseDrivers: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'expense-drivers',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+      propertyContribution: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'property-contribution',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+      propertyYields: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'yields',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+      currencyExposure: (filters: CurrencyExposureFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'currency-exposure',
+          { ...normalizeAnalyticsFilters(filters), measure: filters.measure },
+        ] as const,
+      occupancy: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'occupancy',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
+    },
+    propertyValuation: (propertyId: number, end?: string) =>
+      ['analytics', 'property-valuation', { propertyId, end }] as const,
+    tenantRentPerformance: (
+      tenantId: number,
+      filters: Pick<
+        AnalyticsFilters,
+        'start' | 'end' | 'currency' | 'grain' | 'comparison'
+      >,
+    ) =>
+      [
+        'analytics',
+        'tenant-rent-performance',
+        {
+          tenantId,
+          start: filters.start,
+          end: filters.end,
+          currency: filters.currency,
+          grain: filters.grain,
+          comparison: filters.comparison,
+        },
+      ] as const,
+  },
 }
 
-export type { TransactionFilters }
+export { normalizePropertyIds }
+export type { AnalyticsFilters, CurrencyExposureFilters, TransactionFilters }
