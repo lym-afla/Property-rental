@@ -4,10 +4,19 @@ import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 
 import { fixtureUser } from '@/__fixtures__/user'
 import { server } from '@/test/handlers'
 import { HomePage } from './HomePage'
+
+vi.mock('recharts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('recharts')>()
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  }
+})
 
 vi.mock('@/context/SessionProvider', () => ({
   useSession: () => ({
@@ -31,32 +40,11 @@ vi.mock('@/api/properties', () => ({
     isLoading: false,
     isError: false,
   }),
-  usePropertiesWithStats: () => ({
-    data: [],
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
-}))
-
-vi.mock('@/api/tenants', () => ({
-  useTenantsWithStats: () => ({
-    data: [],
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
 }))
 
 vi.mock('@/api/charts', () => ({
   useChartData: () => ({ data: { labels: [], datasets: [], currency: 'USD' } }),
 }))
-
-vi.mock('@/components/charts/CashFlowChart', () => ({ CashFlowChart: () => <div>Legacy cash flow chart</div> }))
-vi.mock('@/components/charts/ExpenseBreakdownChart', () => ({ ExpenseBreakdownChart: () => <div>Legacy expense chart</div> }))
-vi.mock('@/components/charts/NetIncomeTrendChart', () => ({ NetIncomeTrendChart: () => <div>Legacy income chart</div> }))
-vi.mock('@/components/charts/OccupancyChart', () => ({ OccupancyChart: () => <div>Legacy occupancy chart</div> }))
-vi.mock('@/components/charts/CurrencyExposureChart', () => ({ CurrencyExposureChart: () => <div>Legacy exposure chart</div> }))
 
 const summary = {
   currency: 'GBP',
@@ -98,7 +86,7 @@ function renderPage(initialEntry = '/') {
 }
 
 describe('HomePage dashboard shell', () => {
-  it('restores a copied section/filter URL, requests validated summary data, and retains legacy charts', async () => {
+  it('restores a copied section/filter URL without rendering independently filtered legacy consumers', async () => {
     let requestedUrl = ''
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
@@ -111,7 +99,11 @@ describe('HomePage dashboard shell', () => {
 
     expect(screen.getByRole('heading', { name: 'Portfolio analysis' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Portfolio' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByText('Legacy cash flow chart')).toBeInTheDocument()
+    expect(screen.getByText('Property-scoped chart migration pending')).toBeInTheDocument()
+    expect(screen.queryByText('Cash Flow')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Currency exposure timeline')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Expense timeline')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Net income timeline')).not.toBeInTheDocument()
 
     expect(await screen.findByText('£1,000,000')).toBeInTheDocument()
     expect(screen.getByText('£350,000')).toBeInTheDocument()
@@ -125,26 +117,43 @@ describe('HomePage dashboard shell', () => {
     expect(requested.searchParams.get('grain')).toBe('quarter')
   })
 
-  it('updates section and filters only through the router URL and resets to session defaults', async () => {
+  it('updates router URL and analytics request from filter interactions, then fully serializes reset defaults', async () => {
     const user = userEvent.setup()
+    const requestedUrls: string[] = []
     server.use(
-      http.get('/api/v1/analytics/portfolio/summary/', () => HttpResponse.json(summary)),
+      http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
+        requestedUrls.push(request.url)
+        return HttpResponse.json(summary)
+      }),
     )
     renderPage('/?section=risk&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&comparison=none&property=&measure=property_value')
+
+    expect(screen.getByText('Currency exposure migration pending')).toBeInTheDocument()
+    expect(screen.getByText('Occupancy migration pending')).toBeInTheDocument()
+    expect(screen.getByText('Profit & Loss migration pending')).toBeInTheDocument()
+    expect(screen.queryByText('Profit & Loss')).not.toBeInTheDocument()
+    for (const toggle of screen.getAllByRole('button', { name: 'Table' })) {
+      expect(toggle).toHaveClass('min-h-11')
+    }
 
     await user.click(screen.getByRole('button', { name: 'Income & Costs' }))
     await waitFor(() => {
       expect(screen.getByLabelText('Current dashboard URL')).toHaveTextContent('section=income-costs')
     })
 
+    await user.click(screen.getByLabelText('Reporting currency'))
+    await user.click(screen.getByRole('option', { name: 'EUR' }))
+    await waitFor(() => {
+      const currentUrl = screen.getByLabelText('Current dashboard URL').textContent ?? ''
+      expect(new URLSearchParams(currentUrl).get('currency')).toBe('EUR')
+      expect(new URL(requestedUrls.at(-1) ?? 'http://invalid').searchParams.get('currency')).toBe('EUR')
+    })
+
     await user.click(screen.getByRole('button', { name: 'Reset dashboard filters' }))
     const resetUrl = screen.getByLabelText('Current dashboard URL').textContent ?? ''
-    const reset = new URLSearchParams(resetUrl)
-    expect(reset.get('section')).toBe('overview')
-    expect(reset.get('end')).toBe('2026-07-29')
-    expect(reset.get('currency')).toBe('USD')
-    expect(reset.get('grain')).toBe('month')
-    expect(reset.get('comparison')).toBe('none')
+    expect(resetUrl).toBe(
+      '?section=overview&start=2026-01-29&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value',
+    )
   })
 
   it('distinguishes summary loading, error, and empty states', async () => {
@@ -163,6 +172,7 @@ describe('HomePage dashboard shell', () => {
     )
     const { unmount } = renderPage('/?section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value')
     expect(await screen.findByText('Failed to load portfolio summary')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveClass('min-h-11')
     unmount()
 
     server.use(
@@ -188,5 +198,16 @@ describe('HomePage dashboard shell', () => {
     )
     renderPage('/?section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value')
     expect(await screen.findByText('No portfolio data for this selection.')).toBeInTheDocument()
+  })
+
+  it('formats occupancy to one decimal place', async () => {
+    server.use(
+      http.get('/api/v1/analytics/portfolio/summary/', () =>
+        HttpResponse.json({ ...summary, occupancy_rate: 50.123456 }),
+      ),
+    )
+    renderPage('/?section=overview&start=2026-01-01&end=2026-07-29&currency=GBP&grain=month&comparison=none&property=&measure=property_value')
+    expect(await screen.findByText('50.1%')).toBeInTheDocument()
+    expect(screen.queryByText('50.123456%')).not.toBeInTheDocument()
   })
 })

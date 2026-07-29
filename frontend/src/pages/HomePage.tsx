@@ -1,7 +1,7 @@
 // Responsive investment dashboard shell. URL-owned global filters feed the
 // validated analytics summary and the compatible legacy chart-data requests.
-// The legacy charts and detailed P&L remain below the new summary until their
-// dedicated redesign tasks migrate them to the typed analytics endpoints.
+// Compatible legacy charts remain below the new summary until their dedicated
+// redesign tasks migrate them to the typed analytics endpoints.
 //
 // Drill-down: clicking a Cash Flow bar segment navigates to
 // /transactions?from=...&to=...&category=... for the period + category.
@@ -15,27 +15,17 @@ import { format, parseISO, subMonths, subYears } from 'date-fns'
 
 import { usePortfolioSummary } from '@/api/analytics'
 import { useChartData } from '@/api/charts'
-import { useProperties, usePropertiesWithStats } from '@/api/properties'
+import { useProperties } from '@/api/properties'
 import { CashFlowChart } from '@/components/charts/CashFlowChart'
 import { ExpenseBreakdownChart } from '@/components/charts/ExpenseBreakdownChart'
 import { NetIncomeTrendChart } from '@/components/charts/NetIncomeTrendChart'
-import { OccupancyChart } from '@/components/charts/OccupancyChart'
-import { CurrencyExposureChart } from '@/components/charts/CurrencyExposureChart'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
 import type { DashboardFilterState, DashboardGrain } from '@/features/dashboard/filters'
-import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate } from '@/lib/format'
 import { useSession } from '@/context/SessionProvider'
 import type { User } from '@/types/user'
 
@@ -155,11 +145,6 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
   const frequency = GRAIN_TO_FREQUENCY[filters.grain]
   const range = { from: filters.start, to: filters.end }
 
-  // ---- Data hooks ----------------------------------------------------------
-  // The legacy P&L still uses property stats; scope it to the shared as-of
-  // date and currency while the validated summary owns the KPI semantics.
-  const propertiesStats = usePropertiesWithStats(filters.end, userCurrency)
-
   // One chart-data request for the headline bar chart; the same response
   // powers both Cash Flow and (via Net Income Trend's client-side sum) the
   // net income trajectory, so a single round-trip feeds two tiles.
@@ -188,91 +173,6 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
   })
   const kpiCurrency = userCurrency
 
-  // ---- P&L per-category breakdown -----------------------------------------
-  // The user wants the OLD-style P&L with every category line, not just
-  // Gross/Expenses/Net. `with_stats` only returns aggregate totals, so we
-  // fire a `chart-data` request (yearly frequency over a wide range) and
-  // sum each dataset to get per-category all-time / YTD totals. The
-  // chart-data `homePage` branch emits one dataset per category with its
-  // monthly/quarterly/yearly totals; summing the `data` array gives the
-  // grand total for that category over the requested window.
-  //
-  // All-time window: from a far-back sentinel (`1900-01-01`) through today.
-  // The backend's chart_data service treats `1900-01-01` as the "All time"
-  // sentinel and rewrites it to the property set's earliest transaction
-  // date (see `services/charts.py::get_chart_data`).
-  // YTD window: Jan 1 through the shared as-of date.
-  const today = new Date(`${filters.end}T12:00:00.000Z`)
-  const todayIso = filters.end
-  const yearStart = `${today.getUTCFullYear()}-01-01`
-  const yearEnd = filters.end
-  const pnlAllTimeQuery = useChartData({
-    type: 'homePage',
-    frequency: 'Y',
-    start: '1900-01-01',
-    end: todayIso,
-    currency: userCurrency,
-  })
-  const pnlYtdQuery = useChartData({
-    type: 'homePage',
-    frequency: 'Y',
-    start: yearStart,
-    end: yearEnd,
-    currency: userCurrency,
-  })
-
-  // Income vs expense classification — mirrors `rentals/constants.py`.
-  // Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
-  // is an expense-category offset (positive amount that nets against the
-  // other expense categories), so it lives on the expense side.
-  const INCOME_CATEGORIES = ['rent']
-
-  // Sum each dataset's `data` array to get the category total for the
-  // requested window. The chart-data service returns negatives for
-  // expenses (transactions store expense amounts as negative); we keep
-  // the sign through to the table and format via `formatAccounting`,
-  // which renders negatives as `$(-1,234)`.
-  const pnlRows = useMemo(() => {
-    const sum = (datasets: { label?: string; data: number[] }[], predicate: (label: string) => boolean) => {
-      const rows: { label: string; total: number }[] = []
-      for (const ds of datasets) {
-        const label = ds.label ?? ''
-        if (!predicate(label)) continue
-        const total = (ds.data ?? []).reduce((acc, v) => acc + (Number(v) || 0), 0)
-        rows.push({ label, total })
-      }
-      // T12: filter out categories with zero total so empty buckets (e.g.
-      // a category that exists in the choices but has no transactions in
-      // the window) don't appear as a stray row in the P&L.
-      return rows.filter((r) => r.total !== 0)
-    }
-    const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
-    const allTimeDatasets = pnlAllTimeQuery.data?.datasets ?? []
-    const ytdDatasets = pnlYtdQuery.data?.datasets ?? []
-    const incomeAllTime = sum(allTimeDatasets, isIncome)
-    // Expense categories come back negative from chart-data; keep the
-    // sign so `formatAccounting` can render the brackets.
-    const expenseAllTime = sum(allTimeDatasets, (l) => !isIncome(l) && l.length > 0)
-    const incomeYtd = sum(ytdDatasets, isIncome)
-    const expenseYtd = sum(ytdDatasets, (l) => !isIncome(l) && l.length > 0)
-    const totalIncomeAll = incomeAllTime.reduce((acc, r) => acc + r.total, 0)
-    const totalIncomeYtd = incomeYtd.reduce((acc, r) => acc + r.total, 0)
-    const totalExpenseAll = expenseAllTime.reduce((acc, r) => acc + r.total, 0)
-    const totalExpenseYtd = expenseYtd.reduce((acc, r) => acc + r.total, 0)
-    return {
-      incomeAllTime,
-      incomeYtd,
-      expenseAllTime,
-      expenseYtd,
-      totalIncomeAll,
-      totalIncomeYtd,
-      totalExpenseAll,
-      totalExpenseYtd,
-      netIncomeAll: totalIncomeAll + totalExpenseAll, // expenses are negative
-      netIncomeYtd: totalIncomeYtd + totalExpenseYtd,
-    }
-  }, [pnlAllTimeQuery.data, pnlYtdQuery.data])
-
   // ---- Cash Flow drill-down ------------------------------------------------
   const onBarClick = (period: string, category: string) => {
     const r = periodLabelToRange(period, frequency)
@@ -285,10 +185,17 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
     navigate(`/transactions?${params.toString()}`)
   }
 
-  // ---- Render guards -------------------------------------------------------
-  // Legacy charts own their loading state; this guard is for the P&L table.
-  const isLoading = propertiesStats.isLoading
-  const isError = propertiesStats.isError
+  if (filters.propertyIds.length > 0) {
+    return (
+      <div className="space-y-6">
+        <PortfolioSummary filters={filters} />
+        <MigrationPlaceholder
+          title="Property-scoped chart migration pending"
+          description="Tasks 8–9 will restore charts here using analytics endpoints that honor the selected properties. The legacy all-property charts are hidden so they cannot contradict the shared filter."
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -308,7 +215,10 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
         <ExpenseBreakdownChart
           data={expenseQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
         />
-        <OccupancyChart />
+        <MigrationPlaceholder
+          title="Occupancy migration pending"
+          description="Task 8 will restore occupancy using the shared dashboard range and as-of date."
+        />
       </div>
 
       {/* ---- Net income trend + Currency exposure (side-by-side) -------- */}
@@ -316,131 +226,16 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
         <NetIncomeTrendChart
           data={netIncomeQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
         />
-        <CurrencyExposureChart />
+        <MigrationPlaceholder
+          title="Currency exposure migration pending"
+          description="Task 9 will restore currency exposure using the shared range, currency, properties, and exposure measure."
+        />
       </div>
 
-      {/* ---- P&L table -------------------------------------------------- */}
-      {/* Per-category P&L breakdown with All-time + YTD columns. The chart-data
-          request gives us one dataset per category; we sum each one to get
-          the totals displayed here. Currency follows the user's
-          `default_currency` (`kpiCurrency`): both chart-data requests below
-          pass `currency: userCurrency`, and `kpiCurrency` resolves to the
-          user's display currency (falling back to USD only when the session
-          has not loaded yet or the user never picked one). Layout:
-          income categories first, then "Total revenue", then expense
-          categories (alphabetical, kept negative), then "Total expenses"
-          and "Net income". `formatAccounting` renders negatives as
-          `$(-1,234)` so the sign convention is unambiguous. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Profit &amp; Loss</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            All values in {kpiCurrency}, your display currency. Per-category
-            breakdown across all owned properties, FX-converted on the backend.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {isError ? (
-            <ErrorState
-              message="Failed to load property stats"
-              onRetry={() => {
-                propertiesStats.refetch()
-              }}
-            />
-          ) : isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (propertiesStats.data ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No properties yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">All time</TableHead>
-                  <TableHead className="text-right">YTD</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {/* Income section — one row per income category. */}
-                {pnlRows.incomeAllTime.map((row, idx) => {
-                  const ytdMatch = pnlRows.incomeYtd.find(
-                    (r) => r.label === row.label,
-                  )
-                  return (
-                    <TableRow key={`income-${row.label}-${idx}`}>
-                      <TableCell className="font-medium capitalize">
-                        {row.label}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatAccounting(row.total, kpiCurrency)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatAccounting(ytdMatch?.total ?? 0, kpiCurrency)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {/* Total revenue row. */}
-                <TableRow className="border-t">
-                  <TableCell className="font-bold">Total revenue</TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.totalIncomeAll, kpiCurrency)}
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.totalIncomeYtd, kpiCurrency)}
-                  </TableCell>
-                </TableRow>
-                {/* Expense section — one row per expense category. Expenses
-                    come back negative from chart-data, kept negative so
-                    `formatAccounting` renders brackets. Sorted
-                    alphabetically by label. */}
-                {[...pnlRows.expenseAllTime]
-                  .sort((a, b) => a.label.localeCompare(b.label))
-                  .map((row, idx) => {
-                    const ytdMatch = pnlRows.expenseYtd.find(
-                      (r) => r.label === row.label,
-                    )
-                    return (
-                      <TableRow key={`expense-${row.label}-${idx}`}>
-                        <TableCell className="font-medium capitalize">
-                          {row.label}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatAccounting(row.total, kpiCurrency)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatAccounting(ytdMatch?.total ?? 0, kpiCurrency)}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                {/* Total expenses row (kept negative). */}
-                <TableRow className="border-t">
-                  <TableCell className="font-bold">Total expenses</TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.totalExpenseAll, kpiCurrency)}
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.totalExpenseYtd, kpiCurrency)}
-                  </TableCell>
-                </TableRow>
-                {/* Net income row. */}
-                <TableRow className="border-t-2">
-                  <TableCell className="font-bold">Net income</TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.netIncomeAll, kpiCurrency)}
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatAccounting(pnlRows.netIncomeYtd, kpiCurrency)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <MigrationPlaceholder
+        title="Profit & Loss migration pending"
+        description="Task 8 will restore the detailed P&L using the shared range, currency, and property selection."
+      />
 
       {/* Hidden export for tests / a11y tools that want the timeline label
           as plain text — keeps the dashboard's "as of" date reachable
@@ -502,9 +297,26 @@ function PortfolioSummary({ filters }: { filters: DashboardFilterState }) {
       <KpiCard label="Net income" value={money(data.net_income)} description="Selected period" />
       <KpiCard
         label="Occupancy"
-        value={<span className="tabular-nums">{data.occupancy_rate}%</span>}
+        value={
+          <span className="tabular-nums">
+            {data.occupancy_rate.toLocaleString(undefined, { maximumFractionDigits: 1 })}%
+          </span>
+        }
         description={`${data.occupied} of ${data.rental_inventory_count} rental units`}
       />
     </div>
+  )
+}
+
+function MigrationPlaceholder({ title, description }: { title: string; description: string }) {
+  return (
+    <Card className="min-h-52 border-dashed">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
   )
 }

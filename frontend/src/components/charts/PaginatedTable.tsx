@@ -87,6 +87,7 @@ export function PaginatedTable({
         <Button
           variant="outline"
           size="sm"
+          className="min-h-11"
           onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
           disabled={safePageIndex === 0}
         >
@@ -95,6 +96,7 @@ export function PaginatedTable({
         <Button
           variant="outline"
           size="sm"
+          className="min-h-11"
           onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))}
           disabled={safePageIndex >= pageCount - 1}
         >

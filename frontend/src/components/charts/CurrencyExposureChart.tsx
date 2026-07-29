@@ -181,12 +181,12 @@ export function CurrencyExposureChart({ timeline, onTimelineChange }: Props) {
       value={selectedTimeline}
       onValueChange={(v) => handleTimelineChange(v as Timeline)}
     >
-      <SelectTrigger className="h-8 w-[150px]" aria-label="Currency exposure timeline">
+      <SelectTrigger className="min-h-11 w-[150px]" aria-label="Currency exposure timeline">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {TIMELINE_OPTIONS.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
+          <SelectItem className="min-h-11" key={o.value} value={o.value}>
             {o.label}
           </SelectItem>
         ))}

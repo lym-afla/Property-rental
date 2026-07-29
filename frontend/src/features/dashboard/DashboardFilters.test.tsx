@@ -88,6 +88,27 @@ describe('DashboardFilters', () => {
     expect(within(sheet).getByRole('checkbox', { name: 'Birch House' })).toBeChecked()
   })
 
+  it('keeps the 390px layout unclipped and restores focus when the mobile sheet dismisses', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    render(<StatefulFilters />)
+
+    const toolbar = screen.getByLabelText('Global dashboard filters')
+    expect(toolbar.firstElementChild).toHaveClass('grid-cols-2')
+    expect(screen.getByLabelText('Start date')).not.toHaveClass('hidden')
+    expect(screen.getByLabelText('As of date')).not.toHaveClass('hidden')
+    expect(screen.getByLabelText('Reporting currency')).not.toHaveClass('hidden')
+
+    const trigger = screen.getByRole('button', { name: 'Filters' })
+    await user.click(trigger)
+    const sheet = screen.getByRole('dialog', { name: 'Dashboard filters' })
+    expect(sheet).toContainElement(document.activeElement as HTMLElement)
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Dashboard filters' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
   it('provides deterministic reset behavior', async () => {
     const user = userEvent.setup()
     const onReset = vi.fn()

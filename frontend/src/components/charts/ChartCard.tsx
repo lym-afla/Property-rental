@@ -28,7 +28,12 @@ export function ChartCard({ title, description, controls, tableData, tableRender
         <div className="flex items-center gap-2">
           {controls}
           {tableData && (
-            <Button variant="ghost" size="sm" onClick={() => setShowTable(!showTable)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-11"
+              onClick={() => setShowTable(!showTable)}
+            >
               {showTable ? 'Chart' : 'Table'}
             </Button>
           )}

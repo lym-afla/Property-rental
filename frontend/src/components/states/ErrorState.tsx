@@ -30,7 +30,7 @@ export function ErrorState({
       </div>
       <p className="text-sm text-muted-foreground">{message}</p>
       {onRetry ? (
-        <Button variant="outline" onClick={onRetry}>
+        <Button variant="outline" className="min-h-11" onClick={onRetry}>
           <RefreshCw className="size-4" />
           {retryLabel}
         </Button>
