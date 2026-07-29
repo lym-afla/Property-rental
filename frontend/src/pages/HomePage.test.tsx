@@ -66,17 +66,17 @@ const cashFlow = {
   metric: 'portfolio_cash_flow', grain: 'month', currency: 'USD', scale: 1,
   start: '2026-01-01', end: '2026-07-29',
   series: [
-    { key: 'rent', label: 'Rent', kind: 'income' },
-    { key: 'utilities', label: 'Utilities', kind: 'expense' },
-    { key: 'total_income', label: 'Total income', kind: 'income' },
-    { key: 'total_expenses', label: 'Total expenses', kind: 'expense' },
+    { key: 'rent', label: 'Rent', kind: 'income_category' },
+    { key: 'utilities', label: 'Utilities', kind: 'expense_category' },
+    { key: 'total_income', label: 'Total income', kind: 'income_total' },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'expense_total' },
     { key: 'net_income', label: 'Net income', kind: 'net' },
     { key: 'cumulative_net_income', label: 'Cumulative net income', kind: 'cumulative' },
   ],
   points: [{ period_start: '2026-01-01', period_end: '2026-01-31', rent: 1500, utilities: -250, total_income: 1500, total_expenses: -250, net_income: 1250, cumulative_net_income: 1250 }],
 } as const
 
-const expenses = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'utilities', label: 'Utilities', kind: 'expense' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', utilities: -250 }] } as const
+const expenses = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'utilities', label: 'Utilities', kind: 'expense_category' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', utilities: -250 }] } as const
 
 function LocationProbe() {
   const location = useLocation()

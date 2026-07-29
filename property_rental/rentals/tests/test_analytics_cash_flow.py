@@ -47,6 +47,14 @@ def test_cash_flow_returns_raw_signed_values(landlord_user, sample_property):
     )
 
     assert result.scale == 1
+    assert [(series.key, series.kind) for series in result.series] == [
+        ("rent", "income_category"),
+        ("utilities", "expense_category"),
+        ("total_income", "income_total"),
+        ("total_expenses", "expense_total"),
+        ("net_income", "net"),
+        ("cumulative_net_income", "cumulative"),
+    ]
     assert result.points == (
         {
             "period_start": date(2026, 1, 1),
@@ -168,7 +176,7 @@ def test_expense_drivers_exclude_income_and_define_expense_kind(
     )
 
     assert [(series.key, series.kind) for series in result.series] == [
-        ("utilities", "expense")
+        ("utilities", "expense_category")
     ]
     assert result.points == (
         {

@@ -6,7 +6,7 @@ import { ExpenseDriversChart } from './ExpenseDriversChart'
 
 vi.mock('recharts', async (importOriginal) => ({ ...(await importOriginal<typeof import('recharts')>()), ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 
-const data = { metric: 'expense_drivers' as const, grain: 'month' as const, currency: 'USD', scale: 1 as const, start: '2026-01-01', end: '2026-03-31', series: [{ key: 'major_repairs', label: 'Major repairs and long-running maintenance', kind: 'expense' }, { key: 'utilities', label: 'Utilities', kind: 'expense' }], points: [
+const data = { metric: 'expense_drivers' as const, grain: 'month' as const, currency: 'USD', scale: 1 as const, start: '2026-01-01', end: '2026-03-31', series: [{ key: 'major_repairs', label: 'Major repairs and long-running maintenance', kind: 'expense_category' }, { key: 'utilities', label: 'Utilities', kind: 'expense_category' }], points: [
   { period_start: '2026-01-01', period_end: '2026-01-31', major_repairs: -1000, utilities: -100 },
   { period_start: '2026-02-01', period_end: '2026-02-28', major_repairs: -500, utilities: -250 },
   { period_start: '2026-03-01', period_end: '2026-03-31', major_repairs: -500, utilities: -200 },

@@ -9,7 +9,7 @@ import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 
 import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisualTokens, type ChartDataProps } from './chartUtils'
 
-const TREND_KINDS = new Set(['income', 'expense'])
+const TREND_KINDS = new Set(['income_total', 'expense_total'])
 
 export function RevenueExpenseTrendChart({ data, isLoading, isError, onRetry }: ChartDataProps) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())

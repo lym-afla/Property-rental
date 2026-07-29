@@ -93,7 +93,11 @@ def _category_series(category_keys):
         SeriesDefinition(
             key=key,
             label=_CATEGORY_LABELS[key],
-            kind="income" if key in INCOME_CATEGORIES else "expense",
+            kind=(
+                "income_category"
+                if key in INCOME_CATEGORIES
+                else "expense_category"
+            ),
         )
         for key in category_keys
     )
@@ -150,8 +154,8 @@ def portfolio_cash_flow(user, filters):
         end=filters.end,
         series=_category_series(category_keys)
         + (
-            SeriesDefinition("total_income", "Total income", "income"),
-            SeriesDefinition("total_expenses", "Total expenses", "expense"),
+            SeriesDefinition("total_income", "Total income", "income_total"),
+            SeriesDefinition("total_expenses", "Total expenses", "expense_total"),
             SeriesDefinition("net_income", "Net income", "net"),
             SeriesDefinition(
                 "cumulative_net_income", "Cumulative net income", "cumulative"

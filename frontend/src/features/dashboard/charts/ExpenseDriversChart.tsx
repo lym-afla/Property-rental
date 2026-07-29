@@ -9,7 +9,7 @@ import { chartState, type ChartDataProps } from './chartUtils'
 
 export function ExpenseDriversChart({ data, isLoading, isError, onRetry }: ChartDataProps) {
   const rows = data ? data.series
-    .filter((item) => item.kind === 'expense')
+    .filter((item) => item.kind === 'expense_category')
     .map((item) => ({ key: item.key, category: item.label, total: Math.abs(data.points.reduce((sum, point) => sum + Number(point[item.key] ?? 0), 0)) }))
     .filter((row) => row.total > 0)
     .sort((left, right) => right.total - left.total)

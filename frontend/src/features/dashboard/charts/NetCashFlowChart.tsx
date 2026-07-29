@@ -13,10 +13,10 @@ type Props = ChartDataProps & {
   onDrillDown?: (drillDown: DrillDown) => void
 }
 
-const CASH_FLOW_KINDS = new Set(['income', 'expense'])
+const CASH_FLOW_CATEGORY_KINDS = new Set(['income_category', 'expense_category'])
 
 function categorySeries(data: PortfolioChartData) {
-  return data.series.filter((item) => CASH_FLOW_KINDS.has(item.kind))
+  return data.series.filter((item) => CASH_FLOW_CATEGORY_KINDS.has(item.kind))
 }
 
 export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyIds = [], onDrillDown }: Props) {

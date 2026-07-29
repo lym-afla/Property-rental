@@ -84,8 +84,10 @@ def test_cash_flow_emits_explicit_series_kinds(auth_client, sample_property):
 
     assert response.status_code == 200
     kinds = {item["key"]: item["kind"] for item in response.json()["series"]}
-    assert kinds["rent"] == "income"
-    assert kinds["utilities"] == "expense"
+    assert kinds["rent"] == "income_category"
+    assert kinds["utilities"] == "expense_category"
+    assert kinds["total_income"] == "income_total"
+    assert kinds["total_expenses"] == "expense_total"
     assert kinds["net_income"] == "net"
 
 
@@ -114,5 +116,5 @@ def test_expense_drivers_emits_only_expense_series(auth_client, sample_property)
 
     assert response.status_code == 200
     assert response.json()["series"] == [
-        {"key": "utilities", "label": "Utilities", "kind": "expense"}
+        {"key": "utilities", "label": "Utilities", "kind": "expense_category"}
     ]

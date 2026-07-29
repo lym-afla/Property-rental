@@ -46,7 +46,7 @@ const cashFlowFixture = {
   start: '2026-01-01',
   end: '2026-07-29',
   series: [
-    { key: 'rent', label: 'Rent', kind: 'income' },
+    { key: 'rent', label: 'Rent', kind: 'income_category' },
     { key: 'net_income', label: 'Net income', kind: 'net' },
   ],
   points: [
@@ -62,7 +62,7 @@ const cashFlowFixture = {
 const expenseFixture = {
   ...cashFlowFixture,
   metric: 'expense_drivers',
-  series: [{ key: 'utilities', label: 'Utilities', kind: 'expense' }],
+  series: [{ key: 'utilities', label: 'Utilities', kind: 'expense_category' }],
   points: [
     {
       period_start: '2026-01-01',
