@@ -81,13 +81,21 @@ test('loads a consistent route fallback before the dashboard chunk resolves', as
   await navigation
 })
 
-test('restores every dashboard filter from a copied URL', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Risk' }).click()
-  const copiedDashboardUrl = page.url()
-  await page.reload()
+test('restores every dashboard filter from a copied URL', async ({ page }, testInfo) => {
+  await page.goto('/?section=risk&start=2024-01-01&end=2024-02-29&currency=EUR&grain=quarter&comparison=previous_period&property=1&property=2')
   await expect(page.getByRole('heading', { name: 'Risk analysis' })).toBeVisible()
-  await expect(page).toHaveURL(copiedDashboardUrl)
+  await expect(page.getByLabel('Start date')).toHaveValue('2024-01-01')
+  await expect(page.getByLabel('As of date')).toHaveValue('2024-02-29')
+  await expect(page.getByLabel('Reporting currency')).toHaveText('EUR')
+  if (testInfo.project.name === 'mobile') {
+    await page.getByRole('button', { name: 'Filters', exact: true }).click()
+    await expect(page.getByLabel(properties[0].name)).toBeChecked()
+    await expect(page.getByLabel(properties[1].name)).toBeChecked()
+  } else {
+    await expect(page.getByLabel('Properties')).toHaveText('2 selected')
+  }
+  await expect(page.getByLabel('Frequency')).toHaveText('Quarterly')
+  await expect(page.getByLabel('Comparison')).toHaveText('Previous period')
 })
 
 test('keeps charts operable with keyboard and exposes exact values for long labels and mixed currencies', async ({ page }) => {
@@ -128,9 +136,29 @@ test('shows recoverable loading, error, and empty analytics states', async ({ pa
   await expect(page.getByRole('button', { name: 'Retry' }).first()).toBeVisible()
 })
 
+test('shows semantic chart loading and empty states', async ({ page }) => {
+  let releaseCashFlow: (() => void) | undefined
+  await page.route('**/api/v1/analytics/portfolio/cash-flow/**', async (route) => {
+    await new Promise<void>((resolve) => { releaseCashFlow = resolve })
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(cashFlow) })
+  })
+  const navigation = page.goto('/')
+  await expect(page.getByLabel('Net cash flow loading')).toBeVisible()
+  releaseCashFlow?.()
+  await navigation
+
+  await page.route('**/api/v1/analytics/portfolio/cash-flow/**', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...cashFlow, points: [] }) }),
+  )
+  await page.reload()
+  await expect(page.getByText('No Net cash flow data for this selection.')).toBeVisible()
+})
+
 test('navigates from a property to its valuation history', async ({ page }) => {
   await page.goto('/properties/1')
   await expect(page.getByText(properties[0].name, { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Table' }).click()
+  await expect(page.getByRole('table', { name: 'Property valuation exact values' })).toContainText('€250,000')
   await page.getByRole('tab', { name: 'Valuations' }).click()
   await expect(page.getByRole('tab', { name: 'Valuations' })).toHaveAttribute('data-state', 'active')
 })
