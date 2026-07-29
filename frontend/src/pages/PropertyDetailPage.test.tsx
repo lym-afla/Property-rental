@@ -13,7 +13,7 @@
 // `useParams` only returns a value when the page is rendered inside a
 // matching `<Route path="/properties/:id">`, so the test wrapper includes
 // the route definition rather than just `<MemoryRouter>`.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -23,6 +23,13 @@ import { http, HttpResponse } from 'msw'
 import { PropertyDetailPage } from './PropertyDetailPage'
 import { server } from '@/test/handlers'
 import { fixtureProperty } from '@/__fixtures__/property'
+
+vi.mock('@/context/SessionProvider', () => ({
+  useSession: () => ({
+    user: { effective_date: '2026-07-29' },
+    isLoading: false,
+  }),
+}))
 
 function renderPage(route = '/properties/1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -57,12 +64,23 @@ describe('PropertyDetailPage', () => {
   })
 
   it('renders the Overview tab with P&L labels', async () => {
+    server.use(
+      http.get('/api/v1/analytics/portfolio/summary/', () =>
+        HttpResponse.json({
+          currency: 'EUR', scale: 1, start: '2026-01-01', end: '2026-07-29',
+          property_count: 1, rental_inventory_count: 1, occupied: 1,
+          occupancy_rate: 100, revenue: 300, costs: 100, net_income: 200,
+          property_value: null, debt: null, equity: null,
+          valuation_status: 'missing_valuation',
+          property_value_status: 'missing_valuation', debt_status: 'missing_valuation',
+        }),
+      ),
+    )
     renderPage()
-    // The aggregate Stat tiles were removed; the P&L card now carries a
-    // "Total revenue" / "Total expenses" / "Net income" summary plus
-    // per-category rows derived from the property's transactions.
     expect(await screen.findByText(/profit & loss/i)).toBeInTheDocument()
-    expect(screen.getByText(/net income/i)).toBeInTheDocument()
+    expect(await screen.findByText('€300')).toBeInTheDocument()
+    expect(screen.getByText('€100')).toBeInTheDocument()
+    expect(screen.getByText('€200')).toBeInTheDocument()
   })
 
   it('switches to the Valuations tab on click', async () => {

@@ -12,7 +12,6 @@ const initialFilters: DashboardFilterState = {
   end: '2026-07-29',
   currency: 'USD',
   grain: 'month',
-  comparison: null,
   propertyIds: [],
   exposureMeasure: 'property_value',
 }
@@ -78,7 +77,7 @@ describe('DashboardFilters', () => {
     const end = screen.getByLabelText('As of date')
     const currency = screen.getByLabelText('Reporting currency')
     const grain = screen.getByLabelText('Frequency')
-    expect(screen.getByLabelText('Comparison')).toBeVisible()
+    expect(screen.queryByLabelText('Comparison')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Properties' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument()
 
@@ -115,10 +114,7 @@ describe('DashboardFilters', () => {
     const sheet = screen.getByRole('dialog', { name: 'Dashboard filters' })
     expect(sheet).toHaveAttribute('data-side', 'bottom')
 
-    const comparison = within(sheet).getByLabelText('Comparison')
-    await user.click(comparison)
-    await user.click(screen.getByRole('option', { name: 'Previous period' }))
-    expect(comparison).toHaveTextContent('Previous period')
+    expect(within(sheet).queryByLabelText('Comparison')).not.toBeInTheDocument()
 
     await user.click(within(sheet).getByRole('checkbox', { name: 'Birch House' }))
     expect(within(sheet).getByRole('checkbox', { name: 'Birch House' })).toBeChecked()
@@ -151,7 +147,7 @@ describe('DashboardFilters', () => {
     await user.click(trigger)
     const sheet = screen.getByRole('dialog', { name: 'Dashboard filters' })
     expect(within(sheet).getAllByLabelText('Frequency')).toHaveLength(1)
-    expect(within(sheet).getAllByLabelText('Comparison')).toHaveLength(1)
+    expect(within(sheet).queryByLabelText('Comparison')).not.toBeInTheDocument()
     expect(within(sheet).getByRole('checkbox', { name: 'Birch House' })).toBeVisible()
     expect(sheet).toContainElement(document.activeElement as HTMLElement)
 

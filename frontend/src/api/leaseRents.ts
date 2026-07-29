@@ -45,6 +45,7 @@ export function useCreateLeaseRent() {
       // write here makes the cached tenant rows (including the
       // `with_stats` aggregates) stale.
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -60,6 +61,7 @@ export function useUpdateLeaseRent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.leaseRents.all })
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -72,6 +74,7 @@ export function useDeleteLeaseRent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.leaseRents.all })
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }

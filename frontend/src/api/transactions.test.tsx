@@ -68,6 +68,9 @@ describe('useCreateTransaction', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.analytics.all,
+    })
   })
 })
 

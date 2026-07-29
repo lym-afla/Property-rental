@@ -6,8 +6,7 @@
 //   - Header card: name / location / currency + key stats (bedrooms, area,
 //     sold status) with Edit / Delete actions for the property itself.
 //   - Tabs (shadcn):
-//       * "Overview" — P&L breakdown derived from this property's
-//         transactions (income / expenses / net) plus a recent-transactions
+//       * "Overview" — server-calculated YTD P&L plus a recent-transactions
 //         subset rendered through `DataTable`.
 //       * "Valuations" — full `Property_capital_structure` list for the
 //         property via `DataTable`, with create / edit / delete wired
@@ -20,10 +19,9 @@
 //   - `EntityFormDialog` takes `title` + `children` (the form), not a
 //     render-prop — we wire mutations inside each form's `onSubmit` and
 //     close the dialog on success, mirroring PropertiesPage.
-//   - `useProperty(id)` returns the plain `Property` shape (no stats), so
-//     the P&L numbers are computed client-side from `useTransactions({
-//     property: id })`. This keeps the page self-contained and avoids a
-//     second `usePropertiesWithStats()` round-trip just to find one row.
+//   - `useProperty(id)` returns the plain `Property` shape (no stats), while
+//     `usePortfolioSummary()` provides the scoped P&L totals in the property's
+//     natural currency through the shared analytics contract.
 //   - `usePropertyValuations(propertyId)` already filters server-side via
 //     `?property=<id>`, so no client-side filter is needed.
 import { useMemo, useState } from 'react'
@@ -44,7 +42,8 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
-import { usePropertyValuationAnalytics } from '@/api/analytics'
+import { usePortfolioSummary, usePropertyValuationAnalytics } from '@/api/analytics'
+import { useSession } from '@/context/SessionProvider'
 import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
@@ -80,12 +79,6 @@ import type { PropertyValuation } from '@/types/propertyValuation'
 // recent activity for at-a-glance context.
 const RECENT_TRANSACTIONS_LIMIT = 5
 
-// Income vs expense classification — mirrors `rentals/constants.py`.
-// Only `rent` is income; `cost_reimbursement` (formerly `other_income`)
-// is an expense-category offset (positive amount that nets against the
-// other expense categories).
-const INCOME_CATEGORIES = ['rent']
-
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -96,12 +89,21 @@ export function PropertyDetailPage() {
   const propertyId = Number(id)
 
   const propertyQuery = useProperty(propertyId)
+  const { user } = useSession()
   const valuationsQuery = usePropertyValuations(propertyId)
   const transactionsQuery = useTransactions({ property: propertyId })
 
   // The valuation endpoint returns complete record history. Deliberately do
   // not pass an end date or derive a client-side five-year cutoff.
   const valuationAnalyticsQuery = usePropertyValuationAnalytics(propertyId)
+  const performanceEnd = user?.effective_date ?? new Date().toISOString().slice(0, 10)
+  const propertyPerformanceQuery = usePortfolioSummary({
+    start: `${performanceEnd.slice(0, 4)}-01-01`,
+    end: performanceEnd,
+    currency: propertyQuery.data?.currency,
+    grain: 'year',
+    propertyIds: Number.isFinite(propertyId) && propertyId > 0 ? [propertyId] : [],
+  })
 
   const updateProperty = useUpdateProperty()
   const deleteProperty = useDeleteProperty()
@@ -134,70 +136,6 @@ export function PropertyDetailPage() {
   const latestValue = latestValuation
     ? Number(latestValuation.capital_structure_value)
     : null
-
-  // P&L breakdown computed client-side from the property's transactions.
-  // `Transaction.amount` is a stringified decimal (positive = income,
-  // negative = expense); we group by category and split into all-time vs
-  // YTD windows so the P&L table matches the dashboard's two-column
-  // layout.
-  //
-  // YTD window: `Transaction.date` is the authoritative accounting date —
-  // the optional `period` field is just a label that can drift out of
-  // sync (especially for back-dated or forward-dated rent postings). The
-  // previous code fell back to `period` first, which let a transaction
-  // with a current-year `period` but a prior-year `date` leak into YTD,
-  // inflating the YTD revenue vs the dashboard summary (which sums
-  // server-side by `date`). We now always derive the YTD window from
-  // `date` only.
-  const pnlRows = useMemo(() => {
-    const txns = transactionsQuery.data ?? []
-    const currentYear = new Date().getFullYear()
-    const byCatAll = new Map<string, number>()
-    const byCatYtd = new Map<string, number>()
-    for (const t of txns) {
-      const amount = Number(t.amount)
-      if (!Number.isFinite(amount)) continue
-      const cat = t.category || 'other'
-      byCatAll.set(cat, (byCatAll.get(cat) ?? 0) + amount)
-      // YTD is by `date`, NOT `period`. `period` is a free-text label the
-      // user can leave blank or edit independently of `date`; the
-      // dashboard's gross income figures (and the backend `with_stats`
-      // YTD aggregates) sum by `date__year`, so we match that here.
-      const txnYear = parseInt(String(t.date || '').slice(0, 4), 10)
-      if (txnYear === currentYear) {
-        byCatYtd.set(cat, (byCatYtd.get(cat) ?? 0) + amount)
-      }
-    }
-    const isIncome = (label: string) => INCOME_CATEGORIES.includes(label)
-    const build = (income: boolean, map: Map<string, number>) =>
-      Array.from(map.entries())
-        .filter(([label]) => isIncome(label) === income)
-        // T12: drop categories with zero total so empty buckets (e.g.
-        // `other_income` after the recategorization to
-        // `cost_reimbursement`) don't appear as a stray row in the P&L.
-        .filter(([, total]) => total !== 0)
-        .map(([label, total]) => ({ label, total }))
-    const incomeAll = build(true, byCatAll).sort((a, b) => a.label.localeCompare(b.label))
-    const expenseAll = build(false, byCatAll).sort((a, b) => a.label.localeCompare(b.label))
-    const incomeYtd = build(true, byCatYtd)
-    const expenseYtd = build(false, byCatYtd)
-    const totalIncomeAll = incomeAll.reduce((acc, r) => acc + r.total, 0)
-    const totalIncomeYtd = incomeYtd.reduce((acc, r) => acc + r.total, 0)
-    const totalExpenseAll = expenseAll.reduce((acc, r) => acc + r.total, 0)
-    const totalExpenseYtd = expenseYtd.reduce((acc, r) => acc + r.total, 0)
-    return {
-      incomeAll,
-      expenseAll,
-      incomeYtd,
-      expenseYtd,
-      totalIncomeAll,
-      totalIncomeYtd,
-      totalExpenseAll,
-      totalExpenseYtd,
-      netIncomeAll: totalIncomeAll + totalExpenseAll,
-      netIncomeYtd: totalIncomeYtd + totalExpenseYtd,
-    }
-  }, [transactionsQuery.data])
 
   // Most-recent first; the API may or may not pre-sort, so we sort here to
   // make the preview deterministic regardless of backend ordering. Capped
@@ -374,31 +312,27 @@ export function PropertyDetailPage() {
             <CardHeader>
               <CardTitle>Profit &amp; Loss</CardTitle>
               <CardDescription>
-                Per-category breakdown, all-time + YTD. All values in{' '}
-                {property.currency}. Expenses show as{' '}
-                <code className="rounded bg-muted px-1">{property.currency}(1,234)</code>{' '}
-                (accounting format).
+                Server-calculated year-to-date performance through {performanceEnd}.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Per-category P&L table. Two columns (All-time + YTD).
-                  Income categories first, then "Total revenue", then
-              expense categories (kept negative), then "Total
-                  expenses" and "Net income". */}
-              {transactionsQuery.isLoading ? (
+            <CardContent>
+              {propertyPerformanceQuery.isLoading ? (
                 <Skeleton className="h-40 w-full" />
-              ) : transactionsQuery.isError ? (
+              ) : propertyPerformanceQuery.isError ? (
                 <ErrorState
                   message="Failed to load P&L"
-                  onRetry={() => transactionsQuery.refetch()}
+                  onRetry={() => propertyPerformanceQuery.refetch()}
                 />
-              ) : pnlRows.incomeAll.length === 0 &&
-                pnlRows.expenseAll.length === 0 ? (
+              ) : !propertyPerformanceQuery.data || propertyPerformanceQuery.data.property_count === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No category data available for this property yet.
+                  No performance data available for this property yet.
                 </p>
               ) : (
-                <PropertyPnLTable rows={pnlRows} currency={property.currency} />
+                <dl className="grid gap-4 sm:grid-cols-3">
+                  <Stat label="Revenue (YTD)" value={formatCurrency(propertyPerformanceQuery.data.revenue, propertyPerformanceQuery.data.currency)} />
+                  <Stat label="Costs (YTD)" value={formatCurrency(propertyPerformanceQuery.data.costs, propertyPerformanceQuery.data.currency)} />
+                  <Stat label="Net income (YTD)" value={formatCurrency(propertyPerformanceQuery.data.net_income, propertyPerformanceQuery.data.currency)} />
+                </dl>
               )}
             </CardContent>
           </Card>
@@ -666,112 +600,6 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
         {label}
       </dt>
       <dd className="text-sm font-medium">{value}</dd>
-    </div>
-  )
-}
-
-// Per-property P&L table. Two columns (All-time + YTD), same layout as
-// the dashboard P&L: income categories first, then "Total revenue", then
-// expense categories (kept negative), then "Total expenses" and
-// "Net income". `formatAccounting` renders negatives as `(1,234)` so the
-// sign convention is unambiguous. Rows are derived client-side from the
-// property's transactions (see `pnlRows` above).
-type PropertyPnLCategoryRow = { label: string; total: number }
-
-type PropertyPnLRows = {
-  incomeAll: PropertyPnLCategoryRow[]
-  expenseAll: PropertyPnLCategoryRow[]
-  incomeYtd: PropertyPnLCategoryRow[]
-  expenseYtd: PropertyPnLCategoryRow[]
-  totalIncomeAll: number
-  totalIncomeYtd: number
-  totalExpenseAll: number
-  totalExpenseYtd: number
-  netIncomeAll: number
-  netIncomeYtd: number
-}
-
-function PropertyPnLTable({
-  rows,
-  currency,
-}: {
-  rows: PropertyPnLRows
-  currency: string
-}) {
-  const ytdFor = (ytdRows: PropertyPnLCategoryRow[], label: string) =>
-    ytdRows.find((r) => r.label === label)?.total ?? 0
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Category</TableHead>
-            <TableHead className="text-right">All time</TableHead>
-            <TableHead className="text-right">YTD</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {/* Income rows */}
-          {rows.incomeAll.map((row) => (
-            <TableRow key={`income-${row.label}`}>
-              <TableCell className="font-medium capitalize">
-                {row.label}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatAccounting(row.total, currency)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatAccounting(ytdFor(rows.incomeYtd, row.label), currency)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {/* Total revenue */}
-          <TableRow className="border-t">
-            <TableCell className="font-bold">Total revenue</TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.totalIncomeAll, currency)}
-            </TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.totalIncomeYtd, currency)}
-            </TableCell>
-          </TableRow>
-          {/* Expense rows — kept negative so formatAccounting renders
-              brackets. */}
-          {rows.expenseAll.map((row) => (
-            <TableRow key={`expense-${row.label}`}>
-              <TableCell className="font-medium capitalize">
-                {row.label}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatAccounting(row.total, currency)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatAccounting(ytdFor(rows.expenseYtd, row.label), currency)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {/* Total expenses (kept negative). */}
-          <TableRow className="border-t">
-            <TableCell className="font-bold">Total expenses</TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.totalExpenseAll, currency)}
-            </TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.totalExpenseYtd, currency)}
-            </TableCell>
-          </TableRow>
-          {/* Net income */}
-          <TableRow className="border-t-2">
-            <TableCell className="font-bold">Net income</TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.netIncomeAll, currency)}
-            </TableCell>
-            <TableCell className="text-right font-bold">
-              {formatAccounting(rows.netIncomeYtd, currency)}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
     </div>
   )
 }

@@ -3,13 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { OccupancyRiskChart } from './OccupancyRiskChart'
+import type { PortfolioOccupancyResponse } from '@/types/analytics'
 
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-const data = {
+const data: PortfolioOccupancyResponse = {
   metric: 'portfolio_occupancy' as const, grain: 'month' as const, currency: null, scale: 1 as const,
   start: '2026-01-01', end: '2026-02-28',
   series: [
@@ -33,18 +34,17 @@ describe('OccupancyRiskChart', () => {
     expect(screen.getByRole('table', { name: 'Occupancy risk exact values' })).toHaveTextContent('100%')
   })
 
-  it('caps an invalid above-100 endpoint value in its rendered rate and exact table', async () => {
+  it('renders a valid server rate unchanged in its chart and exact table', async () => {
     const user = userEvent.setup()
-    const invalidRateData = {
+    const fractionalRateData = {
       ...data,
-      points: [{ ...data.points[0], occupancy_rate: 125 }],
+      points: [{ ...data.points[0], capacity: 4, occupied: 3, vacant: 1, occupancy_rate: 75 }],
     }
-    render(<OccupancyRiskChart data={invalidRateData} />)
+    render(<OccupancyRiskChart data={fractionalRateData} />)
 
-    expect(screen.getByTestId('occupancy-rate-2026-01-01')).toHaveAttribute('data-rate', '100')
-    expect(screen.queryByText('125%')).not.toBeInTheDocument()
+    expect(screen.getByTestId('occupancy-rate-2026-01-01')).toHaveAttribute('data-rate', '75')
     await user.click(screen.getByRole('button', { name: 'Table' }))
-    expect(screen.getByRole('table', { name: 'Occupancy risk exact values' })).toHaveTextContent('100%')
+    expect(screen.getByRole('table', { name: 'Occupancy risk exact values' })).toHaveTextContent('75%')
   })
 
   it('keeps capacity context and a touch-sized table control available at 390 pixels', () => {

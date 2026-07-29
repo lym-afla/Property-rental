@@ -7,6 +7,8 @@ import { YieldComparisonChart } from './YieldComparisonChart'
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ScatterChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Scatter: ({ name, shape }: { name: string; shape?: string }) => <span data-testid={`yield-${name}`} data-shape={shape} />,
 }))
 
 const data = {
@@ -37,5 +39,12 @@ describe('YieldComparisonChart', () => {
     expect(screen.getByRole('group', { name: 'Chart series' })).toHaveClass('flex-wrap')
     expect(screen.getByRole('button', { name: 'Gross yield' })).toHaveClass('min-h-11')
     vi.unstubAllGlobals()
+  })
+
+  it('applies distinct shapes to gross and net plotted points', () => {
+    render(<YieldComparisonChart data={data} />)
+    expect(screen.getByTestId('yield-Gross yield').getAttribute('data-shape')).not.toBe(
+      screen.getByTestId('yield-Net yield').getAttribute('data-shape'),
+    )
   })
 })

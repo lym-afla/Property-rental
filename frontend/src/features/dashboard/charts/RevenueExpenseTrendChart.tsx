@@ -23,7 +23,7 @@ export function RevenueExpenseTrendChart({ data, isLoading, isError, onRetry }: 
         <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
         <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
         <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
-        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={2.5} dot={false} />)}
+        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeDasharray={chartSeriesStyle(item.visualToken).strokeDasharray} strokeWidth={2.5} dot={false} />)}
       </LineChart></ResponsiveContainer>}
     </AnalyticsChartCard>
   )

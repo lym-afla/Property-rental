@@ -27,7 +27,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import type {
-  DashboardComparison,
   DashboardCurrency,
   DashboardFilterState,
   DashboardGrain,
@@ -128,7 +127,7 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
               <SheetHeader>
                 <SheetTitle>Dashboard filters</SheetTitle>
                 <SheetDescription id="dashboard-filter-description">
-                  Refine frequency, comparison, and portfolio scope.
+                  Refine frequency and portfolio scope.
                 </SheetDescription>
               </SheetHeader>
               <div className="grid gap-5 overflow-y-auto pb-4">
@@ -213,23 +212,6 @@ function AdvancedSelects({
             {GRAINS.map((grain) => (
               <SelectItem className="min-h-11" key={grain.value} value={grain.value}>{grain.label}</SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1 text-xs font-medium text-muted-foreground">
-        <span>Comparison</span>
-        <Select
-          value={filters.comparison ?? 'none'}
-          onValueChange={(comparison) =>
-            update({ comparison: comparison === 'none' ? null : comparison as DashboardComparison })
-          }
-        >
-          <SelectTrigger aria-label="Comparison" className={mobile ? 'min-h-11 w-full' : 'min-h-11 w-40'}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem className="min-h-11" value="none">No comparison</SelectItem>
-            <SelectItem className="min-h-11" value="previous_period">Previous period</SelectItem>
           </SelectContent>
         </Select>
       </div>

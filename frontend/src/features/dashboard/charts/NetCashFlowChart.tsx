@@ -4,7 +4,8 @@ import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Toolt
 import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle } from '@/components/analytics/chartTheme'
+import { ChartPatternDefs } from '@/components/analytics/ChartPatternDefs'
+import { chartPatternFill, chartSeriesStyle } from '@/components/analytics/chartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisualTokens, type ChartDataProps, type DrillDown, type PortfolioChartData } from './chartUtils'
 
@@ -42,13 +43,14 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
         <span className="sr-only" aria-label="Net cash flow zero baseline">Zero baseline shown on the chart.</span>
         <div className="min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+            <BarChart data={data.points} stackOffset="sign" margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+            <ChartPatternDefs prefix="cash-flow" />
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
             <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
             <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
-            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
+            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartPatternFill('cash-flow', item.visualToken)} stroke={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -23,6 +23,7 @@ export function useCreateFX() {
       apiFetch<FX>('/fx/', { method: 'POST', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -35,6 +36,7 @@ export function useUpdateFXRate() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -45,6 +47,7 @@ export function useDeleteFX() {
     mutationFn: (id: number) => apiFetch(`/fx/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -59,6 +62,7 @@ export function useUpdateFX() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }

@@ -12,13 +12,12 @@ const defaults: DashboardFilterState = {
   end: '2026-07-29',
   currency: 'USD',
   grain: 'month',
-  comparison: null,
   propertyIds: [],
   exposureMeasure: 'property_value',
 }
 
 describe('dashboard URL filters', () => {
-  it('round-trips section, range, currency, grain, comparison, and properties', () => {
+  it('round-trips section, range, currency, grain, and properties', () => {
     const parsed = parseDashboardFilters(
       new URLSearchParams(
         'section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&comparison=previous_period&property=3&property=1&property=3&measure=debt',
@@ -32,12 +31,11 @@ describe('dashboard URL filters', () => {
       end: '2026-07-29',
       currency: 'GBP',
       grain: 'quarter',
-      comparison: 'previous_period',
       propertyIds: [1, 3],
       exposureMeasure: 'debt',
     })
     expect(serializeDashboardFilters(parsed).toString()).toBe(
-      'section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&comparison=previous_period&property=1&property=3&measure=debt',
+      'section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&property=1&property=3&measure=debt',
     )
   })
 
@@ -78,7 +76,7 @@ describe('dashboard URL filters', () => {
 
   it('serializes defaults explicitly so a copied URL restores the same view', () => {
     expect(serializeDashboardFilters(defaults).toString()).toBe(
-      'section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value',
+      'section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&property=&measure=property_value',
     )
   })
 
@@ -92,15 +90,13 @@ describe('dashboard URL filters', () => {
     expect(propertyIds).toEqual([5, 2, 5])
   })
 
-  it('encodes explicit none and empty selections when they differ from defaults', () => {
+  it('encodes an explicit empty property selection when it differs from defaults', () => {
     const authenticatedDefaults: DashboardFilterState = {
       ...defaults,
-      comparison: 'previous_period',
       propertyIds: [4],
     }
     const filters: DashboardFilterState = {
       ...authenticatedDefaults,
-      comparison: null,
       propertyIds: [],
     }
 

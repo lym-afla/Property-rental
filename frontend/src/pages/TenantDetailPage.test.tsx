@@ -1,10 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { TenantDetailPage } from './TenantDetailPage'
 import { server } from '@/test/handlers'
+
+vi.mock('@/context/SessionProvider', () => ({
+  useSession: () => ({
+    user: { effective_date: '2024-01-31' },
+    isLoading: false,
+  }),
+}))
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -27,9 +34,11 @@ describe('TenantDetailPage (smoke)', () => {
   })
 
   it('uses the typed rent-performance endpoint for the detail chart', async () => {
+    let requestedEnd: string | null = null
     server.use(
-      http.get('/api/v1/analytics/tenants/1/rent-performance/', () =>
-        HttpResponse.json({
+      http.get('/api/v1/analytics/tenants/1/rent-performance/', ({ request }) => {
+        requestedEnd = new URL(request.url).searchParams.get('end')
+        return HttpResponse.json({
           metric: 'tenant_rent_performance', grain: 'month', currency: 'EUR', scale: 1,
           start: '2024-01-01', end: '2024-01-31', opening_arrears: 0,
           opening_issues: [], status: 'ok', issues: [],
@@ -43,10 +52,12 @@ describe('TenantDetailPage (smoke)', () => {
             period_start: '2024-01-01', period_end: '2024-01-31', expected: 800,
             received: 800, variance: 0, cumulative_arrears: 0, status: 'ok', issues: [],
           }],
-        }),
-      ),
+        })
+      }),
     )
     renderPage()
     expect(await screen.findByText('Reporting period: 2024-01-01 to 2024-01-31')).toBeInTheDocument()
+    expect(requestedEnd).toBe('2024-01-31')
+    expect(screen.queryByText('Net income (all-time)')).not.toBeInTheDocument()
   })
 })

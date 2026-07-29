@@ -36,6 +36,7 @@ export function useCreatePropertyValuation() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.propertyValuations.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -56,6 +57,7 @@ export function useUpdatePropertyValuation() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.propertyValuations.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -67,6 +69,7 @@ export function useDeletePropertyValuation() {
       apiFetch(`/property-valuations/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.propertyValuations.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }

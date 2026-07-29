@@ -5,8 +5,8 @@
 // Layout:
 //   - Header card: tenant name + property name + lease dates + rent rate
 //     + debt + status badge, with Edit / Update rent / Vacate actions.
-//   - Overview section: Rent & debt card (revenue + net income all-time
-//     and YTD), typed rent-performance analytics, and the 5 most-recent transactions for
+//   - Overview section: server-provided rent and debt statistics, typed
+//     rent-performance analytics, and the 5 most-recent transactions for
 //     THIS tenant (filtered server-side via `?tenant=<id>`).
 //
 // Charts: the Overview section mounts RentPerformanceChart with the
@@ -39,6 +39,7 @@ import {
 import { useProperty } from '@/api/properties'
 import { useTransactions } from '@/api/transactions'
 import { useTenantRentPerformance } from '@/api/analytics'
+import { useSession } from '@/context/SessionProvider'
 import { RentPerformanceChart } from '@/features/tenant/RentPerformanceChart'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
@@ -102,6 +103,7 @@ const STATUS_VARIANT: Record<
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useSession()
 
   const tenantId = Number(id)
 
@@ -124,10 +126,9 @@ export function TenantDetailPage() {
   // Use server-provided expected, received, variance, and arrears values.
   // The start is the lease start once available; no React-side financial
   // calculation is used by the chart.
-  const todayStr = new Date().toISOString().slice(0, 10)
   const rentPerformanceQuery = useTenantRentPerformance(tenantId, {
-    start: tenantQuery.data?.lease_start ?? todayStr,
-    end: todayStr,
+    start: tenantQuery.data?.lease_start ?? user?.effective_date ?? undefined,
+    end: user?.effective_date ?? undefined,
     grain: 'month',
   })
 
@@ -155,28 +156,6 @@ export function TenantDetailPage() {
     const txns = [...(transactionsQuery.data ?? [])]
     txns.sort((a, b) => b.date.localeCompare(a.date))
     return txns.slice(0, RECENT_TRANSACTIONS_LIMIT)
-  }, [transactionsQuery.data])
-
-  // Net income (all-time + YTD) for this tenant, computed from this
-  // tenant's transactions (Task 21). Tenant stats only expose
-  // `revenue_*` (rent-only) and `debt`, so for a proper income-minus-
-  // expense number we sum the transactions directly. Transactions are
-  // stored in their original currency; we sum naively across currencies
-  // here (mirroring how the property detail P&L handles a single
-  // property — the tenant's transactions all reference one property, so
-  // the currency is uniform in practice).
-  const netIncome = useMemo(() => {
-    const txns = transactionsQuery.data ?? []
-    let all = 0
-    let ytd = 0
-    const yearPrefix = new Date().getFullYear().toString()
-    for (const t of txns) {
-      const amount = Number(t.amount)
-      if (!Number.isFinite(amount)) continue
-      all += amount
-      if (t.date.startsWith(yearPrefix)) ytd += amount
-    }
-    return { allTime: all, ytd }
   }, [transactionsQuery.data])
 
   // ---- Render guards -------------------------------------------------------
@@ -300,20 +279,10 @@ export function TenantDetailPage() {
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
               <CardDescription>
-                Lifetime revenue and net income for this tenant. Currency
-                shown in {currency || '—'}.
+                Server-calculated rent, revenue, and debt. Currency shown in {currency || '—'}.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Net income (all-time + YTD) shown alongside revenue.
-                  Net income is computed client-side from this tenant's
-                  transactions (income minus expenses, filtered to this
-                  tenant only via `useTransactions({ tenant: id })`); the
-                  stats endpoint only exposes revenue + debt. Negative
-                  values (tenant's expenses exceeded rent collected in
-                  the window) render in accounting format with the
-                  currency sign (e.g. `₽(85,000)`), consistent with the
-                  Transactions page convention. */}
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat
                   label="Revenue (all-time)"
@@ -332,12 +301,12 @@ export function TenantDetailPage() {
                   }
                 />
                 <Stat
-                  label="Net income (all-time)"
-                  value={formatAccounting(netIncome.allTime, currency)}
+                  label="Current rent"
+                  value={stats ? formatAccounting(stats.rent_rate, currency) : '—'}
                 />
                 <Stat
-                  label="Net income (YTD)"
-                  value={formatAccounting(netIncome.ytd, currency)}
+                  label="Outstanding debt"
+                  value={stats ? formatAccounting(stats.debt, currency) : '—'}
                 />
               </dl>
             </CardContent>

@@ -57,15 +57,15 @@ jobs:
         working-directory: frontend
 
   frontend-e2e:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    env:
+      PW_CHANNEL: chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: npm ci
-        working-directory: frontend
-      - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend

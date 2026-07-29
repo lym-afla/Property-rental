@@ -94,6 +94,9 @@ describe('useCreateProperty', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.properties.withStats(),
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.analytics.all,
+    })
   })
 })
 

@@ -27,6 +27,7 @@ from rentals.api.analytics_serializers import (
     YieldResponseSerializer,
 )
 from rentals.utils import get_effective_date
+from rentals.services.fx import MissingFXRate
 
 
 class _ValuationEndSerializer(serializers.Serializer):
@@ -35,6 +36,14 @@ class _ValuationEndSerializer(serializers.Serializer):
 
 class _PortfolioAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def handle_exception(self, exc):
+        if isinstance(exc, MissingFXRate):
+            return Response(
+                {"code": "missing_fx", "detail": str(exc)},
+                status=422,
+            )
+        return super().handle_exception(exc)
 
     def filters(self, request, extra_query_params=()):
         allowed = {

@@ -13,8 +13,8 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   Tooltip: () => null,
   ReferenceLine: () => null,
-  Bar: ({ name }: { name: string }) => <span>{name} bars</span>,
-  Line: ({ name }: { name: string }) => <span>{name} line</span>,
+  Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`rent-bar-${name}`} data-fill={fill}>{name} bars</span>,
+  Line: ({ name, strokeDasharray }: { name: string; strokeDasharray?: string }) => <span data-testid={`rent-line-${name}`} data-dash={strokeDasharray ?? 'solid'}>{name} line</span>,
 }))
 
 const data: TenantRentPerformanceResponse = {
@@ -47,6 +47,13 @@ describe('RentPerformanceChart', () => {
     expect(screen.getByText('Expected rent line')).toBeInTheDocument()
     expect(screen.getByText('Received rent bars')).toBeInTheDocument()
     expect(screen.getByText('Cumulative arrears line')).toBeInTheDocument()
+    expect(screen.getByTestId('rent-bar-Received rent').getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByTestId('rent-bar-Received rent').getAttribute('data-fill')).not.toBe(
+      screen.getByTestId('rent-bar-Variance').getAttribute('data-fill'),
+    )
+    expect(screen.getByTestId('rent-line-Expected rent').getAttribute('data-dash')).not.toBe(
+      screen.getByTestId('rent-line-Cumulative arrears').getAttribute('data-dash'),
+    )
     expect(screen.getByText('Reporting period: 2026-01-01 to 2026-03-31')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
     const table = screen.getByRole('table', { name: /tenant rent performance exact values/i })

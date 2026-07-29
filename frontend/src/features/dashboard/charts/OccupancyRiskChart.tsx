@@ -4,12 +4,10 @@ import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analy
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartVisualTokens } from '@/components/analytics/chartTheme'
 import { formatDate } from '@/lib/format'
-type OccupancyData = {
-  points: Array<{ period_start: string; period_end: string; [key: string]: string | number | null }>
-}
+import type { PortfolioOccupancyResponse } from '@/types/analytics'
 
 type Props = {
-  data?: OccupancyData
+  data?: PortfolioOccupancyResponse
   isLoading?: boolean
   isError?: boolean
   onRetry?: () => void
@@ -26,14 +24,10 @@ function formatRate(value: number | null | undefined) {
   return typeof value === 'number' ? `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%` : '—'
 }
 
-function boundedRate(value: string | number | null | undefined) {
-  return typeof value === 'number' ? Math.max(0, Math.min(100, value)) : value ?? null
-}
-
 export function OccupancyRiskChart(props: Props) {
   const { data } = props
   const state = occupancyState(props)
-  const points: OccupancyData['points'] = data?.points.map((point): OccupancyData['points'][number] => ({ ...point, occupancy_rate: boundedRate(point.occupancy_rate) })) ?? []
+  const points = data?.points ?? []
   const table = data ? {
     columns: [{ key: 'period', label: 'Period' }, { key: 'occupancy', label: 'Occupancy', numeric: true }, { key: 'occupied', label: 'Occupied', numeric: true }, { key: 'vacant', label: 'Vacant', numeric: true }, { key: 'capacity', label: 'Capacity', numeric: true }],
     rows: points.map((point) => ({ period: formatDate(point.period_start), occupancy: formatRate(point.occupancy_rate as number | null), occupied: point.occupied ?? '—', vacant: point.vacant ?? '—', capacity: point.capacity ?? '—' })),

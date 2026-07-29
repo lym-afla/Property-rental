@@ -46,6 +46,7 @@ export function useCreateProperty() {
       // the call site even if the parent shape changes later.
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
       qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -58,6 +59,7 @@ export function useUpdateProperty() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
       qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -70,6 +72,7 @@ export function useDeleteProperty() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.properties.all })
       qc.invalidateQueries({ queryKey: queryKeys.properties.withStats() })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }

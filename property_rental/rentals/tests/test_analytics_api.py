@@ -6,7 +6,11 @@ from decimal import Decimal
 import pytest
 from django.test import Client
 
-from rentals.tests.factories import PropertyFactory, TransactionFactory
+from rentals.tests.factories import (
+    PropertyCapitalStructureFactory,
+    PropertyFactory,
+    TransactionFactory,
+)
 
 
 @pytest.mark.django_db
@@ -118,3 +122,61 @@ def test_expense_drivers_emits_only_expense_series(auth_client, sample_property)
     assert response.json()["series"] == [
         {"key": "utilities", "label": "Utilities", "kind": "expense_category"}
     ]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("path", "extra_params"),
+    [
+        ("/api/v1/analytics/portfolio/cash-flow/", {}),
+        ("/api/v1/analytics/portfolio/expenses/", {}),
+        ("/api/v1/analytics/portfolio/summary/", {}),
+        ("/api/v1/analytics/portfolio/property-contribution/", {}),
+        ("/api/v1/analytics/portfolio/yields/", {}),
+        (
+            "/api/v1/analytics/portfolio/currency-exposure/",
+            {"measure": "rental_income"},
+        ),
+    ],
+)
+def test_portfolio_endpoints_return_typed_non_500_when_fx_is_missing(
+    auth_client, landlord_user, path, extra_params
+):
+    """An absent conversion rate must be actionable API data, never a server error."""
+    property_eur = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        currency="EUR",
+    )
+    PropertyCapitalStructureFactory(
+        property=property_eur,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+    TransactionFactory(
+        property=property_eur,
+        category="rent",
+        amount=Decimal("1000.00"),
+        date=date(2026, 1, 10),
+        currency="EUR",
+    )
+    TransactionFactory(
+        property=property_eur,
+        category="utilities",
+        amount=Decimal("-100.00"),
+        date=date(2026, 1, 12),
+        currency="EUR",
+    )
+
+    response = auth_client.get(
+        path,
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "currency": "USD",
+            **extra_params,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "missing_fx"

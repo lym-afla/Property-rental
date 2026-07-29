@@ -58,7 +58,6 @@ function dashboardDefaults(user: User | null): DashboardFilterState {
     end,
     currency,
     grain,
-    comparison: null,
     propertyIds: [],
     exposureMeasure: 'property_value',
   }
@@ -81,21 +80,6 @@ export function HomePage() {
 
 function DashboardContent({ filters, onFiltersChange }: { filters: DashboardFilterState; onFiltersChange: (next: DashboardFilterState) => void }) {
   const navigate = useNavigate()
-  const range = { from: filters.start, to: filters.end }
-  const analyticsParams = {
-    start: range.from,
-    end: range.to,
-    currency: filters.currency,
-    grain: filters.grain,
-    propertyIds: filters.propertyIds,
-  }
-  const cashFlowQuery = usePortfolioCashFlow(analyticsParams)
-  const expenseQuery = useExpenseDrivers(analyticsParams)
-  const contributionQuery = usePropertyContribution(analyticsParams)
-  const yieldsQuery = usePropertyYields(analyticsParams)
-  const exposureQuery = useCurrencyExposure({ ...analyticsParams, measure: filters.exposureMeasure })
-  const occupancyQuery = usePortfolioOccupancy(analyticsParams)
-
   const onDrillDown = ({ from, to, category, currency, propertyIds }: DrillDown) => {
     const params = new URLSearchParams({ from, to, category, currency })
     for (const propertyId of propertyIds) params.append('property', String(propertyId))
@@ -106,33 +90,66 @@ function DashboardContent({ filters, onFiltersChange }: { filters: DashboardFilt
     <div className="space-y-6">
       <PortfolioSummary filters={filters} />
 
-      <NetCashFlowChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} propertyIds={filters.propertyIds} onDrillDown={onDrillDown} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <CumulativeCashChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
-        <OccupancyRiskChart data={occupancyQuery.data} isLoading={occupancyQuery.isLoading} isError={occupancyQuery.isError} onRetry={() => { void occupancyQuery.refetch() }} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
-        <CurrencyExposureChart data={exposureQuery.data} isLoading={exposureQuery.isLoading} isError={exposureQuery.isError} onRetry={() => { void exposureQuery.refetch() }} measure={filters.exposureMeasure} onMeasureChange={(exposureMeasure) => onFiltersChange({ ...filters, exposureMeasure })} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PropertyContributionChart data={contributionQuery.data} isLoading={contributionQuery.isLoading} isError={contributionQuery.isError} onRetry={() => { void contributionQuery.refetch() }} />
-        <YieldComparisonChart data={yieldsQuery.data} isLoading={yieldsQuery.isLoading} isError={yieldsQuery.isError} onRetry={() => { void yieldsQuery.refetch() }} />
-      </div>
-
-      <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
+      {filters.section === 'overview' && <OverviewSection filters={filters} onDrillDown={onDrillDown} />}
+      {filters.section === 'income-costs' && <IncomeCostsSection filters={filters} />}
+      {filters.section === 'portfolio' && <PortfolioSection filters={filters} onFiltersChange={onFiltersChange} />}
+      {filters.section === 'risk' && <RiskSection filters={filters} />}
 
       {/* Hidden export for tests / a11y tools that want the timeline label
           as plain text — keeps the dashboard's "as of" date reachable
           without polluting the visible layout. */}
       <span className="sr-only">
-        Dashboard timeline {filters.grain} ({formatDate(range.from)} to {formatDate(range.to)})
+        Dashboard timeline {filters.grain} ({formatDate(filters.start)} to {formatDate(filters.end)})
       </span>
     </div>
   )
+}
+
+function analyticsParams(filters: DashboardFilterState) {
+  return {
+    start: filters.start,
+    end: filters.end,
+    currency: filters.currency,
+    grain: filters.grain,
+    propertyIds: filters.propertyIds,
+  }
+}
+
+function OverviewSection({ filters, onDrillDown }: { filters: DashboardFilterState; onDrillDown: (value: DrillDown) => void }) {
+  const cashFlowQuery = usePortfolioCashFlow(analyticsParams(filters))
+  return <div className="space-y-4">
+    <NetCashFlowChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} propertyIds={filters.propertyIds} onDrillDown={onDrillDown} />
+    <CumulativeCashChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
+  </div>
+}
+
+function IncomeCostsSection({ filters }: { filters: DashboardFilterState }) {
+  const params = analyticsParams(filters)
+  const cashFlowQuery = usePortfolioCashFlow(params)
+  const expenseQuery = useExpenseDrivers(params)
+  return <div className="grid gap-4 lg:grid-cols-2">
+    <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
+    <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
+  </div>
+}
+
+function PortfolioSection({ filters, onFiltersChange }: { filters: DashboardFilterState; onFiltersChange: (next: DashboardFilterState) => void }) {
+  const params = analyticsParams(filters)
+  const contributionQuery = usePropertyContribution(params)
+  const yieldsQuery = usePropertyYields(params)
+  const exposureQuery = useCurrencyExposure({ ...params, measure: filters.exposureMeasure })
+  return <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-2">
+      <PropertyContributionChart data={contributionQuery.data} isLoading={contributionQuery.isLoading} isError={contributionQuery.isError} onRetry={() => { void contributionQuery.refetch() }} />
+      <YieldComparisonChart data={yieldsQuery.data} isLoading={yieldsQuery.isLoading} isError={yieldsQuery.isError} onRetry={() => { void yieldsQuery.refetch() }} />
+    </div>
+    <CurrencyExposureChart data={exposureQuery.data} isLoading={exposureQuery.isLoading} isError={exposureQuery.isError} onRetry={() => { void exposureQuery.refetch() }} measure={filters.exposureMeasure} onMeasureChange={(exposureMeasure) => onFiltersChange({ ...filters, exposureMeasure })} />
+  </div>
+}
+
+function RiskSection({ filters }: { filters: DashboardFilterState }) {
+  const occupancyQuery = usePortfolioOccupancy(analyticsParams(filters))
+  return <OccupancyRiskChart data={occupancyQuery.data} isLoading={occupancyQuery.isLoading} isError={occupancyQuery.isError} onRetry={() => { void occupancyQuery.refetch() }} />
 }
 
 function PortfolioSummary({ filters }: { filters: DashboardFilterState }) {
@@ -141,7 +158,6 @@ function PortfolioSummary({ filters }: { filters: DashboardFilterState }) {
     end: filters.end,
     currency: filters.currency,
     grain: filters.grain,
-    comparison: filters.comparison,
     propertyIds: filters.propertyIds,
   })
 

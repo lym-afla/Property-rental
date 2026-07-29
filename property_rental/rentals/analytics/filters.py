@@ -8,6 +8,9 @@ from enum import StrEnum
 from rest_framework import serializers
 
 
+MAX_ANALYTICS_POINTS = 600
+
+
 class ISODateField(serializers.DateField):
     """DRF date field that requires exact zero-padded ISO input."""
 
@@ -74,6 +77,25 @@ class AnalyticsFilters:
                 {"end": "end must be on or after start"}
             )
 
+        grain = Grain(values.get("grain", Grain.MONTH.value))
+        start_month = start.year * 12 + start.month - 1
+        end_month = end.year * 12 + end.month - 1
+        if grain is Grain.MONTH:
+            point_count = end_month - start_month + 1
+        elif grain is Grain.QUARTER:
+            point_count = end_month // 3 - start_month // 3 + 1
+        else:
+            point_count = end.year - start.year + 1
+        if point_count > MAX_ANALYTICS_POINTS:
+            raise serializers.ValidationError(
+                {
+                    "start": (
+                        "Analytics ranges may contain at most "
+                        f"{MAX_ANALYTICS_POINTS} {grain.value} buckets."
+                    )
+                }
+            )
+
         currency = values.get("currency", (default_currency or "").upper())
         if len(currency) != 3 or not currency.isalpha():
             raise serializers.ValidationError(
@@ -83,7 +105,7 @@ class AnalyticsFilters:
         return cls(
             start=start,
             end=end,
-            grain=Grain(values.get("grain", Grain.MONTH.value)),
+            grain=grain,
             currency=currency,
             comparison=values.get("comparison"),
             property_ids=tuple(values.get("property", ())),

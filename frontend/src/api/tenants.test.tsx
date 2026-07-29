@@ -80,6 +80,9 @@ describe('useCreateTenant', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.tenants.all,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.analytics.all,
+    })
   })
 })
 

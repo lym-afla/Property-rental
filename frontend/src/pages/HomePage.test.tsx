@@ -106,22 +106,46 @@ function renderPage(initialEntry = '/') {
 }
 
 describe('HomePage dashboard shell', () => {
-  it('restores a copied section/filter URL and scopes typed cash-flow requests to every selected property', async () => {
+  it('restores a copied URL and requests only overview analytics for every selected property', async () => {
     const user = userEvent.setup()
     let requestedUrl = ''
+    let cashFlowRequests = 0
+    let irrelevantRequests = 0
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
         requestedUrl = request.url
         return HttpResponse.json(summary)
       }),
-      http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
-      http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
+      http.get('/api/v1/analytics/portfolio/cash-flow/', () => {
+        cashFlowRequests += 1
+        return HttpResponse.json(cashFlow)
+      }),
+      http.get('/api/v1/analytics/portfolio/expenses/', () => {
+        irrelevantRequests += 1
+        return HttpResponse.json(expenses)
+      }),
+      http.get('/api/v1/analytics/portfolio/property-contribution/', () => {
+        irrelevantRequests += 1
+        return HttpResponse.json({})
+      }),
+      http.get('/api/v1/analytics/portfolio/yields/', () => {
+        irrelevantRequests += 1
+        return HttpResponse.json({})
+      }),
+      http.get('/api/v1/analytics/portfolio/currency-exposure/', () => {
+        irrelevantRequests += 1
+        return HttpResponse.json(currencyExposure)
+      }),
+      http.get('/api/v1/analytics/portfolio/occupancy/', () => {
+        irrelevantRequests += 1
+        return HttpResponse.json({})
+      }),
     )
 
-    renderPage('/?section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&comparison=previous_period&property=3&property=1&measure=debt')
+    renderPage('/?section=overview&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&comparison=previous_period&property=3&property=1&measure=debt')
 
-    expect(screen.getByRole('heading', { name: 'Portfolio analysis' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Portfolio' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: 'Investment dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByText('Net cash flow')).toBeInTheDocument()
     expect(screen.queryByLabelText('Currency exposure timeline')).not.toBeInTheDocument()
 
@@ -135,6 +159,8 @@ describe('HomePage dashboard shell', () => {
     expect(requested.searchParams.get('comparison')).toBeNull()
     expect(requested.searchParams.getAll('property')).toEqual(['1', '3'])
     expect(requested.searchParams.get('grain')).toBe('quarter')
+    expect(cashFlowRequests).toBe(1)
+    expect(irrelevantRequests).toBe(0)
 
     await user.click(screen.getByText('Drill down to transactions'))
     await user.click(screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' }))
@@ -159,10 +185,10 @@ describe('HomePage dashboard shell', () => {
         return HttpResponse.json(currencyExposure)
       }),
     )
-    renderPage('/?section=risk&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&comparison=none&property=&measure=property_value')
+    renderPage('/?section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&property=&measure=property_value')
 
     expect(screen.getByText('Currency exposure')).toBeInTheDocument()
-    expect(screen.getByText('Occupancy risk')).toBeInTheDocument()
+    expect(screen.queryByText('Occupancy risk')).not.toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Exposure measure'), 'debt')
     await waitFor(() => {
@@ -187,7 +213,7 @@ describe('HomePage dashboard shell', () => {
     await user.click(screen.getByRole('button', { name: 'Reset dashboard filters' }))
     const resetUrl = screen.getByLabelText('Current dashboard URL').textContent ?? ''
     expect(resetUrl).toBe(
-      '?section=overview&start=2026-01-29&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value',
+      '?section=overview&start=2026-01-29&end=2026-07-29&currency=USD&grain=month&property=&measure=property_value',
     )
   })
 

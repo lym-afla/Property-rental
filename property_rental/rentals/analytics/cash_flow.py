@@ -35,6 +35,9 @@ def _calendar_periods(filters):
     period_start = _period_start(filters.start, filters.grain)
     periods = []
     while period_start <= filters.end:
+        if period_start.year == date.max.year:
+            periods.append((period_start, date.max))
+            break
         next_start = _next_period_start(period_start, filters.grain)
         periods.append((period_start, next_start - timedelta(days=1)))
         period_start = next_start
@@ -120,7 +123,10 @@ def portfolio_cash_flow(user, filters):
 
     for period_start, period_end in periods:
         category_rows = bucketed_transactions[period_start]
-        point = {"period_start": period_start, "period_end": period_end}
+        point = {
+            "period_start": max(period_start, filters.start),
+            "period_end": min(period_end, filters.end),
+        }
         for category in category_keys:
             point[category] = _category_total(
                 category_rows[category],
@@ -175,7 +181,10 @@ def expense_drivers(user, filters):
 
     for period_start, period_end in _calendar_periods(filters):
         category_rows = bucketed_transactions[period_start]
-        point = {"period_start": period_start, "period_end": period_end}
+        point = {
+            "period_start": max(period_start, filters.start),
+            "period_end": min(period_end, filters.end),
+        }
         for category in category_keys:
             point[category] = _category_total(
                 category_rows[category],

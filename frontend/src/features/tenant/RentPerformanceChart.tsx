@@ -4,7 +4,8 @@ import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveConta
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
+import { ChartPatternDefs } from '@/components/analytics/ChartPatternDefs'
+import { chartPatternFill, chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
 import { formatCurrency, formatCurrencyAxis, formatDate } from '@/lib/format'
 import type { TenantRentPerformanceResponse } from '@/types/analytics'
 
@@ -75,13 +76,14 @@ export function RentPerformanceChart(props: Props) {
         <div className="min-h-0 flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+              <ChartPatternDefs prefix="rent-performance" />
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
               <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
               <ReferenceLine y={0} stroke="currentColor" aria-label="Variance zero baseline" />
-              {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartSeriesStyle(item.visualToken).color} />)}
-              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={2.5} dot />)}
+              {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartPatternFill('rent-performance', item.visualToken)} stroke={chartSeriesStyle(item.visualToken).color} />)}
+              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeDasharray={chartSeriesStyle(item.visualToken).strokeDasharray} strokeWidth={2.5} dot />)}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

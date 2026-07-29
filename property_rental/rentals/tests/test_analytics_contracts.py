@@ -84,6 +84,24 @@ def test_filters_reject_invalid_query_values(landlord_user, query, message):
     assert message in exc_info.value.detail
 
 
+def test_filters_reject_ranges_over_maximum_bucket_count(landlord_user):
+    """Removing the point cap would allow one request to allocate unbounded buckets."""
+    request = RequestFactory().get(
+        "/api/v1/analytics/portfolio/cash-flow/",
+        {"start": "2000-01-01", "end": "2050-01-01", "grain": "month"},
+    )
+
+    with pytest.raises(serializers.ValidationError) as exc_info:
+        AnalyticsFilters.from_query_params(
+            request.GET,
+            default_currency=landlord_user.default_currency,
+            effective_date=date(2050, 1, 1),
+        )
+
+    assert "start" in exc_info.value.detail
+    assert "600" in str(exc_info.value.detail["start"])
+
+
 def test_time_series_serializer_requires_raw_scale():
     """Changing scale validation would allow display-scaled monetary values into the API."""
     serializer = TimeSeriesResponseSerializer(

@@ -74,6 +74,9 @@ describe('useCreatePropertyValuation', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.propertyValuations.all,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.analytics.all,
+    })
   })
 })
 

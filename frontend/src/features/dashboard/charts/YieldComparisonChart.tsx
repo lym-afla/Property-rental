@@ -74,7 +74,7 @@ export function YieldComparisonChart(props: Props) {
                   <Tooltip content={({ active, payload }) => active ? <ChartTooltip label="Property yield" rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatYield(Number(item.value)) }))} /> : null} />
                   {visibleSeries.map((series) => {
                     const key: YieldKey = series.key
-                    return <Scatter key={key} name={series.label} fill={chartSeriesStyle(series.visualToken).color} data={data.rows.filter((row) => row[key] !== null).map((row) => ({ property_name: row.property_name, yield: row[key] }))} />
+                    return <Scatter key={key} name={series.label} shape={chartSeriesStyle(series.visualToken).marker} fill={chartSeriesStyle(series.visualToken).color} data={data.rows.filter((row) => row[key] !== null).map((row) => ({ property_name: row.property_name, yield: row[key] }))} />
                   })}
                 </ScatterChart>
               </ResponsiveContainer>

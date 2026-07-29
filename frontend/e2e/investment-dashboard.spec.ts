@@ -13,11 +13,27 @@ const properties = [
 const period = { period_start: range.start, period_end: range.end }
 const cashFlow = {
   metric: 'portfolio_cash_flow', grain: 'month', currency: 'USD', scale: 1, ...range,
-  series: [{ key: 'rent', label: 'Rent income', kind: 'income_category' }, { key: 'repairs', label: 'Repairs', kind: 'expense_category' }],
-  points: [{ ...period, rent: 2000, repairs: -350 }],
+  series: [
+    { key: 'rent', label: 'Rent income', kind: 'income_category' },
+    { key: 'repairs', label: 'Repairs', kind: 'expense_category' },
+    { key: 'total_income', label: 'Total income', kind: 'income_total' },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'expense_total' },
+    { key: 'net_income', label: 'Net income', kind: 'net' },
+    { key: 'cumulative_net_income', label: 'Cumulative net income', kind: 'cumulative' },
+  ],
+  points: [{ ...period, rent: 2000, repairs: -350, total_income: 2000, total_expenses: -350, net_income: 1650, cumulative_net_income: 1650 }],
 }
 const expenseDrivers = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'repairs', label: 'Repairs', kind: 'expense_category' }], points: [{ ...period, repairs: -350 }] }
-const occupancy = { metric: 'portfolio_occupancy', grain: 'month', currency: null, scale: 1, ...range, series: [{ key: 'occupancy_rate', label: 'Occupancy rate', kind: 'occupancy' }], points: [{ ...period, occupancy_rate: 100, occupied: 2, vacant: 0, capacity: 2 }] }
+const occupancy = {
+  metric: 'portfolio_occupancy', grain: 'month', currency: null, scale: 1, ...range,
+  series: [
+    { key: 'capacity', label: 'Rental inventory', kind: 'capacity' },
+    { key: 'occupied', label: 'Occupied', kind: 'occupied' },
+    { key: 'vacant', label: 'Vacant', kind: 'vacant' },
+    { key: 'occupancy_rate', label: 'Occupancy rate', kind: 'occupancy_rate' },
+  ],
+  points: [{ ...period, occupancy_rate: 100, occupied: 2, vacant: 0, capacity: 2 }],
+}
 const contribution = {
   metric: 'property_contribution', currency: 'USD', scale: 1, ...range, portfolio_net_income: 1650,
   rows: [
@@ -31,7 +47,7 @@ const yields = {
 }
 const exposure = {
   metric: 'currency_exposure', grain: 'month', currency: 'USD', scale: 1, ...range, measure: 'property_value', measure_label: 'Property value',
-  series: [{ key: 'eur', label: 'EUR', kind: 'currency' }, { key: 'usd', label: 'USD', kind: 'currency' }],
+  series: [{ key: 'eur', label: 'EUR', kind: 'native_currency' }, { key: 'usd', label: 'USD', kind: 'native_currency' }],
   points: [{ ...period, eur: 250000, usd: 150000 }],
   coverage: [{ ...period, currency: 'USD', status: 'ok', missing_count: 0, stale_count: 0 }],
 }
@@ -69,6 +85,21 @@ test.beforeEach(async ({ page }) => {
   await mockDashboardApi(page)
 })
 
+test('mobile app navigation keeps every destination touch-sized without horizontal overflow', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile')
+  await page.goto('/')
+  const navigation = page.getByRole('navigation', { name: 'Primary' })
+  await expect(navigation).toBeVisible()
+  const links = navigation.getByRole('link')
+  await expect(links).toHaveCount(5)
+  for (const link of await links.all()) {
+    const box = await link.boundingBox()
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
 test('loads a consistent route fallback before the dashboard chunk resolves', async ({ page }) => {
   let releaseChunk: (() => void) | undefined
   await page.route('**/src/pages/HomePage.tsx', async (route) => {
@@ -81,7 +112,7 @@ test('loads a consistent route fallback before the dashboard chunk resolves', as
   await navigation
 })
 
-test('restores every dashboard filter from a copied URL', async ({ page }, testInfo) => {
+test('restores every supported dashboard filter from a copied URL', async ({ page }, testInfo) => {
   await page.goto('/?section=risk&start=2024-01-01&end=2024-02-29&currency=EUR&grain=quarter&comparison=previous_period&property=1&property=2')
   await expect(page.getByRole('heading', { name: 'Risk analysis' })).toBeVisible()
   await expect(page.getByLabel('Start date')).toHaveValue('2024-01-01')
@@ -95,7 +126,7 @@ test('restores every dashboard filter from a copied URL', async ({ page }, testI
     await expect(page.getByLabel('Properties')).toHaveText('2 selected')
   }
   await expect(page.getByLabel('Frequency')).toHaveText('Quarterly')
-  await expect(page.getByLabel('Comparison')).toHaveText('Previous period')
+  await expect(page.getByLabel('Comparison')).toHaveCount(0)
 })
 
 test('keeps charts operable with keyboard and exposes exact values for long labels and mixed currencies', async ({ page }) => {
@@ -106,7 +137,8 @@ test('keeps charts operable with keyboard and exposes exact values for long labe
   await expect(legend).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('button', { name: 'Table' }).first().click()
   await expect(page.getByRole('table', { name: 'Net cash flow exact values' })).toBeVisible()
-  await page.getByRole('button', { name: 'Table' }).nth(1).click()
+  await page.getByRole('button', { name: 'Portfolio' }).click()
+  await page.getByRole('button', { name: 'Table' }).first().click()
   await expect(page.getByText('Dollar House (negative contributor)')).toBeVisible()
   await expect(page.getByText('Negative contributor', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'EUR' })).toBeVisible()

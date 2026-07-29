@@ -53,6 +53,69 @@ const dynamicPointSchema = z
   })
   .catchall(z.number().nullable())
 
+const cashFlowSeriesDefinitionSchema = z
+  .object({
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    kind: z.enum([
+      'income_category',
+      'expense_category',
+      'income_total',
+      'expense_total',
+      'net',
+      'cumulative',
+    ]),
+  })
+  .strict()
+
+const cashFlowPointSchema = z
+  .object({
+    period_start: isoDateSchema,
+    period_end: isoDateSchema,
+    total_income: z.number(),
+    total_expenses: z.number(),
+    net_income: z.number(),
+    cumulative_net_income: z.number(),
+  })
+  .catchall(z.number().nullable())
+
+const occupancySeriesSchema = z.tuple([
+  z.object({ key: z.literal('capacity'), label: z.literal('Capacity'), kind: z.literal('capacity') }).strict(),
+  z.object({ key: z.literal('occupied'), label: z.literal('Occupied'), kind: z.literal('occupied') }).strict(),
+  z.object({ key: z.literal('vacant'), label: z.literal('Vacant'), kind: z.literal('vacant') }).strict(),
+  z.object({ key: z.literal('occupancy_rate'), label: z.literal('Occupancy rate'), kind: z.literal('percentage') }).strict(),
+])
+
+const occupancyPointSchema = z
+  .object({
+    period_start: isoDateSchema,
+    period_end: isoDateSchema,
+    capacity: z.number().int().nonnegative(),
+    occupied: z.number().int().nonnegative(),
+    vacant: z.number().int().nonnegative(),
+    occupancy_rate: z.number().min(0).max(100),
+  })
+  .strict()
+  .superRefine((point, context) => {
+    if (point.occupied + point.vacant !== point.capacity) {
+      context.addIssue({
+        code: 'custom',
+        path: ['capacity'],
+        message: 'occupied plus vacant must equal capacity',
+      })
+    }
+    const expectedRate = point.capacity === 0
+      ? 0
+      : (point.occupied / point.capacity) * 100
+    if (Math.abs(point.occupancy_rate - expectedRate) > 0.000001) {
+      context.addIssue({
+        code: 'custom',
+        path: ['occupancy_rate'],
+        message: 'occupancy_rate must match occupied divided by capacity',
+      })
+    }
+  })
+
 const timeSeriesBaseShape = {
   metric: z.string().trim().min(1),
   grain: analyticsGrainSchema,
@@ -149,15 +212,58 @@ export const timeSeriesSchema = makeTimeSeriesSchema({})
 export const portfolioCashFlowSchema = makeTimeSeriesSchema({
   metric: z.literal('portfolio_cash_flow'),
   currency: analyticsCurrencySchema,
+  series: z.array(cashFlowSeriesDefinitionSchema),
+  points: z.array(cashFlowPointSchema),
+}).superRefine((value, context) => {
+  const required = [
+    ['total_income', 'income_total'],
+    ['total_expenses', 'expense_total'],
+    ['net_income', 'net'],
+    ['cumulative_net_income', 'cumulative'],
+  ] as const
+  for (const [key, kind] of required) {
+    if (!value.series.some((series) => series.key === key && series.kind === kind)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['series'],
+        message: `cash-flow series must declare ${key} as ${kind}`,
+      })
+    }
+  }
 })
 export const expenseDriversSchema = makeTimeSeriesSchema({
   metric: z.literal('expense_drivers'),
   currency: analyticsCurrencySchema,
+  series: z.array(
+    z.object({
+      key: z.string().trim().min(1),
+      label: z.string().trim().min(1),
+      kind: z.literal('expense_category'),
+    }).strict(),
+  ),
 })
-export const portfolioOccupancySchema = makeTimeSeriesSchema({
-  metric: z.literal('portfolio_occupancy'),
-  currency: z.null(),
-})
+export const portfolioOccupancySchema = z
+  .object({
+    metric: z.literal('portfolio_occupancy'),
+    grain: analyticsGrainSchema,
+    currency: z.null(),
+    scale: z.literal(1),
+    start: isoDateSchema,
+    end: isoDateSchema,
+    series: occupancySeriesSchema,
+    points: z.array(occupancyPointSchema),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.end < value.start) {
+      context.addIssue({ code: 'custom', path: ['end'], message: 'end must be on or after start' })
+    }
+    value.points.forEach((point, index) => {
+      if (point.period_end < point.period_start) {
+        context.addIssue({ code: 'custom', path: ['points', index, 'period_end'], message: 'period_end must be on or after period_start' })
+      }
+    })
+  })
 
 const valuationCoverageStatusSchema = z.enum([
   'ok',

@@ -762,4 +762,3 @@ class LeaseRentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
-

@@ -8,6 +8,8 @@ import { server } from '@/test/handlers'
 import {
   currencyExposureSchema,
   isoDateSchema,
+  portfolioCashFlowSchema,
+  portfolioOccupancySchema,
   portfolioSummarySchema,
   propertyContributionSchema,
   propertyValuationSchema,
@@ -47,14 +49,24 @@ const cashFlowFixture = {
   end: '2026-07-29',
   series: [
     { key: 'rent', label: 'Rent', kind: 'income_category' },
+    { key: 'total_income', label: 'Total income', kind: 'income_total' },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'expense_total' },
     { key: 'net_income', label: 'Net income', kind: 'net' },
+    {
+      key: 'cumulative_net_income',
+      label: 'Cumulative net income',
+      kind: 'cumulative',
+    },
   ],
   points: [
     {
       period_start: '2026-01-01',
       period_end: '2026-01-31',
       rent: 1500,
+      total_income: 1500,
+      total_expenses: 0,
       net_income: 1500,
+      cumulative_net_income: 1500,
     },
   ],
 }
@@ -270,6 +282,36 @@ describe('analytics runtime schemas', () => {
   it('rejects scaled monetary responses', () => {
     expect(() =>
       timeSeriesSchema.parse({ ...cashFlowFixture, scale: 1000 }),
+    ).toThrow()
+  })
+
+  it('rejects cash-flow responses missing chart-required aggregate series', () => {
+    expect(() =>
+      portfolioCashFlowSchema.parse({
+        ...cashFlowFixture,
+        series: cashFlowFixture.series.filter(
+          (series) => series.key !== 'cumulative_net_income',
+        ),
+        points: cashFlowFixture.points.map(
+          ({ cumulative_net_income: _omitted, ...point }) => point,
+        ),
+      }),
+    ).toThrow()
+  })
+
+  it('rejects occupancy outside exact server invariants', () => {
+    expect(() =>
+      portfolioOccupancySchema.parse({
+        ...occupancyFixture,
+        points: [
+          {
+            ...occupancyFixture.points[0],
+            occupied: 2,
+            vacant: 1,
+            occupancy_rate: 125,
+          },
+        ],
+      }),
     ).toThrow()
   })
 

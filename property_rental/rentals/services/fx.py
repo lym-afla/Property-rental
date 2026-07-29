@@ -262,6 +262,10 @@ def convert(amount, from_currency, to_currency, as_of):
     return amount * get_rate(from_currency, to_currency, as_of)['FX']
 
 
+class MissingFXRate(ValueError):
+    """Raised when analytics cannot convert a value at the requested date."""
+
+
 class PreloadedConverter:
     """Resolve a batch of transaction conversions from one FX-row query.
 
@@ -314,16 +318,24 @@ class PreloadedConverter:
             )
         ]
         if not matches:
-            raise ValueError(f"FX rate for {source} to {target} not found.")
+            raise MissingFXRate(f"FX rate for {source} to {target} not found.")
         return max(matches, key=lambda fx: fx.date)
 
     def convert(self, amount, from_currency, to_currency, as_of):
         if from_currency == to_currency:
             return amount
 
-        cross_currency = nx.shortest_path(
-            self._graph(as_of), from_currency, to_currency, method="bellman-ford"
-        )
+        try:
+            cross_currency = nx.shortest_path(
+                self._graph(as_of),
+                from_currency,
+                to_currency,
+                method="bellman-ford",
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as exc:
+            raise MissingFXRate(
+                f"FX rate for {from_currency} to {to_currency} not found."
+            ) from exc
         fx_rate = 1
         for index in range(1, len(cross_currency)):
             source = cross_currency[index - 1]

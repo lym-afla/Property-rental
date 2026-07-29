@@ -47,6 +47,7 @@ export function useCreateTenant() {
       apiFetch<Tenant>('/tenants/', { method: 'POST', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -58,6 +59,7 @@ export function useUpdateTenant() {
       apiFetch<Tenant>(`/tenants/${id}/`, { method: 'PATCH', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -68,6 +70,7 @@ export function useDeleteTenant() {
     mutationFn: (id: number) => apiFetch(`/tenants/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }
@@ -86,6 +89,7 @@ export function useVacateTenant() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all })
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
 }

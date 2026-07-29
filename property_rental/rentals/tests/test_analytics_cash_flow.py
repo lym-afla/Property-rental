@@ -57,7 +57,7 @@ def test_cash_flow_returns_raw_signed_values(landlord_user, sample_property):
     ]
     assert result.points == (
         {
-            "period_start": date(2026, 1, 1),
+                "period_start": date(2026, 1, 1),
             "period_end": date(2026, 1, 31),
             "rent": 2000.0,
             "utilities": -300.0,
@@ -127,7 +127,7 @@ def test_cash_flow_uses_calendar_quarter_boundaries(landlord_user, sample_proper
 
     assert result.points == (
         {
-            "period_start": date(2026, 1, 1),
+            "period_start": date(2026, 2, 10),
             "period_end": date(2026, 3, 31),
             "rent": 100.0,
             "utilities": 0.0,
@@ -138,7 +138,7 @@ def test_cash_flow_uses_calendar_quarter_boundaries(landlord_user, sample_proper
         },
         {
             "period_start": date(2026, 4, 1),
-            "period_end": date(2026, 6, 30),
+            "period_end": date(2026, 5, 20),
             "rent": 0.0,
             "utilities": -25.0,
             "total_income": 0.0,
@@ -147,6 +147,39 @@ def test_cash_flow_uses_calendar_quarter_boundaries(landlord_user, sample_proper
             "cumulative_net_income": 75.0,
         },
     )
+
+
+def test_cash_flow_clamps_partial_bucket_boundaries_to_requested_range(
+    landlord_user, sample_property
+):
+    """Returning full calendar bounds would drill into transactions outside the bar."""
+    from rentals.analytics.cash_flow import portfolio_cash_flow
+
+    result = portfolio_cash_flow(
+        landlord_user,
+        filters_for("2026-01-15", "2026-02-10"),
+    )
+
+    assert [
+        (point["period_start"], point["period_end"]) for point in result.points
+    ] == [
+        (date(2026, 1, 15), date(2026, 1, 31)),
+        (date(2026, 2, 1), date(2026, 2, 10)),
+    ]
+
+
+def test_cash_flow_safely_terminates_a_bucket_at_date_max(landlord_user):
+    """Always constructing the next year would crash a valid year-9999 request."""
+    from rentals.analytics.cash_flow import portfolio_cash_flow
+
+    result = portfolio_cash_flow(
+        landlord_user,
+        filters_for("9999-12-31", "9999-12-31"),
+    )
+
+    assert len(result.points) == 1
+    assert result.points[0]["period_start"] == date.max
+    assert result.points[0]["period_end"] == date.max
 
 
 @pytest.mark.django_db

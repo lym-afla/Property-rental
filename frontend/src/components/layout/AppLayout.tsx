@@ -36,9 +36,9 @@ export function AppLayout() {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-6">
-            <span className="font-semibold">Property Rental</span>
-            <nav className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-6">
+            <span className="truncate font-semibold">Property Rental</span>
+            <nav aria-label="Primary" className="hidden items-center gap-4 md:flex">
               {navItems.map(item => (
                 <NavLink
                   key={item.to}
@@ -57,7 +57,7 @@ export function AppLayout() {
               so the primary nav carries only data surfaces. */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" disabled={!user}>
+              <Button className="min-h-11 md:min-h-0" variant="ghost" size="sm" disabled={!user}>
                 {user ? user.username : '—'}
               </Button>
             </DropdownMenuTrigger>
@@ -78,9 +78,23 @@ export function AppLayout() {
           </DropdownMenu>
         </div>
       </header>
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-6 pb-24 md:pb-6">
         <Outlet />
       </main>
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        {navItems.map(item => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            className={({ isActive }) =>
+              `flex min-h-11 min-w-11 items-center justify-center overflow-hidden px-1 text-center text-[11px] leading-tight transition-colors ${isActive ? 'font-medium text-foreground' : 'text-muted-foreground'}`
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

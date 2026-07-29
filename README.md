@@ -1,12 +1,12 @@
 # Property rental tracking application
 
-This is a web application to keep track of a portfolio of properties in terms of renting statistics together with the economic result of property rentals. It is written on Python with Django framework on the back-end and plain HTML with JavaScript on the front-end. Bootstrap library is used for visual representation
+This application tracks rental-property operations and investment performance. Django and Django REST Framework provide the backend and typed analytics API; the frontend is a React/TypeScript SPA built with Vite, TanStack Query, Tailwind CSS, shadcn/ui, and Recharts.
 
 ## Distinctiveness and Complexity
 + The idea of the project is to bring property portfolio management analytics to the database of properties
 + The data is structured as a comprehensive database consisting of eight models (users, landlord, tenants, property, property funding, transactions, rent history, FX data)
 + The app allows registered user to save own properties and include key information (address, footage, rooms, price, etc.), create tenants and "rent" own properties to tenants. Include revenue inputs (rent received) and costs (utility bills, capex, etc.) into the respective database. And track the economics of each property project: P&L components, charges executed in time, rent outstanding
-+ `Chart.js` package is used to include charts in the application, normally showing P&L entries for the portfolio or distinct properties and rent history
++ Recharts renders the typed investment dashboard, property valuation history, and tenant rent-performance analytics
 + Instances of the main models (user, property, tenant, transaction) can also be edited or deleted in case of the wrong data present
 + User settings are also included to be able to save user details (username, name, email) and data visual properties (default currency, chart frequency, chart timeline and number of digits shown in tables)
 + The application is multi-currency. Each property has its onw _natural_ currrency. Data representation, however, can be made in any currency (set up in user settings). And home page, summarising all the statistics is shown using single default currency. After the new transaction is entered, special function is run to update FX database to be able to convert currencies
@@ -16,9 +16,9 @@ This is a web application to keep track of a portfolio of properties in terms of
 ## File structure
 `Property_rental` build with Django with the single app `rentals`. Rentals app has fairly standard structure:
 + `migrations` folder keep the history of model updates
-+ `static` folder with images used, styles.css and a number of JavaScript files that are used to handle actions on web pages and `AJAX` requests to update forms, charts and tables
-+ `templates` folder with a number of `html` pages, templates and snippets used when rendering pages (layouts for home page, property, tenants and transaction pages, chart divs, tables)
-+ Fairly standard `views.py`, `models.py`, `urls.py` handling routing and exchange of data between back-end and front-end
++ `frontend` contains the React/TypeScript SPA, component tests, and Playwright scenarios
++ `rentals/analytics` owns financial classification, FX conversion, occupancy, yields, and bounded date bucketing
++ Django templates provide only the SPA shell; behavioral endpoints live under `/api/v1/`
 + In addition, `forms.py` to do form creation and handling, `constants.py` to use constants throughout the app, mainly in models and forms, and `utils.py` with additional useful functions to do, for instance, currency format representation, preparing datasets for charting (dates, labels), updating FX spot rates from yahoo finance (using yfinance package)
 
 ### Running the application
@@ -26,14 +26,14 @@ Can be run in `development` mode on the local server with Django approach, using
 
 ### Analytics API and visual regression checks
 
-The React investment dashboard reads typed analytics responses from `/api/v1/analytics/portfolio/summary/`, `cash-flow/`, `expenses/`, `property-contribution/`, `yields/`, `currency-exposure/`, and `occupancy/`. Property valuation history is available at `/api/v1/analytics/properties/<id>/valuation/`.
+The React investment dashboard reads typed analytics responses from `/api/v1/analytics/portfolio/summary/`, `cash-flow/`, `expenses/`, `property-contribution/`, `yields/`, `currency-exposure/`, and `occupancy/`. Property valuation history is available at `/api/v1/analytics/properties/<id>/valuation/`. Time-series requests are capped at 600 buckets.
 
 Run the frontend checks from `frontend/`:
 
 ```powershell
 npm ci
-npx playwright install chromium
-npm run test:e2e
+$env:PW_CHANNEL='chrome'
+npm run test:e2e -- --workers=1
 ```
 
-`test:e2e` starts Vite with a root base for deterministic fixture-backed Playwright tests and runs the desktop (1440px), tablet (768px), and mobile (390px) projects. On this workstation, use `PW_CHANNEL=chrome npm run test:e2e` when the managed Chromium download is unavailable. Update approved visual baselines with `npm run test:e2e -- --update-snapshots`.
+`test:e2e` starts Vite with a root base for deterministic fixture-backed Playwright tests and runs the desktop (1440px), tablet (768px), and mobile (390px) projects. Exact-pixel baselines are pinned to Windows Chrome locally and in CI; other platform/browser combinations skip only the visual snapshot spec. Update intentional baselines with `$env:PW_CHANNEL='chrome'; npm run test:e2e -- --update-snapshots --workers=1`.

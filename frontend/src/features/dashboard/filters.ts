@@ -6,7 +6,6 @@ export const DASHBOARD_SECTIONS = [
 ] as const
 export const DASHBOARD_GRAINS = ['month', 'quarter', 'year'] as const
 export const DASHBOARD_CURRENCIES = ['USD', 'EUR', 'GBP', 'RUB'] as const
-export const DASHBOARD_COMPARISONS = ['previous_period'] as const
 export const EXPOSURE_MEASURES = [
   'property_value',
   'debt',
@@ -16,7 +15,6 @@ export const EXPOSURE_MEASURES = [
 export type DashboardSection = (typeof DASHBOARD_SECTIONS)[number]
 export type DashboardGrain = (typeof DASHBOARD_GRAINS)[number]
 export type DashboardCurrency = (typeof DASHBOARD_CURRENCIES)[number]
-export type DashboardComparison = (typeof DASHBOARD_COMPARISONS)[number]
 export type DashboardExposureMeasure = (typeof EXPOSURE_MEASURES)[number]
 
 export type DashboardFilterState = {
@@ -25,7 +23,6 @@ export type DashboardFilterState = {
   end: string
   currency: DashboardCurrency
   grain: DashboardGrain
-  comparison: DashboardComparison | null
   propertyIds: number[]
   exposureMeasure: DashboardExposureMeasure
 }
@@ -64,7 +61,6 @@ export function parseDashboardFilters(
   const endValue = searchParams.get('end')
   const currencyValue = searchParams.get('currency')?.toUpperCase() ?? null
   const grainValue = searchParams.get('grain')
-  const comparisonValue = searchParams.get('comparison')
   const measureValue = searchParams.get('measure')
 
   let start = isIsoDate(startValue) ? startValue : defaults.start
@@ -93,12 +89,6 @@ export function parseDashboardFilters(
     grain: isOneOf(grainValue, DASHBOARD_GRAINS)
       ? grainValue
       : defaults.grain,
-    comparison:
-      comparisonValue === 'none'
-        ? null
-        : isOneOf(comparisonValue, DASHBOARD_COMPARISONS)
-          ? comparisonValue
-          : defaults.comparison,
     propertyIds: normalizedPropertyIds(rawPropertyIds),
     exposureMeasure: isOneOf(measureValue, EXPOSURE_MEASURES)
       ? measureValue
@@ -115,7 +105,6 @@ export function serializeDashboardFilters(
   searchParams.set('end', filters.end)
   searchParams.set('currency', filters.currency)
   searchParams.set('grain', filters.grain)
-  searchParams.set('comparison', filters.comparison ?? 'none')
   const propertyIds = normalizedPropertyIds(filters.propertyIds)
   for (const propertyId of propertyIds) {
     searchParams.append('property', String(propertyId))

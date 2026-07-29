@@ -7,6 +7,8 @@ import { NetCashFlowChart } from './NetCashFlowChart'
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  BarChart: ({ children, stackOffset }: { children: React.ReactNode; stackOffset?: string }) => <div data-testid="cash-flow-plot" data-stack-offset={stackOffset}>{children}</div>,
+  Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`cash-bar-${name}`} data-fill={fill} />,
 }))
 
 const data = {
@@ -34,6 +36,9 @@ describe('NetCashFlowChart', () => {
     render(<NetCashFlowChart data={data} />)
 
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
+    expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
+    expect(screen.getByTestId('cash-bar-Rent').getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByTestId('cash-bar-Rent').getAttribute('data-fill')).not.toBe(screen.getByTestId('cash-bar-Utilities').getAttribute('data-fill'))
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$1,000')
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$-250')

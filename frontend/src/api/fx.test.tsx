@@ -56,6 +56,9 @@ describe('useCreateFX', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.fx.all,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.analytics.all,
+    })
   })
 })
 
