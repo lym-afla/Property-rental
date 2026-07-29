@@ -1,23 +1,34 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { SessionProvider } from '@/context/SessionProvider'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { HomePage } from '@/pages/HomePage'
-import { LoginPage } from '@/pages/LoginPage'
-import { PropertyDetailPage } from '@/pages/PropertyDetailPage'
-import { PropertiesPage } from '@/pages/PropertiesPage'
-import { TenantsPage } from '@/pages/TenantsPage'
-import { TenantDetailPage } from '@/pages/TenantDetailPage'
-import { TransactionsPage } from '@/pages/TransactionsPage'
-import { FXPage } from '@/pages/FXPage'
-import { ProfilePage } from '@/pages/ProfilePage'
-import { RegisterPage } from '@/pages/RegisterPage'
+
+const HomePage = lazy(() => import('@/pages/HomePage').then(({ HomePage }) => ({ default: HomePage })))
+const LoginPage = lazy(() => import('@/pages/LoginPage').then(({ LoginPage }) => ({ default: LoginPage })))
+const RegisterPage = lazy(() => import('@/pages/RegisterPage').then(({ RegisterPage }) => ({ default: RegisterPage })))
+const PropertiesPage = lazy(() => import('@/pages/PropertiesPage').then(({ PropertiesPage }) => ({ default: PropertiesPage })))
+const PropertyDetailPage = lazy(() => import('@/pages/PropertyDetailPage').then(({ PropertyDetailPage }) => ({ default: PropertyDetailPage })))
+const TenantsPage = lazy(() => import('@/pages/TenantsPage').then(({ TenantsPage }) => ({ default: TenantsPage })))
+const TenantDetailPage = lazy(() => import('@/pages/TenantDetailPage').then(({ TenantDetailPage }) => ({ default: TenantDetailPage })))
+const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then(({ TransactionsPage }) => ({ default: TransactionsPage })))
+const FXPage = lazy(() => import('@/pages/FXPage').then(({ FXPage }) => ({ default: FXPage })))
+const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(({ ProfilePage }) => ({ default: ProfilePage })))
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center" role="status" aria-label="Loading page">
+      Loading page…
+    </div>
+  )
+}
 
 function App() {
   return (
     <SessionProvider>
       <BrowserRouter>
-        <Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
           {/* Public routes — outside ProtectedRoute so unauthenticated users
               can reach them (resolves the Task 7 redirect-loop). */}
           <Route path="/login" element={<LoginPage />} />
@@ -35,7 +46,8 @@ function App() {
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </SessionProvider>
   )

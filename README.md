@@ -23,3 +23,17 @@ This is a web application to keep track of a portfolio of properties in terms of
 
 ### Running the application
 Can be run in `development` mode on the local server with Django approach, using `runserver` command. 
+
+### Analytics API and visual regression checks
+
+The React investment dashboard reads typed analytics responses from `/api/v1/analytics/portfolio/summary/`, `cash-flow/`, `expenses/`, `property-contribution/`, `yields/`, `currency-exposure/`, and `occupancy/`. Property valuation history is available at `/api/v1/analytics/properties/<id>/valuation/`.
+
+Run the frontend checks from `frontend/`:
+
+```powershell
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+`test:e2e` starts Vite with a root base for deterministic fixture-backed Playwright tests and runs the desktop (1440px), tablet (768px), and mobile (390px) projects. On this workstation, use `PW_CHANNEL=chrome npm run test:e2e` when the managed Chromium download is unavailable. Update approved visual baselines with `npm run test:e2e -- --update-snapshots`.
