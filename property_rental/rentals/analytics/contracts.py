@@ -13,7 +13,8 @@ class SeriesDefinition:
 
 @dataclass(frozen=True)
 class TimeSeriesPoint:
-    date: date
+    period_start: date
+    period_end: date
     values: dict[str, object]
 
 

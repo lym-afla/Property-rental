@@ -1,8 +1,10 @@
 """Strict DRF serializers for analytics response contracts."""
 
+from collections.abc import Mapping
+
 from rest_framework import serializers
 
-from rentals.analytics.filters import Grain
+from rentals.analytics.filters import Grain, ISODateField
 
 
 class StrictSerializer(serializers.Serializer):
@@ -24,8 +26,28 @@ class SeriesDefinitionSerializer(StrictSerializer):
 
 
 class TimeSeriesPointSerializer(StrictSerializer):
-    date = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
-    values = serializers.DictField()
+    period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+
+    def to_internal_value(self, data):
+        values = serializers.Serializer.to_internal_value(self, data)
+        values.update(
+            (key, value) for key, value in data.items() if key not in self.fields
+        )
+        return values
+
+    def to_representation(self, instance):
+        values = serializers.Serializer.to_representation(self, instance)
+        if isinstance(instance, Mapping):
+            dynamic_values = (
+                (key, value)
+                for key, value in instance.items()
+                if key not in self.fields
+            )
+        else:
+            dynamic_values = instance.values.items()
+        values.update(dynamic_values)
+        return values
 
 
 class CategoryValueSerializer(StrictSerializer):
@@ -41,8 +63,8 @@ class TimeSeriesResponseSerializer(StrictSerializer):
         r"^[A-Z]{3}$", allow_null=True, required=True
     )
     scale = serializers.IntegerField(min_value=1, max_value=1)
-    start = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
-    end = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     series = SeriesDefinitionSerializer(many=True)
     points = TimeSeriesPointSerializer(many=True)
 
@@ -51,4 +73,28 @@ class TimeSeriesResponseSerializer(StrictSerializer):
             raise serializers.ValidationError(
                 {"end": "end must be on or after start"}
             )
+        series_keys = {series["key"] for series in attrs["series"]}
+        boundary_keys = {"period_start", "period_end"}
+        for index, point in enumerate(attrs["points"]):
+            unknown = set(point) - boundary_keys - series_keys
+            if unknown:
+                raise serializers.ValidationError(
+                    {
+                        "points": {
+                            index: {
+                                key: ["Unknown series key."] for key in sorted(unknown)
+                            }
+                        }
+                    }
+                )
+            if point["period_end"] < point["period_start"]:
+                raise serializers.ValidationError(
+                    {
+                        "points": {
+                            index: {
+                                "period_end": ["Must be on or after period_start."]
+                            }
+                        }
+                    }
+                )
         return attrs

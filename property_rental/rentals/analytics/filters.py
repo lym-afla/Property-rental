@@ -1,10 +1,23 @@
 """Validation and normalization of analytics URL query parameters."""
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
 from rest_framework import serializers
+
+
+class ISODateField(serializers.DateField):
+    """DRF date field that requires exact zero-padded ISO input."""
+
+    def to_internal_value(self, value):
+        if (
+            isinstance(value, str)
+            and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
+        ):
+            self.fail("invalid", format="YYYY-MM-DD")
+        return super().to_internal_value(value)
 
 
 class Grain(StrEnum):
@@ -14,8 +27,8 @@ class Grain(StrEnum):
 
 
 class _AnalyticsFilterSerializer(serializers.Serializer):
-    start = serializers.DateField(required=False)
-    end = serializers.DateField(required=False)
+    start = ISODateField(required=False)
+    end = ISODateField(required=False)
     grain = serializers.ChoiceField(
         choices=[grain.value for grain in Grain], required=False
     )
