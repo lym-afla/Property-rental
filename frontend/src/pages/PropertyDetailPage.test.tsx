@@ -86,6 +86,28 @@ describe('PropertyDetailPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens valuation history from the empty valuation chart action', async () => {
+    server.use(
+      http.get('/api/v1/analytics/properties/:id/valuation/', () =>
+        HttpResponse.json({
+          metric: 'property_valuation', grain: 'record', currency: 'EUR', scale: 1,
+          start: '2026-01-01', end: '2026-07-29', status: 'missing_valuation',
+          series: [
+            { key: 'total_value', label: 'Total value', kind: 'total' },
+            { key: 'debt', label: 'Debt', kind: 'debt' },
+            { key: 'equity', label: 'Equity', kind: 'equity' },
+          ], points: [],
+        }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(fixtureProperty.name)
+    await user.click(screen.getByRole('tab', { name: /valuations/i }))
+    await user.click(await screen.findByRole('button', { name: /view valuation history/i }))
+    expect(screen.getByRole('heading', { name: /capital structure/i })).toBeInTheDocument()
+  })
+
   it('renders ErrorState when the property request fails', async () => {
     server.use(
       http.get('/api/v1/properties/:id/', () =>

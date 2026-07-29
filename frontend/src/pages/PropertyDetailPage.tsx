@@ -46,9 +46,9 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
-import { useChartData } from '@/api/charts'
-import { ValuationChart } from '@/components/charts/ValuationChart'
 import { RentYieldChart } from '@/components/charts/RentYieldChart'
+import { usePropertyValuationAnalytics } from '@/api/analytics'
+import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { ConfirmDialog } from '@/components/modals/ConfirmDialog'
@@ -102,25 +102,9 @@ export function PropertyDetailPage() {
   const valuationsQuery = usePropertyValuations(propertyId)
   const transactionsQuery = useTransactions({ property: propertyId })
 
-  // Property-scoped chart data: feeds ValuationChart (Debt + Equity per
-  // period) and RentYieldChart (rent / value). A single round-trip covers
-  // both since the chart-data view already returns the union of series
-  // the property branch builds (`Debt`, `Equity`, plus the rent category
-  // from the homePage-style aggregation). We pull 5 years of history so
-  // both charts have meaningful context for established properties.
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const fiveYearsAgo = (() => {
-    const d = new Date()
-    d.setFullYear(d.getFullYear() - 5)
-    return d.toISOString().slice(0, 10)
-  })()
-  const chartQuery = useChartData({
-    type: 'property',
-    elementId: propertyId,
-    frequency: 'M',
-    start: fiveYearsAgo,
-    end: todayStr,
-  })
+  // The valuation endpoint returns complete record history. Deliberately do
+  // not pass an end date or derive a client-side five-year cutoff.
+  const valuationAnalyticsQuery = usePropertyValuationAnalytics(propertyId)
 
   const updateProperty = useUpdateProperty()
   const deleteProperty = useDeleteProperty()
@@ -135,6 +119,7 @@ export function PropertyDetailPage() {
     useState<PropertyValuation | null>(null)
   const [deleteValuationTarget, setDeleteValuationTarget] =
     useState<PropertyValuation | null>(null)
+  const [activeTab, setActiveTab] = useState('overview')
 
   const property = propertyQuery.data
 
@@ -383,7 +368,7 @@ export function PropertyDetailPage() {
       </Card>
 
       {/* Tabs -------------------------------------------------------------- */}
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="valuations">Valuations</TabsTrigger>
@@ -504,14 +489,12 @@ export function PropertyDetailPage() {
             </Button>
           </div>
 
-          {/* Valuation chart (Plan C). Rendered ABOVE the capital-structure
-              table so the trend is the first thing the user reads, with the
-              raw rows below for detail. The chart-data request feeds Debt +
-              Equity series; the chart overlays the sum (total value) as a
-              line. Currency comes from the property's native currency. */}
           <ValuationChart
-            data={chartQuery.data ?? { labels: [], datasets: [], currency: property.currency }}
-            currency={property.currency}
+            data={valuationAnalyticsQuery.data}
+            isLoading={valuationAnalyticsQuery.isLoading}
+            isError={valuationAnalyticsQuery.isError}
+            onRetry={() => valuationAnalyticsQuery.refetch()}
+            onViewHistory={() => setActiveTab('valuations')}
           />
 
           {valuationsQuery.isLoading ? (

@@ -39,8 +39,8 @@ import {
 } from '@/api/tenants'
 import { useProperty } from '@/api/properties'
 import { useTransactions } from '@/api/transactions'
-import { useChartData } from '@/api/charts'
-import { TenantRentChart } from '@/components/charts/TenantRentChart'
+import { useTenantRentPerformance } from '@/api/analytics'
+import { RentPerformanceChart } from '@/features/tenant/RentPerformanceChart'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
 import { UpdateRentDialog } from '@/components/modals/UpdateRentDialog'
@@ -122,19 +122,14 @@ export function TenantDetailPage() {
   const statsQuery = useTenantsWithStats()
   const updateTenant = useUpdateTenant()
 
-  // Tenant-scoped chart data: powers TenantRentChart (rent received per
-  // period). Monthly frequency over the lease lifetime; the chart's own
-  // Brush handles long histories. We seed the window from the tenant's
-  // lease_start through today once the tenant record is loaded; until then
-  // we fall back to today as both bounds so the request fires with a
-  // harmless 1-day window rather than NaN.
+  // Use server-provided expected, received, variance, and arrears values.
+  // The start is the lease start once available; no React-side financial
+  // calculation is used by the chart.
   const todayStr = new Date().toISOString().slice(0, 10)
-  const chartQuery = useChartData({
-    type: 'tenant',
-    elementId: tenantId,
-    frequency: 'M',
+  const rentPerformanceQuery = useTenantRentPerformance(tenantId, {
     start: tenantQuery.data?.lease_start ?? todayStr,
     end: todayStr,
+    grain: 'month',
   })
 
   const [editOpen, setEditOpen] = useState(false)
@@ -349,13 +344,11 @@ export function TenantDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Tenant rent history chart (Plan C). Renders below the
-              revenue/debt card so the lifetime + YTD figures sit right
-              above the per-period bars they aggregate. The chart owns its
-              own loading/error states via ChartCard. */}
-          <TenantRentChart
-            data={chartQuery.data ?? { labels: [], datasets: [], currency: currency || 'USD' }}
-            currency={currency || undefined}
+          <RentPerformanceChart
+            data={rentPerformanceQuery.data}
+            isLoading={rentPerformanceQuery.isLoading}
+            isError={rentPerformanceQuery.isError}
+            onRetry={() => rentPerformanceQuery.refetch()}
           />
 
           <div className="space-y-2">
