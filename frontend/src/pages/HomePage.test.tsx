@@ -42,10 +42,6 @@ vi.mock('@/api/properties', () => ({
   }),
 }))
 
-vi.mock('@/api/charts', () => ({
-  useChartData: () => ({ data: { labels: [], datasets: [], currency: 'USD' } }),
-}))
-
 const summary = {
   currency: 'GBP',
   scale: 1,
@@ -65,6 +61,22 @@ const summary = {
   property_value_status: 'ok',
   debt_status: 'ok',
 } as const
+
+const cashFlow = {
+  metric: 'portfolio_cash_flow', grain: 'month', currency: 'USD', scale: 1,
+  start: '2026-01-01', end: '2026-07-29',
+  series: [
+    { key: 'rent', label: 'Rent', kind: 'income' },
+    { key: 'utilities', label: 'Utilities', kind: 'expense' },
+    { key: 'total_income', label: 'Total income', kind: 'income' },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'expense' },
+    { key: 'net_income', label: 'Net income', kind: 'net' },
+    { key: 'cumulative_net_income', label: 'Cumulative net income', kind: 'cumulative' },
+  ],
+  points: [{ period_start: '2026-01-01', period_end: '2026-01-31', rent: 1500, utilities: -250, total_income: 1500, total_expenses: -250, net_income: 1250, cumulative_net_income: 1250 }],
+} as const
+
+const expenses = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'utilities', label: 'Utilities', kind: 'expense' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', utilities: -250 }] } as const
 
 function LocationProbe() {
   const location = useLocation()
@@ -86,24 +98,24 @@ function renderPage(initialEntry = '/') {
 }
 
 describe('HomePage dashboard shell', () => {
-  it('restores a copied section/filter URL without rendering independently filtered legacy consumers', async () => {
+  it('restores a copied section/filter URL and scopes typed cash-flow requests to every selected property', async () => {
+    const user = userEvent.setup()
     let requestedUrl = ''
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
         requestedUrl = request.url
         return HttpResponse.json(summary)
       }),
+      http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
+      http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
     )
 
     renderPage('/?section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&comparison=previous_period&property=3&property=1&measure=debt')
 
     expect(screen.getByRole('heading', { name: 'Portfolio analysis' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Portfolio' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByText('Property-scoped chart migration pending')).toBeInTheDocument()
-    expect(screen.queryByText('Cash Flow')).not.toBeInTheDocument()
+    expect(await screen.findByText('Net cash flow')).toBeInTheDocument()
     expect(screen.queryByLabelText('Currency exposure timeline')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Expense timeline')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Net income timeline')).not.toBeInTheDocument()
 
     expect(await screen.findByText('£1,000,000')).toBeInTheDocument()
     expect(screen.getByText('£350,000')).toBeInTheDocument()
@@ -115,6 +127,11 @@ describe('HomePage dashboard shell', () => {
     expect(requested.searchParams.get('comparison')).toBeNull()
     expect(requested.searchParams.getAll('property')).toEqual(['1', '3'])
     expect(requested.searchParams.get('grain')).toBe('quarter')
+
+    await user.click(screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' }))
+    expect(screen.getByLabelText('Current dashboard URL')).toHaveTextContent(
+      'from=2026-01-01&to=2026-01-31&category=rent&currency=USD&property=1&property=3',
+    )
   })
 
   it('updates router URL and analytics request from filter interactions, then fully serializes reset defaults', async () => {
@@ -125,16 +142,13 @@ describe('HomePage dashboard shell', () => {
         requestedUrls.push(request.url)
         return HttpResponse.json(summary)
       }),
+      http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
+      http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
     )
     renderPage('/?section=risk&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&comparison=none&property=&measure=property_value')
 
     expect(screen.getByText('Currency exposure migration pending')).toBeInTheDocument()
     expect(screen.getByText('Occupancy migration pending')).toBeInTheDocument()
-    expect(screen.getByText('Profit & Loss migration pending')).toBeInTheDocument()
-    expect(screen.queryByText('Profit & Loss')).not.toBeInTheDocument()
-    for (const toggle of screen.getAllByRole('button', { name: 'Table' })) {
-      expect(toggle).toHaveClass('min-h-11')
-    }
 
     await user.click(screen.getByRole('button', { name: 'Income & Costs' }))
     await waitFor(() => {
@@ -158,6 +172,8 @@ describe('HomePage dashboard shell', () => {
 
   it('distinguishes summary loading, error, and empty states', async () => {
     server.use(
+      http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
+      http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
       http.get('/api/v1/analytics/portfolio/summary/', async () => {
         await delay('infinite')
         return HttpResponse.json(summary)
@@ -172,7 +188,7 @@ describe('HomePage dashboard shell', () => {
     )
     const { unmount } = renderPage('/?section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value')
     expect(await screen.findByText('Failed to load portfolio summary')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toHaveClass('min-h-11')
+    expect(screen.getAllByRole('button', { name: 'Retry' }).at(0)).toHaveClass('min-h-11')
     unmount()
 
     server.use(

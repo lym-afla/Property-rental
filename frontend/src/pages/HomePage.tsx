@@ -1,41 +1,23 @@
-// Responsive investment dashboard shell. URL-owned global filters feed the
-// validated analytics summary and the compatible legacy chart-data requests.
-// Compatible legacy charts remain below the new summary until their dedicated
-// redesign tasks migrate them to the typed analytics endpoints.
-//
-// Drill-down: clicking a Cash Flow bar segment navigates to
-// /transactions?from=...&to=...&category=... for the period + category.
-// `periodLabelToRange` translates the chart's period label (`Jan-24`,
-// `Q1 24`, `2024`) into a `YYYY-MM-DD` range that the TransactionsPage
-// filter already understands (it reads `from`/`to`/`category` from the URL
-// query string).
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, subYears } from 'date-fns'
 
-import { usePortfolioSummary } from '@/api/analytics'
-import { useChartData } from '@/api/charts'
+import { useExpenseDrivers, usePortfolioCashFlow, usePortfolioSummary } from '@/api/analytics'
 import { useProperties } from '@/api/properties'
-import { CashFlowChart } from '@/components/charts/CashFlowChart'
-import { ExpenseBreakdownChart } from '@/components/charts/ExpenseBreakdownChart'
-import { NetIncomeTrendChart } from '@/components/charts/NetIncomeTrendChart'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
+import { CumulativeCashChart } from '@/features/dashboard/charts/CumulativeCashChart'
+import { ExpenseDriversChart } from '@/features/dashboard/charts/ExpenseDriversChart'
+import { NetCashFlowChart } from '@/features/dashboard/charts/NetCashFlowChart'
+import { RevenueExpenseTrendChart } from '@/features/dashboard/charts/RevenueExpenseTrendChart'
+import type { DrillDown } from '@/features/dashboard/charts/chartUtils'
 import type { DashboardFilterState, DashboardGrain } from '@/features/dashboard/filters'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { useSession } from '@/context/SessionProvider'
 import type { User } from '@/types/user'
-
-type Frequency = 'M' | 'Q' | 'Y'
-
-const GRAIN_TO_FREQUENCY: Record<DashboardGrain, Frequency> = {
-  month: 'M',
-  quarter: 'Q',
-  year: 'Y',
-}
 
 function timelineStart(end: string, timeline: string): string {
   if (timeline === 'All') return '1900-01-01'
@@ -79,51 +61,6 @@ function dashboardDefaults(user: User | null): DashboardFilterState {
   }
 }
 
-// Convert a chart period label back into a date range for drill-down. The
-// backend's `chart_labels` emits `Jan-24` (M), `Q1 24` (Q), `2024` (Y); we
-// parse each back into a `YYYY-MM-DD` window covering that period.
-function periodLabelToRange(
-  label: string,
-  frequency: Frequency,
-): { from: string; to: string } | null {
-  if (frequency === 'Y') {
-    const year = Number(label)
-    if (!Number.isFinite(year)) return null
-    return {
-      from: `${year}-01-01`,
-      to: `${year}-12-31`,
-    }
-  }
-  if (frequency === 'Q') {
-    // e.g. "Q1 24" -> 2024-01-01..2024-03-31
-    const m = label.match(/Q([1-4])\s+(\d{2,4})/)
-    if (!m) return null
-    const q = Number(m[1])
-    let year = Number(m[2])
-    if (year < 100) year += 2000
-    const startMonth = (q - 1) * 3 + 1
-    const endMonth = startMonth + 2
-    const lastDay = new Date(year, endMonth, 0).getDate()
-    return {
-      from: `${year}-${String(startMonth).padStart(2, '0')}-01`,
-      to: `${year}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-    }
-  }
-  // Monthly: "Jan-24" -> 2024-01-01..2024-01-31
-  const m = label.match(/^([A-Za-z]{3})-(\d{2,4})$/)
-  if (!m) return null
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const monthIdx = monthNames.indexOf(m[1])
-  if (monthIdx < 0) return null
-  let year = Number(m[2])
-  if (year < 100) year += 2000
-  const lastDay = new Date(year, monthIdx + 1, 0).getDate()
-  return {
-    from: `${year}-${String(monthIdx + 1).padStart(2, '0')}-01`,
-    to: `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
-  }
-}
-
 export function HomePage() {
   const { user } = useSession()
   const properties = useProperties()
@@ -141,101 +78,46 @@ export function HomePage() {
 
 function DashboardContent({ filters }: { filters: DashboardFilterState }) {
   const navigate = useNavigate()
-  const userCurrency = filters.currency
-  const frequency = GRAIN_TO_FREQUENCY[filters.grain]
   const range = { from: filters.start, to: filters.end }
-
-  // One chart-data request for the headline bar chart; the same response
-  // powers both Cash Flow and (via Net Income Trend's client-side sum) the
-  // net income trajectory, so a single round-trip feeds two tiles.
-  const chartQuery = useChartData({
-    type: 'homePage',
-    frequency,
+  const analyticsParams = {
     start: range.from,
     end: range.to,
-    currency: userCurrency,
-  })
-  // Keep separate query handles for the legacy components. Identical keys
-  // deduplicate at the query-client boundary.
-  const expenseQuery = useChartData({
-    type: 'homePage',
-    frequency,
-    start: range.from,
-    end: range.to,
-    currency: userCurrency,
-  })
-  const netIncomeQuery = useChartData({
-    type: 'homePage',
-    frequency,
-    start: range.from,
-    end: range.to,
-    currency: userCurrency,
-  })
-  const kpiCurrency = userCurrency
-
-  // ---- Cash Flow drill-down ------------------------------------------------
-  const onBarClick = (period: string, category: string) => {
-    const r = periodLabelToRange(period, frequency)
-    if (!r) return
-    const params = new URLSearchParams({
-      from: r.from,
-      to: r.to,
-      category,
-    })
-    navigate(`/transactions?${params.toString()}`)
+    currency: filters.currency,
+    grain: filters.grain,
+    propertyIds: filters.propertyIds,
   }
+  const cashFlowQuery = usePortfolioCashFlow(analyticsParams)
+  const expenseQuery = useExpenseDrivers(analyticsParams)
 
-  if (filters.propertyIds.length > 0) {
-    return (
-      <div className="space-y-6">
-        <PortfolioSummary filters={filters} />
-        <MigrationPlaceholder
-          title="Property-scoped chart migration pending"
-          description="Tasks 8–9 will restore charts here using analytics endpoints that honor the selected properties. The legacy all-property charts are hidden so they cannot contradict the shared filter."
-        />
-      </div>
-    )
+  const onDrillDown = ({ from, to, category, currency, propertyIds }: DrillDown) => {
+    const params = new URLSearchParams({ from, to, category, currency })
+    for (const propertyId of propertyIds) params.append('property', String(propertyId))
+    navigate(`/transactions?${params.toString()}`)
   }
 
   return (
     <div className="space-y-6">
       <PortfolioSummary filters={filters} />
 
-      {/* ---- Cash Flow (full-width) ------------------------------------- */}
-      {/* The chart itself owns its loading state via ChartCard; we just
-          pass the data through and let the controls live in the card
-          header so they're co-located with the chart they affect. */}
-      <CashFlowChart
-        data={chartQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
-        onBarClick={onBarClick}
-      />
+      <NetCashFlowChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} propertyIds={filters.propertyIds} onDrillDown={onDrillDown} />
 
-      {/* ---- Expense breakdown + Occupancy (side-by-side) --------------- */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <ExpenseBreakdownChart
-          data={expenseQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
-        />
+        <CumulativeCashChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
         <MigrationPlaceholder
           title="Occupancy migration pending"
-          description="Task 8 will restore occupancy using the shared dashboard range and as-of date."
+          description="Task 9 will restore occupancy using the shared dashboard range and as-of date."
         />
       </div>
 
-      {/* ---- Net income trend + Currency exposure (side-by-side) -------- */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <NetIncomeTrendChart
-          data={netIncomeQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
-        />
+        <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
         <MigrationPlaceholder
           title="Currency exposure migration pending"
           description="Task 9 will restore currency exposure using the shared range, currency, properties, and exposure measure."
         />
       </div>
 
-      <MigrationPlaceholder
-        title="Profit & Loss migration pending"
-        description="Task 8 will restore the detailed P&L using the shared range, currency, and property selection."
-      />
+      <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
 
       {/* Hidden export for tests / a11y tools that want the timeline label
           as plain text — keeps the dashboard's "as of" date reachable
