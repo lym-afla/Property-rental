@@ -128,6 +128,7 @@ describe('HomePage dashboard shell', () => {
     expect(requested.searchParams.getAll('property')).toEqual(['1', '3'])
     expect(requested.searchParams.get('grain')).toBe('quarter')
 
+    await user.click(screen.getByText('Drill down to transactions'))
     await user.click(screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' }))
     expect(screen.getByLabelText('Current dashboard URL')).toHaveTextContent(
       'from=2026-01-01&to=2026-01-31&category=rent&currency=USD&property=1&property=3',

@@ -39,11 +39,14 @@ describe('NetCashFlowChart', () => {
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$-250')
   })
 
-  it('drills into the server-provided period by pointer and keyboard activation', async () => {
+  it('uses a visible drill-down disclosure for pointer and keyboard activation', async () => {
     const user = userEvent.setup()
     const onDrillDown = vi.fn()
     render(<NetCashFlowChart data={data} propertyIds={[3, 1]} onDrillDown={onDrillDown} />)
 
+    const disclosure = screen.getByText('Drill down to transactions')
+    expect(disclosure).not.toHaveClass('sr-only')
+    await user.click(disclosure)
     const drillDown = screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' })
     await user.click(drillDown)
     drillDown.focus()
@@ -52,5 +55,10 @@ describe('NetCashFlowChart', () => {
     expect(onDrillDown).toHaveBeenCalledWith({
       from: '2026-01-01', to: '2026-01-28', category: 'rent', currency: 'USD', propertyIds: [3, 1],
     })
+  })
+
+  it('shows an empty state when a response has periods but no income or expense series', () => {
+    render(<NetCashFlowChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', net_income: 750 }] }} />)
+    expect(screen.getByText('No net cash flow data for this selection.')).toBeInTheDocument()
   })
 })

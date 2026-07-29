@@ -27,11 +27,21 @@ export type DrillDown = {
 export function chartState(
   title: string,
   { data, isLoading, isError, onRetry }: ChartDataProps,
+  hasDisplayableData = data !== undefined && data.points.length > 0,
 ): AnalyticsChartState {
   if (isLoading) return { status: 'loading' }
   if (isError) return { status: 'error', message: `Could not load ${title}.`, onRetry }
-  if (!data || data.points.length === 0) return { status: 'empty', message: `No ${title.toLowerCase()} data for this selection.` }
+  if (!data || !hasDisplayableData) return { status: 'empty', message: `No ${title.toLowerCase()} data for this selection.` }
   return { status: 'success' }
+}
+
+export function hasSeriesValues(
+  data: PortfolioChartData | undefined,
+  series: readonly { key: string }[],
+): boolean {
+  return data !== undefined && series.length > 0 && data.points.some((point) =>
+    series.some((item) => typeof point[item.key] === 'number'),
+  )
 }
 
 export function seriesWithVisualTokens(

@@ -8,17 +8,17 @@ import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { chartState, type ChartDataProps } from './chartUtils'
 
 export function ExpenseDriversChart({ data, isLoading, isError, onRetry }: ChartDataProps) {
-  const state = chartState('Expense drivers', { data, isLoading, isError, onRetry })
   const rows = data ? data.series
     .filter((item) => item.kind === 'expense')
     .map((item) => ({ key: item.key, category: item.label, total: Math.abs(data.points.reduce((sum, point) => sum + Number(point[item.key] ?? 0), 0)) }))
     .filter((row) => row.total > 0)
     .sort((left, right) => right.total - left.total)
     .map((row, index) => ({ ...row, rank: index + 1 })) : []
-  const table = data ? { columns: [{ key: 'rank', label: 'Rank', numeric: true }, { key: 'category', label: 'Expense category' }, { key: 'total', label: 'Total', numeric: true }], rows: rows.map((row) => ({ rank: row.rank, category: row.category, total: formatCurrency(row.total, data.currency ?? '') })) } : undefined
+  const state = chartState('Expense drivers', { data, isLoading, isError, onRetry }, rows.length > 0)
+  const table = state.status === 'success' && data ? { columns: [{ key: 'rank', label: 'Rank', numeric: true }, { key: 'category', label: 'Expense category' }, { key: 'total', label: 'Total', numeric: true }], rows: rows.map((row) => ({ rank: row.rank, category: row.category, total: formatCurrency(row.total, data.currency ?? '') })) } : undefined
   return (
     <AnalyticsChartCard state={state} title="Expense drivers" subtitle="Ranked spend categories supplied by the expense analytics endpoint." table={table}>
-      {data && <>
+      {state.status === 'success' && data && <>
         <ResponsiveContainer width="100%" height="100%"><BarChart data={rows} layout="vertical" margin={{ top: 8, right: 12, left: 28, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis type="number" tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />

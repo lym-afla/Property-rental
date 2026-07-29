@@ -21,4 +21,9 @@ describe('ExpenseDriversChart', () => {
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Expense drivers exact values' })).toHaveTextContent('$2,000')
   })
+
+  it('shows an empty state when expense rows total zero across populated periods', () => {
+    render(<ExpenseDriversChart data={{ ...data, points: data.points.map((point) => ({ ...point, major_repairs: 0, utilities: 0 })) }} />)
+    expect(screen.getByText('No expense drivers data for this selection.')).toBeInTheDocument()
+  })
 })

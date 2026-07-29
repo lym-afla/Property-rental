@@ -21,4 +21,9 @@ describe('RevenueExpenseTrendChart', () => {
     expect(expenses).toHaveAttribute('aria-pressed', 'false')
     expect(expenses).toHaveTextContent('Total expenses')
   })
+
+  it('shows an empty state when periods have no income or expense series', () => {
+    render(<RevenueExpenseTrendChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }] }} />)
+    expect(screen.getByText('No revenue and expenses data for this selection.')).toBeInTheDocument()
+  })
 })

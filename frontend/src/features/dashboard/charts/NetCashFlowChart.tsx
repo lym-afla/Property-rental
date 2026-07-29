@@ -6,23 +6,23 @@ import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesStyle } from '@/components/analytics/chartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
-import { cashTable, chartState, compactPeriod, seriesWithVisualTokens, type ChartDataProps, type DrillDown, type PortfolioChartData } from './chartUtils'
+import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisualTokens, type ChartDataProps, type DrillDown, type PortfolioChartData } from './chartUtils'
 
 type Props = ChartDataProps & {
   propertyIds?: readonly number[]
   onDrillDown?: (drillDown: DrillDown) => void
 }
 
-const AGGREGATE_KEYS = new Set(['total_income', 'total_expenses', 'net_income', 'cumulative_net_income'])
+const CASH_FLOW_KINDS = new Set(['income', 'expense'])
 
 function categorySeries(data: PortfolioChartData) {
-  return data.series.filter((item) => !AGGREGATE_KEYS.has(item.key))
+  return data.series.filter((item) => CASH_FLOW_KINDS.has(item.kind))
 }
 
 export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyIds = [], onDrillDown }: Props) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
-  const state = chartState('Net cash flow', { data, isLoading, isError, onRetry })
   const series = data ? seriesWithVisualTokens(categorySeries(data)) : []
+  const state = chartState('Net cash flow', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
   const visibleSeries = series.filter((item) => !hiddenKeys.has(item.key))
   const drill = (point: PortfolioChartData['points'][number], category: string) => onDrillDown?.({
     from: point.period_start, to: point.period_end, category, currency: data?.currency ?? '', propertyIds,
@@ -33,27 +33,32 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
       state={state}
       title="Net cash flow"
       subtitle="Signed income and expense categories by reporting period."
-      controls={data && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
+      controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next
       })} />}
-      table={data ? cashTable(data, series) : undefined}
+      table={state.status === 'success' && data ? cashTable(data, series) : undefined}
     >
-      {data && <>
+      {state.status === 'success' && data && <div className="flex h-full min-h-0 flex-col">
         <span className="sr-only" aria-label="Net cash flow zero baseline">Zero baseline shown on the chart.</span>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+        <div className="min-h-0 flex-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
             <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
             <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
             {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="sr-only" aria-label="Net cash flow drill-down controls">
-          {data.points.flatMap((point) => series.map((item) => <button key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      </>}
+        <details className="mt-2 rounded-md border px-2 py-1">
+          <summary className="min-h-11 cursor-pointer content-center font-medium">Drill down to transactions</summary>
+          <div className="grid max-h-28 grid-cols-1 gap-1 overflow-y-auto pb-1 sm:grid-cols-2">
+            {data.points.flatMap((point) => series.map((item) => <button className="min-h-11 rounded-md border px-2 text-left text-sm hover:bg-muted focus-visible:ring-3" key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
+          </div>
+        </details>
+      </div>}
     </AnalyticsChartCard>
   )
 }

@@ -20,4 +20,9 @@ describe('CumulativeCashChart', () => {
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Cumulative cash exact values' })).toHaveTextContent('$250')
   })
+
+  it('shows an empty state when periods have no cumulative series', () => {
+    render(<CumulativeCashChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }] }} />)
+    expect(screen.getByText('No cumulative cash data for this selection.')).toBeInTheDocument()
+  })
 })
