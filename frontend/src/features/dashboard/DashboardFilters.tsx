@@ -1,4 +1,5 @@
 import { SlidersHorizontal } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -42,6 +43,7 @@ type Props = {
 }
 
 const CURRENCIES: DashboardCurrency[] = ['USD', 'EUR', 'GBP', 'RUB']
+const DESKTOP_FILTER_QUERY = '(min-width: 768px)'
 const GRAINS: { value: DashboardGrain; label: string }[] = [
   { value: 'month', label: 'Monthly' },
   { value: 'quarter', label: 'Quarterly' },
@@ -49,6 +51,7 @@ const GRAINS: { value: DashboardGrain; label: string }[] = [
 ]
 
 export function DashboardFilters({ filters, properties, onChange, onReset }: Props) {
+  const isDesktop = useDesktopFilterLayout()
   const update = (patch: Partial<DashboardFilterState>) =>
     onChange({ ...filters, ...patch })
 
@@ -104,51 +107,53 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
           </Select>
         </div>
 
-        <div className="hidden items-end gap-2 md:flex">
-          <AdvancedSelects filters={filters} update={update} />
-          <PropertyMenu
-            filters={filters}
-            properties={properties}
-            onToggle={toggleProperty}
-          />
-        </div>
-
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button type="button" variant="outline" className="min-h-11 md:hidden">
-              <SlidersHorizontal />
-              Filters
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" aria-describedby="dashboard-filter-description">
-            <SheetHeader>
-              <SheetTitle>Dashboard filters</SheetTitle>
-              <SheetDescription id="dashboard-filter-description">
-                Refine frequency, comparison, and portfolio scope.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="grid gap-5 overflow-y-auto pb-4">
-              <AdvancedSelects filters={filters} update={update} mobile />
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">Properties</legend>
-                {properties.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No properties available.</p>
-                ) : (
-                  properties.map((property) => (
-                    <label key={property.id} className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm">
-                      <Checkbox
-                        aria-label={property.name}
-                        checked={filters.propertyIds.includes(property.id)}
-                        onCheckedChange={(checked) => toggleProperty(property.id, checked === true)}
-                      />
-                      {property.name}
-                    </label>
-                  ))
-                )}
-              </fieldset>
-            </div>
-          </SheetContent>
-        </Sheet>
+        {isDesktop ? (
+          <div className="flex items-end gap-2">
+            <AdvancedSelects filters={filters} update={update} />
+            <PropertyMenu
+              filters={filters}
+              properties={properties}
+              onToggle={toggleProperty}
+            />
+          </div>
+        ) : (
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button type="button" variant="outline" className="min-h-11">
+                <SlidersHorizontal />
+                Filters
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" aria-describedby="dashboard-filter-description">
+              <SheetHeader>
+                <SheetTitle>Dashboard filters</SheetTitle>
+                <SheetDescription id="dashboard-filter-description">
+                  Refine frequency, comparison, and portfolio scope.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="grid gap-5 overflow-y-auto pb-4">
+                <AdvancedSelects filters={filters} update={update} mobile />
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">Properties</legend>
+                  {properties.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No properties available.</p>
+                  ) : (
+                    properties.map((property) => (
+                      <label key={property.id} className="flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm">
+                        <Checkbox
+                          aria-label={property.name}
+                          checked={filters.propertyIds.includes(property.id)}
+                          onCheckedChange={(checked) => toggleProperty(property.id, checked === true)}
+                        />
+                        {property.name}
+                      </label>
+                    ))
+                  )}
+                </fieldset>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
 
         <Button
           type="button"
@@ -162,6 +167,26 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
       </div>
     </div>
   )
+}
+
+function useDesktopFilterLayout() {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window.matchMedia !== 'function') return true
+    return window.matchMedia(DESKTOP_FILTER_QUERY).matches
+  })
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+
+    const mediaQuery = window.matchMedia(DESKTOP_FILTER_QUERY)
+    const updateLayout = () => setIsDesktop(mediaQuery.matches)
+    mediaQuery.addEventListener('change', updateLayout)
+    updateLayout()
+
+    return () => mediaQuery.removeEventListener('change', updateLayout)
+  }, [])
+
+  return isDesktop
 }
 
 function AdvancedSelects({
