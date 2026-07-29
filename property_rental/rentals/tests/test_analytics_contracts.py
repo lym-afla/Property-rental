@@ -200,6 +200,35 @@ def test_time_series_response_serializer_emits_declared_flat_point_dictionaries(
     ]
 
 
+def test_time_series_response_serializer_omits_undeclared_point_keys():
+    """Copying every point key would leak fields outside the declared series contract."""
+    response = TimeSeriesResponse(
+        metric="portfolio_cash_flow",
+        grain="month",
+        currency="USD",
+        scale=1,
+        start=date(2026, 1, 1),
+        end=date(2026, 1, 31),
+        series=(SeriesDefinition("income", "Income", "positive"),),
+        points=(
+            {
+                "period_start": date(2026, 1, 1),
+                "period_end": date(2026, 1, 31),
+                "income": "1250.00",
+                "internal_note": "must not be emitted",
+            },
+        ),
+    )
+
+    assert TimeSeriesResponseSerializer(response).data["points"] == [
+        {
+            "period_start": "2026-01-01",
+            "period_end": "2026-01-31",
+            "income": "1250.00",
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("start", "2026-1-01"), ("end", "2026-01-1")],

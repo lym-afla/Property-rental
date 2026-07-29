@@ -68,6 +68,16 @@ class TimeSeriesResponseSerializer(StrictSerializer):
     series = SeriesDefinitionSerializer(many=True)
     points = TimeSeriesPointSerializer(many=True)
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        allowed_keys = {"period_start", "period_end"}
+        allowed_keys.update(series["key"] for series in representation["series"])
+        representation["points"] = [
+            {key: value for key, value in point.items() if key in allowed_keys}
+            for point in representation["points"]
+        ]
+        return representation
+
     def validate(self, attrs):
         if attrs["end"] < attrs["start"]:
             raise serializers.ValidationError(
