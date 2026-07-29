@@ -1,0 +1,100 @@
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
+import { describe, expect, it, vi } from 'vitest'
+
+import { DashboardFilters } from './DashboardFilters'
+import type { DashboardFilterState } from './filters'
+
+const initialFilters: DashboardFilterState = {
+  section: 'overview',
+  start: '2026-01-01',
+  end: '2026-07-29',
+  currency: 'USD',
+  grain: 'month',
+  comparison: null,
+  propertyIds: [],
+  exposureMeasure: 'property_value',
+}
+
+const properties = [
+  { id: 1, name: 'Birch House' },
+  { id: 3, name: 'Canal Court' },
+]
+
+function StatefulFilters({ onReset = vi.fn() }: { onReset?: () => void }) {
+  const [filters, setFilters] = useState(initialFilters)
+  return (
+    <DashboardFilters
+      filters={filters}
+      properties={properties}
+      onChange={setFilters}
+      onReset={() => {
+        onReset()
+        setFilters(initialFilters)
+      }}
+    />
+  )
+}
+
+describe('DashboardFilters', () => {
+  it('exposes labelled 44px controls and reports desktop filter changes', async () => {
+    const user = userEvent.setup()
+    render(<StatefulFilters />)
+
+    const start = screen.getByLabelText('Start date')
+    const end = screen.getByLabelText('As of date')
+    const currency = screen.getByLabelText('Reporting currency')
+    const grain = screen.getByLabelText('Frequency')
+
+    for (const control of [start, end, currency, grain]) {
+      expect(control).toHaveClass('min-h-11')
+    }
+
+    await user.clear(start)
+    await user.type(start, '2026-02-01')
+    expect(start).toHaveValue('2026-02-01')
+
+    await user.click(currency)
+    await user.click(screen.getByRole('option', { name: 'GBP' }))
+    expect(currency).toHaveTextContent('GBP')
+
+    await user.click(grain)
+    await user.click(screen.getByRole('option', { name: 'Quarterly' }))
+    expect(grain).toHaveTextContent('Quarterly')
+  })
+
+  it('keeps essential controls visible and exposes advanced controls in a bottom sheet', async () => {
+    const user = userEvent.setup()
+    render(<StatefulFilters />)
+
+    expect(screen.getByLabelText('Start date')).toBeVisible()
+    expect(screen.getByLabelText('As of date')).toBeVisible()
+    expect(screen.getByLabelText('Reporting currency')).toBeVisible()
+
+    const filtersButton = screen.getByRole('button', { name: 'Filters' })
+    expect(filtersButton).toHaveClass('min-h-11')
+    await user.click(filtersButton)
+
+    const sheet = screen.getByRole('dialog', { name: 'Dashboard filters' })
+    expect(sheet).toHaveAttribute('data-side', 'bottom')
+
+    const comparison = within(sheet).getByLabelText('Comparison')
+    await user.click(comparison)
+    await user.click(screen.getByRole('option', { name: 'Previous period' }))
+    expect(comparison).toHaveTextContent('Previous period')
+
+    await user.click(within(sheet).getByRole('checkbox', { name: 'Birch House' }))
+    expect(within(sheet).getByRole('checkbox', { name: 'Birch House' })).toBeChecked()
+  })
+
+  it('provides deterministic reset behavior', async () => {
+    const user = userEvent.setup()
+    const onReset = vi.fn()
+    render(<StatefulFilters onReset={onReset} />)
+
+    await user.click(screen.getByRole('button', { name: 'Reset dashboard filters' }))
+    expect(onReset).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('Start date')).toHaveValue('2026-01-01')
+  })
+})

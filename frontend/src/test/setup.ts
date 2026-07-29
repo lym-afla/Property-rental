@@ -20,6 +20,12 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as typeof ResizeObserver
 }
 
+// Radix Select scrolls the active option into view when its portal opens.
+// jsdom has no layout engine, so it does not provide this harmless method.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())

@@ -1,27 +1,7 @@
-// frontend/src/pages/HomePage.tsx
-//
-// Real dashboard (Plan C Task 10). Replaces the minimal "two counts"
-// placeholder from Plan B2 with:
-//
-//   1. KPI row (5 cards): property count, revenue YTD, net income YTD,
-//      occupancy %, FX exposure.
-//   2. Charts:
-//        - Cash Flow (full-width, with frequency + timeline selectors that
-//          re-fire the chart-data request).
-//        - Expense breakdown + Occupancy (side-by-side).
-//        - Net income trend + Currency exposure (side-by-side).
-//   3. P&L table — per-category breakdown (income + expense sections) with
-//      All-time + YTD columns, derived from `useChartData({type: 'homePage',
-//      frequency: 'Y'})`. The chart-data response returns one dataset per
-//      category; summing each dataset gives the all-time / YTD total per
-//      category. (Previously this table only showed 3 aggregated rows from
-//      `with_stats`, which lost the per-category detail the old Django
-//      template exposed.)
-//
-// Charts are powered by `useChartData({ type: 'homePage', frequency, start,
-// end })`; KPIs derive from `usePropertiesWithStats` and
-// `useTenantsWithStats` (the same hooks every other page uses, so React
-// Query dedupes the round-trips).
+// Responsive investment dashboard shell. URL-owned global filters feed the
+// validated analytics summary and the compatible legacy chart-data requests.
+// The legacy charts and detailed P&L remain below the new summary until their
+// dedicated redesign tasks migrate them to the typed analytics endpoints.
 //
 // Drill-down: clicking a Cash Flow bar segment navigates to
 // /transactions?from=...&to=...&category=... for the period + category.
@@ -29,12 +9,13 @@
 // `Q1 24`, `2024`) into a `YYYY-MM-DD` range that the TransactionsPage
 // filter already understands (it reads `from`/`to`/`category` from the URL
 // query string).
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { format, parseISO, subMonths, subYears } from 'date-fns'
 
+import { usePortfolioSummary } from '@/api/analytics'
 import { useChartData } from '@/api/charts'
-import { usePropertiesWithStats } from '@/api/properties'
-import { useTenantsWithStats } from '@/api/tenants'
+import { useProperties, usePropertiesWithStats } from '@/api/properties'
 import { CashFlowChart } from '@/components/charts/CashFlowChart'
 import { ExpenseBreakdownChart } from '@/components/charts/ExpenseBreakdownChart'
 import { NetIncomeTrendChart } from '@/components/charts/NetIncomeTrendChart'
@@ -51,83 +32,61 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
+import type { DashboardFilterState, DashboardGrain } from '@/features/dashboard/filters'
 import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
 import { useSession } from '@/context/SessionProvider'
+import type { User } from '@/types/user'
 
-// Frequency + timeline options that mirror the backend `chart_data` view's
-// `freq` and the `calculate_from_date` timelines. Keys must match the
-// backend strings (M / Q / Y for frequency; YTD / 3m / 6m / 12m / 3Y / 5Y
-// for timeline).
-const FREQUENCY_OPTIONS = [
-  { value: 'M', label: 'Monthly' },
-  { value: 'Q', label: 'Quarterly' },
-  { value: 'Y', label: 'Yearly' },
-] as const
+type Frequency = 'M' | 'Q' | 'Y'
 
-const TIMELINE_OPTIONS = [
-  { value: 'YTD', label: 'Year to date' },
-  { value: '3m', label: 'Last 3 months' },
-  { value: '6m', label: 'Last 6 months' },
-  { value: '12m', label: 'Last 12 months' },
-  { value: '3Y', label: 'Last 3 years' },
-  { value: '5Y', label: 'Last 5 years' },
-  { value: 'All', label: 'All time' },
-] as const
+const GRAIN_TO_FREQUENCY: Record<DashboardGrain, Frequency> = {
+  month: 'M',
+  quarter: 'Q',
+  year: 'Y',
+}
 
-// Occupancy history is derived client-side from tenants (no chart-data
-// round-trip), so its period selector uses a simpler month-count model
-// than the chart-data timelines.
-const OCCUPANCY_PERIOD_OPTIONS = [
-  { value: '12m', label: 'Last 12 months' },
-  { value: '24m', label: 'Last 24 months' },
-  { value: 'all', label: 'All history' },
-] as const
-
-type Frequency = (typeof FREQUENCY_OPTIONS)[number]['value']
-type Timeline = (typeof TIMELINE_OPTIONS)[number]['value']
-type OccupancyPeriod = (typeof OCCUPANCY_PERIOD_OPTIONS)[number]['value']
-
-// Compute the `YYYY-MM-DD` `from`/`to` window for a timeline ending today.
-// Mirrors the backend `calculate_from_date` (see `rentals/utils.py`) so the
-// chart-data request the dashboard fires lines up with what the user
-// thinks they're asking for.
-function timelineToRange(timeline: Timeline): { from: string; to: string } {
-  const today = new Date()
-  const to = today.toISOString().slice(0, 10)
-  // `All` uses the backend's all-time sentinel `1900-01-01` — the
-  // chart-data service rewrites it to the property set's earliest
-  // transaction date (see `services/charts.py::get_chart_data`).
-  if (timeline === 'All') return { from: '1900-01-01', to }
-  const from = new Date(today)
+function timelineStart(end: string, timeline: string): string {
+  if (timeline === 'All') return '1900-01-01'
+  const endDate = parseISO(end)
   switch (timeline) {
     case 'YTD':
-      from.setMonth(0, 1) // Jan 1 of current year
-      break
+      return `${end.slice(0, 4)}-01-01`
     case '3m':
-      from.setMonth(from.getMonth() - 3)
-      break
-    case '6m':
-      from.setMonth(from.getMonth() - 6)
-      break
+      return format(subMonths(endDate, 3), 'yyyy-MM-dd')
     case '12m':
-      from.setFullYear(from.getFullYear() - 1)
-      break
+      return format(subYears(endDate, 1), 'yyyy-MM-dd')
     case '3Y':
-      from.setFullYear(from.getFullYear() - 3)
-      break
+      return format(subYears(endDate, 3), 'yyyy-MM-dd')
     case '5Y':
-      from.setFullYear(from.getFullYear() - 5)
-      break
+      return format(subYears(endDate, 5), 'yyyy-MM-dd')
+    case '6m':
+    default:
+      return format(subMonths(endDate, 6), 'yyyy-MM-dd')
   }
-  return { from: from.toISOString().slice(0, 10), to }
+}
+
+function dashboardDefaults(user: User | null): DashboardFilterState {
+  const end = user?.effective_date ?? new Date().toISOString().slice(0, 10)
+  const currencies = ['USD', 'EUR', 'GBP', 'RUB'] as const
+  const userCurrency = user?.default_currency?.toUpperCase()
+  const currency = currencies.find((value) => value === userCurrency) ?? 'USD'
+  const grain: DashboardGrain = user?.chart_frequency === 'Q'
+    ? 'quarter'
+    : user?.chart_frequency === 'Y'
+      ? 'year'
+      : 'month'
+  return {
+    section: 'overview',
+    start: timelineStart(end, user?.chart_timeline ?? '6m'),
+    end,
+    currency,
+    grain,
+    comparison: null,
+    propertyIds: [],
+    exposureMeasure: 'property_value',
+  }
 }
 
 // Convert a chart period label back into a date range for drill-down. The
@@ -175,58 +134,31 @@ function periodLabelToRange(
   }
 }
 
-// Convert an occupancy period selection into a month count. `all` returns
-// undefined so the chart knows to span the full tenant history.
-function occupancyPeriodToMonths(period: OccupancyPeriod): number | undefined {
-  if (period === 'all') return undefined
-  return period === '12m' ? 12 : 24
+export function HomePage() {
+  const { user } = useSession()
+  const properties = useProperties()
+  const defaults = useMemo(() => dashboardDefaults(user), [user])
+
+  return (
+    <DashboardLayout
+      defaults={defaults}
+      properties={(properties.data ?? []).map(({ id, name }) => ({ id, name }))}
+    >
+      {(filters) => <DashboardContent filters={filters} />}
+    </DashboardLayout>
+  )
 }
 
-export function HomePage() {
+function DashboardContent({ filters }: { filters: DashboardFilterState }) {
   const navigate = useNavigate()
-  // User's preferred display currency drives every FX-converted number on
-  // this page (KPI cards, charts, P&L table). Falls back to USD when the
-  // session has not loaded yet or the user never picked a currency.
-  const { user } = useSession()
-  const userCurrency = user?.default_currency || 'USD'
-
-  // Frequency + timeline drive the Cash Flow + Net Income Trend chart-data
-  // requests. Default to monthly + last 12 months so the dashboard has
-  // visible history on first load.
-  const [frequency, setFrequency] = useState<Frequency>('M')
-  const [timeline, setTimeline] = useState<Timeline>('12m')
-
-  // Each secondary chart owns its own timeline selector so users can scope
-  // the expense donut and the net income trend independently of the Cash
-  // Flow headline chart. Net Income Trend defaults to the same window as
-  // Cash Flow; Expense Breakdown defaults to 12m (recent spend patterns).
-  const [expenseTimeline, setExpenseTimeline] = useState<Timeline>('12m')
-  const [netIncomeTimeline, setNetIncomeTimeline] = useState<Timeline>('12m')
-
-  // Occupancy history length: number of months to look back, or 'all' for
-  // the full tenant history. Default 12m keeps the chart readable.
-  const [occupancyPeriod, setOccupancyPeriod] =
-    useState<OccupancyPeriod>('12m')
-
-  const range = useMemo(() => timelineToRange(timeline), [timeline])
-  const expenseRange = useMemo(
-    () => timelineToRange(expenseTimeline),
-    [expenseTimeline],
-  )
-  const netIncomeRange = useMemo(
-    () => timelineToRange(netIncomeTimeline),
-    [netIncomeTimeline],
-  )
+  const userCurrency = filters.currency
+  const frequency = GRAIN_TO_FREQUENCY[filters.grain]
+  const range = { from: filters.start, to: filters.end }
 
   // ---- Data hooks ----------------------------------------------------------
-  // KPIs derive from the with_stats aggregations. The dashboard sums every
-  // property into a single portfolio number, so we request stats FX-
-  // converted into the user's `default_currency` — summing native RUB +
-  // GBP figures into one total would mix units. The Properties PAGE
-  // stays native-currency per row; this dashboard hook is user-currency-
-  // scoped.
-  const propertiesStats = usePropertiesWithStats(undefined, userCurrency)
-  const tenantsStats = useTenantsWithStats()
+  // The legacy P&L still uses property stats; scope it to the shared as-of
+  // date and currency while the validated summary owns the KPI semantics.
+  const propertiesStats = usePropertiesWithStats(filters.end, userCurrency)
 
   // One chart-data request for the headline bar chart; the same response
   // powers both Cash Flow and (via Net Income Trend's client-side sum) the
@@ -236,74 +168,25 @@ export function HomePage() {
     frequency,
     start: range.from,
     end: range.to,
+    currency: userCurrency,
   })
-  // Expense breakdown consumes its own chart-data request driven by the
-  // expense timeline selector — the donut reflects the spend window the
-  // user picked rather than always defaulting to 12 months.
+  // Keep separate query handles for the legacy components. Identical keys
+  // deduplicate at the query-client boundary.
   const expenseQuery = useChartData({
     type: 'homePage',
-    frequency: 'M',
-    start: expenseRange.from,
-    end: expenseRange.to,
+    frequency,
+    start: range.from,
+    end: range.to,
+    currency: userCurrency,
   })
-  // Net Income Trend gets its own request so its timeline selector is
-  // independent of the Cash Flow headline chart.
   const netIncomeQuery = useChartData({
     type: 'homePage',
     frequency,
-    start: netIncomeRange.from,
-    end: netIncomeRange.to,
+    start: range.from,
+    end: range.to,
+    currency: userCurrency,
   })
-
-  // ---- KPI derivations -----------------------------------------------------
-  const kpis = useMemo(() => {
-    const props = propertiesStats.data ?? []
-    const tenants = tenantsStats.data ?? []
-    const totalUnits = props.length
-    const revenueYTD = props.reduce((acc, p) => acc + (p.gross_income_ytd ?? 0), 0)
-    const netIncomeYTD = props.reduce((acc, p) => acc + (p.net_income_ytd ?? 0), 0)
-
-    // Occupancy: tenants with an active lease (`lease_end` is null or in
-    // the future) divided by total units. Same status logic the
-    // OccupancyChart uses; we duplicate it because the chart already
-    // exposes the most-recent point as its last bucket and we want the KPI
-    // value to be authoritative regardless of chart bucketing.
-    const today = new Date().toISOString().slice(0, 10)
-    const occupied = tenants.filter((t) => {
-      if (!t.lease_start || t.lease_start > today) return false
-      if (t.lease_end && t.lease_end < today) return false
-      return true
-    }).length
-    const occupancyPct = totalUnits > 0 ? Math.round((occupied / totalUnits) * 100) : 0
-
-    // FX exposure: number of distinct currencies in the portfolio + their
-    // aggregate lifetime net income (a rough proxy for value at risk). We
-    // surface "N currencies" as the headline and let the chart tile show
-    // the per-currency split.
-    const currencies = new Set(props.map((p) => p.currency || '???'))
-
-    return {
-      totalUnits,
-      revenueYTD,
-      netIncomeYTD,
-      occupancyPct,
-      currencyCount: currencies.size,
-    }
-  }, [propertiesStats.data, tenantsStats.data])
-
-  // Aggregate display currency for KPI values: stats are FX-converted to a
-  // single target currency on the backend (exposed as `stats_currency`,
-  // which equals the request currency we sent, i.e. the user's
-  // `default_currency`). The previous code picked the most common NATIVE
-  // `currency` across properties — which was wrong, because the stats
-  // values themselves are denominated in `stats_currency`, not the native
-  // currency. We fall back to `userCurrency` (rather than 'USD') so the
-  // symbol matches the number even before the first stats response
-  // resolves.
-  const kpiCurrency = useMemo(() => {
-    const first = (propertiesStats.data ?? [])[0]
-    return first?.stats_currency ?? userCurrency
-  }, [propertiesStats.data, userCurrency])
+  const kpiCurrency = userCurrency
 
   // ---- P&L per-category breakdown -----------------------------------------
   // The user wants the OLD-style P&L with every category line, not just
@@ -318,12 +201,11 @@ export function HomePage() {
   // The backend's chart_data service treats `1900-01-01` as the "All time"
   // sentinel and rewrites it to the property set's earliest transaction
   // date (see `services/charts.py::get_chart_data`).
-  // YTD window: Jan 1 of the current year through Dec 31 (the chart_data
-  // service clamps the upper bound to today internally for `homePage`).
-  const today = new Date()
-  const todayIso = today.toISOString().slice(0, 10)
-  const yearStart = `${today.getFullYear()}-01-01`
-  const yearEnd = `${today.getFullYear()}-12-31`
+  // YTD window: Jan 1 through the shared as-of date.
+  const today = new Date(`${filters.end}T12:00:00.000Z`)
+  const todayIso = filters.end
+  const yearStart = `${today.getUTCFullYear()}-01-01`
+  const yearEnd = filters.end
   const pnlAllTimeQuery = useChartData({
     type: 'homePage',
     frequency: 'Y',
@@ -404,69 +286,13 @@ export function HomePage() {
   }
 
   // ---- Render guards -------------------------------------------------------
-  // Charts self-skeleton on their own (each chart's ChartCard shows
-  // "Loading…" when its data is empty); we only need to guard the KPIs +
-  // P&L table here.
-  const isLoading = propertiesStats.isLoading || tenantsStats.isLoading
-  const isError = propertiesStats.isError || tenantsStats.isError
+  // Legacy charts own their loading state; this guard is for the P&L table.
+  const isLoading = propertiesStats.isLoading
+  const isError = propertiesStats.isError
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-
-      {/* ---- KPI row ---------------------------------------------------- */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard
-          label="Properties"
-          value={
-            isLoading ? (
-              <Skeleton className="h-7 w-10" />
-            ) : (
-              kpis.totalUnits
-            )
-          }
-        />
-        <KpiCard
-          label="Revenue (YTD)"
-          value={
-            isLoading ? (
-              <Skeleton className="h-7 w-24" />
-            ) : (
-              formatCurrency(kpis.revenueYTD, kpiCurrency)
-            )
-          }
-        />
-        <KpiCard
-          label="Net income (YTD)"
-          value={
-            isLoading ? (
-              <Skeleton className="h-7 w-24" />
-            ) : (
-              formatCurrency(kpis.netIncomeYTD, kpiCurrency)
-            )
-          }
-        />
-        <KpiCard
-          label="Occupancy"
-          value={
-            isLoading ? (
-              <Skeleton className="h-7 w-12" />
-            ) : (
-              `${kpis.occupancyPct}%`
-            )
-          }
-        />
-        <KpiCard
-          label="FX exposure"
-          value={
-            isLoading ? (
-              <Skeleton className="h-7 w-16" />
-            ) : (
-              `${kpis.currencyCount} ${kpis.currencyCount === 1 ? 'currency' : 'currencies'}`
-            )
-          }
-        />
-      </div>
+      <PortfolioSummary filters={filters} />
 
       {/* ---- Cash Flow (full-width) ------------------------------------- */}
       {/* The chart itself owns its loading state via ChartCard; we just
@@ -475,107 +301,20 @@ export function HomePage() {
       <CashFlowChart
         data={chartQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
         onBarClick={onBarClick}
-        controls={
-          <>
-            <Select
-              value={frequency}
-              onValueChange={(v) => setFrequency(v as Frequency)}
-            >
-              <SelectTrigger className="h-8 w-[110px]" aria-label="Frequency">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FREQUENCY_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={timeline}
-              onValueChange={(v) => setTimeline(v as Timeline)}
-            >
-              <SelectTrigger className="h-8 w-[150px]" aria-label="Timeline">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMELINE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        }
       />
 
       {/* ---- Expense breakdown + Occupancy (side-by-side) --------------- */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ExpenseBreakdownChart
           data={expenseQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
-          controls={
-            <Select
-              value={expenseTimeline}
-              onValueChange={(v) => setExpenseTimeline(v as Timeline)}
-            >
-              <SelectTrigger className="h-8 w-[150px]" aria-label="Expense timeline">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMELINE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
         />
-        <OccupancyChart
-          monthsBack={occupancyPeriodToMonths(occupancyPeriod)}
-          controls={
-            <Select
-              value={occupancyPeriod}
-              onValueChange={(v) => setOccupancyPeriod(v as OccupancyPeriod)}
-            >
-              <SelectTrigger className="h-8 w-[150px]" aria-label="Occupancy period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {OCCUPANCY_PERIOD_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        />
+        <OccupancyChart />
       </div>
 
       {/* ---- Net income trend + Currency exposure (side-by-side) -------- */}
       <div className="grid gap-4 lg:grid-cols-2">
         <NetIncomeTrendChart
           data={netIncomeQuery.data ?? { labels: [], datasets: [], currency: kpiCurrency }}
-          controls={
-            <Select
-              value={netIncomeTimeline}
-              onValueChange={(v) => setNetIncomeTimeline(v as Timeline)}
-            >
-              <SelectTrigger className="h-8 w-[150px]" aria-label="Net income timeline">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMELINE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
         />
         <CurrencyExposureChart />
       </div>
@@ -606,7 +345,6 @@ export function HomePage() {
               message="Failed to load property stats"
               onRetry={() => {
                 propertiesStats.refetch()
-                tenantsStats.refetch()
               }}
             />
           ) : isLoading ? (
@@ -708,8 +446,65 @@ export function HomePage() {
           as plain text — keeps the dashboard's "as of" date reachable
           without polluting the visible layout. */}
       <span className="sr-only">
-        Dashboard timeline {timeline} ({formatDate(range.from)} to {formatDate(range.to)})
+        Dashboard timeline {filters.grain} ({formatDate(range.from)} to {formatDate(range.to)})
       </span>
+    </div>
+  )
+}
+
+function PortfolioSummary({ filters }: { filters: DashboardFilterState }) {
+  const summary = usePortfolioSummary({
+    start: filters.start,
+    end: filters.end,
+    currency: filters.currency,
+    grain: filters.grain,
+    comparison: filters.comparison,
+    propertyIds: filters.propertyIds,
+  })
+
+  if (summary.isError) {
+    return (
+      <ErrorState
+        message="Failed to load portfolio summary"
+        onRetry={() => summary.refetch()}
+      />
+    )
+  }
+
+  if (summary.isLoading || !summary.data) {
+    return (
+      <div aria-label="Loading portfolio summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        {Array.from({ length: 6 }, (_, index) => (
+          <Skeleton key={index} className="h-28 w-full rounded-xl" />
+        ))}
+      </div>
+    )
+  }
+
+  if (summary.data.property_count === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        No portfolio data for this selection.
+      </div>
+    )
+  }
+
+  const data = summary.data
+  const money = (value: number | null) => (
+    <span className="tabular-nums">{formatCurrency(value, data.currency)}</span>
+  )
+  return (
+    <div aria-label="Portfolio summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <KpiCard label="Portfolio value" value={money(data.property_value)} description="Latest covered valuations" />
+      <KpiCard label="Debt" value={money(data.debt)} description="As of selected date" />
+      <KpiCard label="Equity" value={money(data.equity)} description="Value less debt" />
+      <KpiCard label="Revenue" value={money(data.revenue)} description="Selected period" />
+      <KpiCard label="Net income" value={money(data.net_income)} description="Selected period" />
+      <KpiCard
+        label="Occupancy"
+        value={<span className="tabular-nums">{data.occupancy_rate}%</span>}
+        description={`${data.occupied} of ${data.rental_inventory_count} rental units`}
+      />
     </div>
   )
 }
