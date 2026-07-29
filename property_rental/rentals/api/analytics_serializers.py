@@ -123,10 +123,22 @@ class PortfolioSummarySerializer(StrictSerializer):
     costs = serializers.FloatField(min_value=0)
     net_income = serializers.FloatField()
     property_value = serializers.FloatField(allow_null=True)
-    debt = serializers.FloatField()
+    debt = serializers.FloatField(allow_null=True)
     equity = serializers.FloatField(allow_null=True)
     valuation_status = serializers.ChoiceField(
-        choices=["ok", "stale_valuation", "missing_valuation"]
+        choices=[
+            "ok",
+            "stale_valuation",
+            "partial_valuation",
+            "missing_valuation",
+            "missing_currency",
+        ]
+    )
+    property_value_status = serializers.ChoiceField(
+        choices=["ok", "stale_valuation", "missing_valuation", "missing_currency"]
+    )
+    debt_status = serializers.ChoiceField(
+        choices=["ok", "stale_valuation", "missing_valuation", "missing_currency"]
     )
 
 
@@ -161,7 +173,14 @@ class YieldRowSerializer(StrictSerializer):
     gross_yield = serializers.FloatField(allow_null=True)
     net_yield = serializers.FloatField(allow_null=True)
     status = serializers.ChoiceField(
-        choices=["ok", "stale_valuation", "missing_valuation", "zero_valuation"]
+        choices=[
+            "ok",
+            "stale_valuation",
+            "missing_valuation",
+            "missing_currency",
+            "zero_valuation",
+            "negative_valuation",
+        ]
     )
 
 
@@ -177,16 +196,20 @@ class YieldResponseSerializer(StrictSerializer):
 class ExposureCoverageSerializer(StrictSerializer):
     period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
-    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    currency = serializers.RegexField(r"^[A-Z]{3}$", allow_null=True)
     status = serializers.ChoiceField(
         choices=[
             "ok",
             "stale_valuation",
             "partial_valuation",
+            "partial_stale_valuation",
             "missing_valuation",
+            "missing_currency",
             "no_exposure",
         ]
     )
+    missing_count = serializers.IntegerField(min_value=0)
+    stale_count = serializers.IntegerField(min_value=0)
 
 
 class CurrencyExposureResponseSerializer(TimeSeriesResponseSerializer):

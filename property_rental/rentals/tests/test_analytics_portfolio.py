@@ -309,6 +309,209 @@ def test_partial_period_occupancy_clips_leases_and_sales_to_filter_bounds(
 
 
 @pytest.mark.django_db
+def test_valuation_exposure_excludes_property_sold_on_or_before_period_as_of(
+    landlord_user, sample_property
+):
+    """An end-of-period exposure snapshot must not retain already-sold assets."""
+    from rentals.analytics.portfolio import currency_exposure
+
+    sample_property.sold = date(2026, 1, 31)
+    sample_property.save(update_fields=["sold"])
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+    )
+
+    result = currency_exposure(
+        landlord_user,
+        filters_for("2026-01-01", "2026-01-31"),
+        measure="property_value",
+    )
+
+    assert result.points[0]["USD"] == 0.0
+    assert result.coverage[0].status == "no_exposure"
+
+
+@pytest.mark.django_db
+def test_lease_starting_after_sale_never_creates_capacity_or_occupancy(
+    landlord_user, sample_property
+):
+    """Invalid post-sale lease records must not reactivate sold inventory."""
+    from rentals.analytics.portfolio import portfolio_occupancy
+
+    sample_property.sold = date(2026, 1, 10)
+    sample_property.save(update_fields=["sold"])
+    TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 11),
+        lease_end=None,
+    )
+
+    point = portfolio_occupancy(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    ).points[0]
+
+    assert point["capacity"] == 0
+    assert point["occupied"] == 0
+    assert point["vacant"] == 0
+
+
+@pytest.mark.django_db
+def test_summary_reports_value_and_debt_coverage_independently(
+    landlord_user, sample_property
+):
+    """Missing debt cannot be treated as zero or used to fabricate equity."""
+    from rentals.analytics.portfolio import portfolio_summary
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+
+    summary = portfolio_summary(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    )
+
+    assert summary.property_value == 100000.0
+    assert summary.property_value_status == "ok"
+    assert summary.debt is None
+    assert summary.debt_status == "missing_valuation"
+    assert summary.equity is None
+
+
+@pytest.mark.django_db
+def test_summary_marks_stale_debt_without_presenting_it_as_fresh(
+    landlord_user, sample_property
+):
+    """An old debt snapshot must retain its stale status independently of value."""
+    from rentals.analytics.portfolio import portfolio_summary
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2025, 12, 1),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+
+    summary = portfolio_summary(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    )
+
+    assert summary.property_value_status == "ok"
+    assert summary.debt == 40000.0
+    assert summary.debt_status == "stale_valuation"
+    assert summary.equity == 60000.0
+
+
+@pytest.mark.django_db
+def test_null_native_currency_is_explicit_and_independent_of_reporting_currency(
+    landlord_user, auth_client
+):
+    """Missing native currency must not inherit a request-dependent FX identity."""
+    from rentals.analytics.portfolio import currency_exposure
+
+    property_ = PropertyFactory(owned_by=landlord_user.landlord, currency=None)
+    PropertyCapitalStructureFactory(
+        property=property_,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+    )
+    usd_filters = filters_for("2026-01-01", "2026-01-31")
+    eur_filters = AnalyticsFilters(
+        start=usd_filters.start,
+        end=usd_filters.end,
+        grain=usd_filters.grain,
+        currency="EUR",
+        comparison=None,
+        property_ids=(),
+    )
+
+    usd = currency_exposure(landlord_user, usd_filters, "property_value")
+    eur = currency_exposure(landlord_user, eur_filters, "property_value")
+
+    assert [series.key for series in usd.series] == ["missing_currency"]
+    assert [series.key for series in eur.series] == ["missing_currency"]
+    assert usd.points[0]["missing_currency"] is None
+    assert eur.points[0]["missing_currency"] is None
+    assert usd.coverage[0].currency is None
+    assert usd.coverage[0].status == "missing_currency"
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/currency-exposure/",
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "measure": "property_value",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["coverage"][0]["currency"] is None
+
+
+@pytest.mark.django_db
+def test_exposure_coverage_preserves_partial_and_stale_conditions_together(
+    landlord_user, sample_property
+):
+    """A missing peer must not hide that the available valuation is stale."""
+    from rentals.analytics.portfolio import currency_exposure
+
+    PropertyFactory(owned_by=landlord_user.landlord, currency="USD")
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2025, 12, 1),
+        capital_structure_value=Decimal("100000.00"),
+    )
+
+    coverage = currency_exposure(
+        landlord_user,
+        filters_for("2026-01-01", "2026-01-31"),
+        "property_value",
+    ).coverage[0]
+
+    assert coverage.status == "partial_stale_valuation"
+    assert coverage.missing_count == 1
+    assert coverage.stale_count == 1
+
+
+@pytest.mark.django_db
+def test_yields_distinguish_zero_and_negative_valuation_statuses(
+    landlord_user, sample_property
+):
+    """Negative valuation data must not be mislabeled as an ordinary zero."""
+    from rentals.analytics.portfolio import property_yields
+
+    zero_property = PropertyFactory(owned_by=landlord_user.landlord)
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("-100.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=zero_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("0.00"),
+    )
+
+    rows = {
+        row.property_id: row
+        for row in property_yields(
+            landlord_user, filters_for("2026-01-01", "2026-01-31")
+        ).rows
+    }
+
+    assert rows[sample_property.id].status == "negative_valuation"
+    assert rows[zero_property.id].status == "zero_valuation"
+    assert rows[sample_property.id].gross_yield is None
+    assert rows[zero_property.id].gross_yield is None
+
+
+@pytest.mark.django_db
 def test_portfolio_services_scope_selected_properties_to_owner(
     landlord_user, other_landlord_user, sample_property
 ):
