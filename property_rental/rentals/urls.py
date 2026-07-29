@@ -7,8 +7,8 @@ template-view routes (``/handling/...``, ``/table-data/...``,
 ``/get_chart_data``, ``/update-fx/``, ``/.well-known/...``) and the
 top-level ``index`` route have been retired. Only two routes remain:
 
-* ``api/v1/`` — the DRF namespace (auth + entities + chart-data).
-* ``''`` and ``<any path>/`` — the SPA catch-all served by ``SpaView``.
+* ``api/v1/`` — the DRF namespace (auth + entities + analytics).
+* ``''`` and non-API paths — the SPA catch-all served by ``SpaView``.
 
 The SPA handles client-side routing; ``/api/v1/`` is registered BEFORE
 the catch-all so it always wins.
@@ -21,12 +21,13 @@ from .views import SpaView
 app_name = 'rentals'
 
 urlpatterns = [
-    # DRF /api/v1/ namespace (auth + entities + chart-data).
+    # DRF /api/v1/ namespace (auth + entities + analytics).
     path('api/v1/', include('rentals.api.urls')),
 ]
 
-# SPA catch-all (MUST be appended LAST so /api/v1/ wins).
+# SPA catch-all (MUST be appended LAST and exclude ``api/`` so retired or
+# misspelled API routes return Django's 404 instead of the SPA shell).
 urlpatterns += [
     path('', SpaView.as_view()),
-    re_path(r'^.+$', SpaView.as_view()),
+    re_path(r'^(?!api/).+$', SpaView.as_view()),
 ]

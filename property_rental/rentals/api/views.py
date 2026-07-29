@@ -1,9 +1,8 @@
-"""DRF ViewSets and the ``ChartDataView`` APIView for ``/api/v1/`` (Task 17).
+"""DRF ViewSets for the ``/api/v1/`` namespace (Task 17).
 
 This module wires the four user-facing entities (Property, Tenant,
 Transaction, FX) as :class:`rest_framework.viewsets.ModelViewSet`
-subclasses and adds a single :class:`ChartDataView` :class:`APIView` for
-the chart-data endpoint that the React frontend (Phase 2) consumes.
+subclasses for the user-facing API.
 
 Security model (the central concern of this task)
 -------------------------------------------------
@@ -31,16 +30,6 @@ Combined with ``permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]``
 cannot leak or accept cross-tenant data even if a future serializer
 change widens a field.
 
-Query param naming for ``ChartDataView``
-----------------------------------------
-The query string follows the **session-key reality** the existing
-template views established in Task 12's bug fix
-(``test_property_valuation_uses_request_params``):
-``freq`` / ``start`` / ``end`` / ``currency`` (not ``frequency`` /
-``from`` / ``to``). The translation into
-:func:`services.charts.get_chart_data`'s positional signature
-``(type, element_id, frequency, from_date, to_date, currency, ...)``
-happens inside the view.
 """
 
 from datetime import date
@@ -52,15 +41,11 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from rentals.models import FX, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
-from rentals.services.charts import get_chart_data as _get_chart_data
-
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
-    ChartDataResponseSerializer,
     FXSerializer,
     LeaseRentSerializer,
     PropertyCapitalStructureSerializer,
@@ -366,7 +351,6 @@ class TenantViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
-
     @action(detail=False, methods=["get"])
     def with_stats(self, request):
         """GET /api/v1/tenants/with_stats/?as_of=YYYY-MM-DD&currency=USD
@@ -612,8 +596,6 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
-
-
 class FXViewSet(viewsets.ModelViewSet):
     """CRUD for FX rows.
 
@@ -781,83 +763,3 @@ class LeaseRentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
 
-
-# ---------------------------------------------------------------------------
-# ChartDataView
-# ---------------------------------------------------------------------------
-
-
-class ChartDataView(APIView):
-    """GET /api/v1/chart-data/?type=...&id=...&freq=...&start=...&end=...&currency=...
-
-    Bridges the existing :func:`rentals.services.charts.get_chart_data`
-    service into the new ``/api/v1/`` namespace. The query-string keys
-    match the session-key reality from Task 12
-    (``freq``/``start``/``end``/``currency``); the translation into
-    ``get_chart_data``'s positional signature happens here.
-
-    Ownership is validated for the referenced entity:
-
-    * ``type=property`` — the property must be owned by the requester.
-    * ``type=tenant`` — the tenant's property must be owned by the
-      requester.
-    * ``type=homePage`` — no entity to validate (operates on the
-      requester's own property set by default).
-
-    A cross-landlord reference returns 404 (no enumeration channel).
-    """
-
-    def get(self, request, *args, **kwargs):
-        chart_type = request.GET.get("type")
-        element_id = request.GET.get("id")
-        frequency = request.GET.get("freq")
-        from_date = request.GET.get("start")
-        to_date = request.GET.get("end")
-        currency = request.GET.get("currency")
-
-        if not chart_type or not frequency or not from_date or not to_date:
-            return Response(
-                {"detail": "type, freq, start, end are required query params."},
-                status=400,
-            )
-
-        properties = None
-
-        if chart_type == "property":
-            # Resolve via the scoped queryset so an out-of-scope PK 404s.
-            property_obj = get_object_or_404(
-                Property.objects.filter(id=element_id, owned_by__user=request.user)
-            )
-            if currency is None:
-                currency = property_obj.currency
-        elif chart_type == "tenant":
-            tenant_obj = get_object_or_404(
-                Tenant.objects.filter(id=element_id, property__owned_by__user=request.user)
-            )
-            if currency is None:
-                currency = tenant_obj.property.currency
-        elif chart_type == "homePage":
-            # homePage operates on the caller's own properties — no
-            # cross-tenant leak is possible because the property set is
-            # always scoped to request.user.
-            properties = list(
-                Property.objects.filter(owned_by__user=request.user)
-            )
-            if currency is None:
-                currency = request.user.default_currency or "USD"
-        else:
-            return Response({"detail": f"Unknown chart type: {chart_type!r}."}, status=400)
-
-        chart_data = _get_chart_data(
-            chart_type,
-            element_id,
-            frequency,
-            from_date,
-            to_date,
-            currency,
-            properties=properties,
-        )
-
-        serializer = ChartDataResponseSerializer(data=chart_data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data)

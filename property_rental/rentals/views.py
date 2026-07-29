@@ -4,7 +4,7 @@ Every behavioral endpoint now lives behind the ``/api/v1/`` DRF namespace
 in ``rentals.api`` and is consumed by the React SPA served by
 ``SpaView``. This module previously hosted ~1100 lines of template-view
 glue (``index``, ``handle_element``, ``create_element``, ``table_data``,
-``vacate_tenant``, ``property_valuation``, ``chart_data_request``,
+``vacate_tenant``, ``property_valuation``,
 ``update_fx_view``, ``new_form``, ``property_choices`` plus the inline
 ``PropertySerializer`` / ``TenantSerializer`` / ``TransactionSerializer``
 / ``PropertyValuationSerializer`` duplicates of
@@ -13,12 +13,9 @@ the API include + the SPA catch-all, and this module keeps only
 ``SpaView``.
 
 Note: the financial logic itself was already extracted into
-``rentals.services.financials`` (``pnl_calc``) and
-``rentals.services.charts`` (``get_chart_data``) in earlier tasks, so
-deleting the template-view shims here does NOT lose any business logic.
-The characterization tests ``test_financials_char.py`` and
-``test_charts_char.py`` were updated in this same change to import those
-services directly.
+``rentals.services.financials`` (``pnl_calc``) in earlier tasks, so
+deleting the template-view shims here does NOT lose business logic. The
+characterization tests import those services directly.
 """
 
 from django.views.generic import TemplateView

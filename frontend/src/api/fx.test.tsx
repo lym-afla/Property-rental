@@ -2,7 +2,7 @@
 //
 // Covers query hooks (`useFX`) and mutation hooks (`useCreateFX`,
 // `useUpdateFXRate`, `useDeleteFX`, `useUpdateFX`). `useUpdateFX` /
-// `useUpdateFXRate` cascade to `fx.all` + `transactions` + `chart-data`;
+// `useUpdateFXRate` cascades to `fx.all` and `transactions`;
 // the create/delete hooks only invalidate `fx.all`.
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
@@ -60,7 +60,7 @@ describe('useCreateFX', () => {
 })
 
 describe('useUpdateFXRate', () => {
-  it('PATCHes and invalidates fx + transactions + chart-data', async () => {
+  it('PATCHes and invalidates fx + transactions', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
 
@@ -76,9 +76,6 @@ describe('useUpdateFXRate', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.chartData.all,
     })
   })
 })
@@ -101,7 +98,7 @@ describe('useDeleteFX', () => {
 })
 
 describe('useUpdateFX', () => {
-  it('POSTs to /fx/update/ and invalidates fx + transactions + chart-data', async () => {
+  it('POSTs to /fx/update/ and invalidates fx + transactions', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
 
@@ -117,9 +114,6 @@ describe('useUpdateFX', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.chartData.all,
     })
   })
 })

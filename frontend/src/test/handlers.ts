@@ -245,19 +245,6 @@ const defaultHandlers = [
   }),
   http.delete(`${API}/property-valuations/:id/`, () => new HttpResponse(null, { status: 204 })),
 
-  // ---- Chart data -------------------------------------------------------
-  // ChartDataView requires `type`, `id`, `freq`, `start`, `end`. Returns
-  // `{labels, datasets, currency}` — the real shape serialized by
-  // `ChartDataResponseSerializer` (NOT `{income, expense, net}`). The empty
-  // default keeps chart-mounted tests from blowing up; tests that care about
-  // the values should override via `server.use(...)`.
-  http.get(`${API}/chart-data/`, () =>
-    HttpResponse.json({
-      labels: [],
-      datasets: [],
-      currency: 'USD',
-    }),
-  ),
 ]
 
 // Single `server` declaration (Task 10 brief flagged a duplicate-declaration

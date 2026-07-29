@@ -7,8 +7,7 @@ import type { FX } from '@/types/fx'
 // `FXViewSet.update_rates` action.
 //
 // Updating FX rates changes how transactions convert across currencies, so
-// `useUpdateFX` invalidates `fx.all` AND `chart-data` AND `transactions`
-// (caches that depend on FX-derived amounts must be refetched).
+// `useUpdateFX` invalidates `fx.all` and `transactions`.
 
 export function useFX() {
   return useQuery<FX[]>({
@@ -36,7 +35,6 @@ export function useUpdateFXRate() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
-      qc.invalidateQueries({ queryKey: queryKeys.chartData.all })
     },
   })
 }
@@ -61,7 +59,6 @@ export function useUpdateFX() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.fx.all })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
-      qc.invalidateQueries({ queryKey: queryKeys.chartData.all })
     },
   })
 }

@@ -15,7 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import HttpResponseNotFound
 from django.urls import path, include
+
+
+def api_not_found(request, exception):
+    """Return a plain 404 response when an API route is not registered."""
+    return HttpResponseNotFound()
+
+
+handler404 = api_not_found
 
 urlpatterns = [
     path('admin/', admin.site.urls),

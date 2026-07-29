@@ -4,7 +4,6 @@ These tests exercise:
 
 * Each ``ModelSerializer`` validates a representative payload drawn from
   the existing factories (Property, Tenant, Transaction, FX).
-* The ``ChartDataResponseSerializer`` round-trips a chart payload.
 * ``IsOwnerOrReadOnly`` admits the owner and denies a non-owner for both
   model shapes the app uses (``Property.owned_by.user`` and
   ``Tenant.property.owned_by.user``).
@@ -26,7 +25,6 @@ from django.test import Client
 
 from rentals.api.permissions import IsOwnerOrReadOnly
 from rentals.api.serializers import (
-    ChartDataResponseSerializer,
     FXSerializer,
     PropertySerializer,
     TenantSerializer,
@@ -128,31 +126,6 @@ def test_serializer_validates_fx():
     serializer = FXSerializer(data=data)
     assert serializer.is_valid(), serializer.errors
     assert serializer.validated_data["from_currency"] == "EUR"
-
-
-def test_chart_data_response_serializer_round_trip():
-    """ChartDataResponseSerializer accepts the chart-data shape that
-    ``services.charts.get_chart_data`` returns."""
-    payload = {
-        "labels": ["2024-01", "2024-02", "2024-03"],
-        "datasets": [
-            {"label": "Income", "data": [1000, 2000, 1500]},
-            {"label": "Expense", "data": [-500, -300, -400]},
-        ],
-        "currency": "USD",
-    }
-    serializer = ChartDataResponseSerializer(data=payload)
-    assert serializer.is_valid(), serializer.errors
-    assert serializer.validated_data["currency"] == "USD"
-    assert len(serializer.validated_data["labels"]) == 3
-    assert len(serializer.validated_data["datasets"]) == 2
-
-
-def test_chart_data_response_serializer_minimal():
-    """ChartDataResponseSerializer tolerates an empty payload (all
-    fields are optional — used for error responses)."""
-    serializer = ChartDataResponseSerializer(data={})
-    assert serializer.is_valid(), serializer.errors
 
 
 # ---------------------------------------------------------------------------
@@ -485,75 +458,10 @@ def test_fx_list_returns_200(auth_client):
 
 
 @pytest.mark.django_db
-def test_chart_data_endpoint_requires_auth(db, client, sample_property):
-    """Unauthenticated chart-data request → 401/403."""
-    resp = client.get(
-        "/api/v1/chart-data/",
-        {"type": "property", "id": sample_property.id, "freq": "M",
-         "start": "2024-01-01", "end": "2024-12-31", "currency": "USD"},
-    )
-    assert resp.status_code in (401, 403)
-
-
-@pytest.mark.django_db
-def test_chart_data_endpoint_returns_payload(auth_client, sample_property):
-    """GET /api/v1/chart-data/?type=property&id=<id>&freq=M&...
-
-    Returns the chart payload shape from
-    ``services.charts.get_chart_data`` via ``ChartDataResponseSerializer``.
-    """
-    # ``property`` branch needs at least one capital-structure row for
-    # property_value() to produce a number; a single row is enough.
-    from rentals.tests.factories import PropertyCapitalStructureFactory
-    from datetime import date as _date
-    PropertyCapitalStructureFactory(
-        property=sample_property,
-        capital_structure_date=_date(2024, 1, 1),
-        capital_structure_value=Decimal("100000"),
-        capital_structure_debt=Decimal("40000"),
-    )
-
-    resp = auth_client.get(
-        "/api/v1/chart-data/",
-        {
-            "type": "property",
-            "id": sample_property.id,
-            "freq": "M",
-            "start": "2024-01-01",
-            "end": "2024-12-31",
-            "currency": "USD",
-        },
-    )
-    assert resp.status_code == 200, resp.content
-    payload = resp.json()
-    # Property branch: 2 datasets (Debt, Equity), currency ends with 'k'.
-    assert "datasets" in payload
-    assert [d["label"] for d in payload["datasets"]] == ["Debt", "Equity"]
-    assert payload["currency"].endswith("k")
-
-
-@pytest.mark.django_db
-def test_chart_data_endpoint_rejects_other_landlords_property(
-    auth_client, other_landlord_user
-):
-    """Chart-data for another landlord's property → 404 (ownership validated).
-
-    The endpoint MUST validate the referenced entity belongs to the
-    requester, otherwise it leaks capital/datasets cross-tenant.
-    """
-    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
-    resp = auth_client.get(
-        "/api/v1/chart-data/",
-        {
-            "type": "property",
-            "id": other_property.id,
-            "freq": "M",
-            "start": "2024-01-01",
-            "end": "2024-12-31",
-            "currency": "USD",
-        },
-    )
-    assert resp.status_code == 404, resp.content
+def test_legacy_chart_data_route_is_removed(auth_client):
+    """The retired chart-data API is no longer a public endpoint."""
+    response = auth_client.get("/api/v1/chart-data/")
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@
 //   - `useUpdateFX()` mutation wired to the "Update FX" button. The hook
 //     POSTs `/api/v1/fx/update/`, which refetches yfinance rates for every
 //     property owned by the requester; on success it invalidates `fx.all`,
-//     `transactions.all`, and `chartData.all` (FX-derived amounts are stale).
+//     `transactions.all` (FX-derived amounts are stale).
 //
 // The page is read-only — the spec does not call for create/edit/delete on
 // FX rates (they're system-derived), so the only mutation affordance is the

@@ -2,7 +2,7 @@
 //
 // One namespace per entity, each exposing the factories it needs. Mutations
 // invalidate via these factories so the cascade rules
-// (transactions -> chart-data, properties -> properties/with_stats) live in
+// (properties -> properties/with_stats) live in
 // the hooks rather than scattered across pages.
 //
 // Every key tuple ends with a primitive or a stable object so React Query can
@@ -105,21 +105,6 @@ export const queryKeys = {
     byTenant: (tenantId: number) =>
       ['lease-rents', 'by-tenant', tenantId] as const,
     detail: (id: number) => ['lease-rents', 'detail', id] as const,
-  },
-
-  // Charts derive from transactions, so any transaction mutation must also
-  // invalidate `chart-data`. The shape mirrors the ChartDataView query
-  // params (spec §5.2): `{ type, id, freq, start, end, currency }`.
-  chartData: {
-    all: ['chart-data'] as const,
-    filtered: (filters: {
-      type: string
-      id: number | string
-      freq?: string
-      start?: string
-      end?: string
-      currency?: string
-    }) => ['chart-data', 'filtered', filters] as const,
   },
 
   analytics: {

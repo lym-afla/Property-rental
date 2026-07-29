@@ -2,8 +2,7 @@
 //
 // Covers query hooks (`useTransactions`, `useTransaction`) and mutation
 // hooks (`useCreateTransaction`, `useUpdateTransaction`, `useDeleteTransaction`).
-// Every mutation asserts endpoint success AND the cascade invalidation
-// (`transactions.all` + `chart-data`).
+// Every mutation asserts endpoint success and transaction invalidation.
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -55,7 +54,7 @@ describe('useTransaction', () => {
 })
 
 describe('useCreateTransaction', () => {
-  it('POSTs and invalidates transactions + chart-data keys', async () => {
+  it('POSTs and invalidates transaction keys', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
 
@@ -68,9 +67,6 @@ describe('useCreateTransaction', () => {
     expect(result.current.data?.id).toBe(999)
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.chartData.all,
     })
   })
 })
@@ -93,9 +89,6 @@ describe('useUpdateTransaction', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
     })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.chartData.all,
-    })
   })
 })
 
@@ -112,9 +105,6 @@ describe('useDeleteTransaction', () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.transactions.all,
-    })
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.chartData.all,
     })
   })
 })

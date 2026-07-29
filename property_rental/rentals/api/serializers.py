@@ -7,8 +7,7 @@ inline ``ModelSerializer`` classes defined in ``rentals/views.py`` (~lines
 those inline ones.
 
 One ``ModelSerializer`` per user-facing entity (Property, Tenant,
-Transaction, FX) plus a non-model ``ChartDataResponseSerializer`` for the
-chart-data endpoint. Field lists match the real model fields in
+Transaction and FX. Field lists match the real model fields in
 ``rentals/models.py`` (no invented fields).
 """
 
@@ -156,19 +155,6 @@ class LeaseRentSerializer(serializers.ModelSerializer):
             "rent",
             "currency",
         ]
-
-
-class ChartDataResponseSerializer(serializers.Serializer):
-    """Serializer for the chart-data endpoint response (Task 17).
-
-    Non-model serializer. Shape mirrors what
-    ``rentals.services.charts.get_chart_data`` returns:
-    ``{"labels": [...], "datasets": [...], "currency": "USD"}``.
-    """
-
-    labels = serializers.ListField(child=serializers.CharField(), required=False)
-    datasets = serializers.ListField(child=serializers.DictField(), required=False)
-    currency = serializers.CharField(required=False)
 
 
 class UserSerializer(serializers.ModelSerializer):

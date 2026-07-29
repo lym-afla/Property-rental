@@ -13,8 +13,8 @@
 //         property via `DataTable`, with create / edit / delete wired
 //         through `EntityFormDialog` + `ConfirmDialog`.
 //
-// Charts: the Overview tab shows rent yield and server-provided valuation
-// history; the Valuations tab contains the editable capital-structure rows.
+// The Overview tab shows server-provided valuation history; the Valuations
+// tab contains the editable capital-structure rows.
 //
 // B1 adaptation notes (vs the original task-3 brief):
 //   - `EntityFormDialog` takes `title` + `children` (the form), not a
@@ -44,7 +44,6 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
-import { RentYieldChart } from '@/components/charts/RentYieldChart'
 import { usePropertyValuationAnalytics } from '@/api/analytics'
 import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
@@ -140,10 +139,7 @@ export function PropertyDetailPage() {
   // `Transaction.amount` is a stringified decimal (positive = income,
   // negative = expense); we group by category and split into all-time vs
   // YTD windows so the P&L table matches the dashboard's two-column
-  // layout. The backend `chart-data` `property` branch only emits Debt +
-  // Equity (it does not emit per-category totals), so we derive the P&L
-  // here from the already-fetched transactions list rather than firing a
-  // chart-data round-trip that would return empty categories.
+  // layout.
   //
   // YTD window: `Transaction.date` is the authoritative accounting date —
   // the optional `period` field is just a label that can drift out of
@@ -387,10 +383,8 @@ export function PropertyDetailPage() {
             <CardContent className="space-y-6">
               {/* Per-category P&L table. Two columns (All-time + YTD).
                   Income categories first, then "Total revenue", then
-                  expense categories (kept negative), then "Total
-                  expenses" and "Net income". Derived client-side from
-                  the property's transactions (the chart-data `property`
-                  branch only emits Debt + Equity, not category totals). */}
+              expense categories (kept negative), then "Total
+                  expenses" and "Net income". */}
               {transactionsQuery.isLoading ? (
                 <Skeleton className="h-40 w-full" />
               ) : transactionsQuery.isError ? (
@@ -408,21 +402,6 @@ export function PropertyDetailPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* Rent yield chart (Plan C). Sits between the P&L card and the
-              recent-transactions table so the yield trend is visible right
-              after the summary numbers it derives from. The chart owns its
-              own loading/error states via ChartCard; we pass the already-
-              loaded property transactions through (the chart-data
-              `property` branch only emits Debt + Equity, not per-category
-              rent, so yield must be derived from transactions). The chart
-              fetches its own valuations internally via
-              usePropertyValuations. */}
-          <RentYieldChart
-            transactions={transactionsQuery.data ?? []}
-            propertyId={propertyId}
-            currency={property.currency}
-          />
 
           <ValuationChart
             data={valuationAnalyticsQuery.data}

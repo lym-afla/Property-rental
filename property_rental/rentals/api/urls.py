@@ -2,9 +2,7 @@
 
 A :class:`rest_framework.routers.DefaultRouter` wires the four
 :class:`ModelViewSet` classes (properties, tenants, transactions, fx) to
-the standard REST verbs. The ``ChartDataView`` APIView is mounted
-alongside as a flat ``chart-data/`` path (it is not a ViewSet — it
-exposes a single GET endpoint).
+the standard REST verbs.
 
 Mounted under ``api/v1/`` from ``rentals/urls.py``:
 
@@ -22,7 +20,6 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 * ``/api/v1/lease-rents/...``              — same shape; backs the tenant
   detail page's "Update rent" dialog (POST creates a new effective-date
   rent entry on the tenant's ``Lease_rent`` history).
-* ``GET    /api/v1/chart-data/?type=&id=&freq=&start=&end=&currency=``
 """
 
 from django.urls import path
@@ -48,7 +45,6 @@ from .analytics_views import (
     TenantRentPerformanceAnalyticsView,
 )
 from .views import (
-    ChartDataView,
     FXViewSet,
     LeaseRentViewSet,
     PropertyCapitalStructureViewSet,
@@ -106,6 +102,5 @@ urlpatterns = [
         "analytics/tenants/<int:tenant_id>/rent-performance/",
         TenantRentPerformanceAnalyticsView.as_view(),
     ),
-    path("chart-data/", ChartDataView.as_view()),
 ]
 urlpatterns += router.urls
