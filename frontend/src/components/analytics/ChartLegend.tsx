@@ -1,20 +1,27 @@
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-import { chartSeriesStyle, type AnalyticsSeriesDefinition } from './chartTheme'
+import { chartSeriesStyle, type AnalyticsSeriesDefinition, type ChartSeriesStyle } from './chartTheme'
 
 type ChartLegendProps = {
   series: readonly AnalyticsSeriesDefinition[]
   hiddenKeys: ReadonlySet<string>
   onToggle: (key: string) => void
+  resolveStyle?: (series: AnalyticsSeriesDefinition) => ChartSeriesStyle
 }
 
-export function ChartLegend({ series, hiddenKeys, onToggle }: ChartLegendProps) {
+const markerClasses = {
+  circle: 'rounded-full',
+  square: 'rounded-none',
+  diamond: 'rotate-45 rounded-sm',
+} as const
+
+export function ChartLegend({ series, hiddenKeys, onToggle, resolveStyle }: ChartLegendProps) {
   return (
     <div aria-label="Chart series" className="flex flex-wrap gap-2" role="group">
       {series.map((item) => {
         const visible = !hiddenKeys.has(item.key)
-        const style = chartSeriesStyle(item.kind)
+        const style = resolveStyle?.(item) ?? chartSeriesStyle(item.visualToken)
         return (
           <Button
             key={item.key}
@@ -27,7 +34,9 @@ export function ChartLegend({ series, hiddenKeys, onToggle }: ChartLegendProps) 
           >
             <span
               aria-hidden="true"
-              className={cn('size-2.5 rounded-full border-2', !visible && 'opacity-40')}
+              data-testid={`legend-marker-${item.key}`}
+              data-marker={style.marker}
+              className={cn('size-2.5 shrink-0 border-2', markerClasses[style.marker], !visible && 'opacity-40')}
               style={{ backgroundColor: style.color, borderColor: style.color }}
             />
             <span className={cn(!visible && 'line-through')}>{item.label}</span>
