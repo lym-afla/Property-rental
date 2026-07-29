@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from rest_framework import serializers
 
 from rentals.analytics.filters import Grain, ISODateField
+from rentals.analytics.tenant import ISSUE_ORDER
 
 
 class StrictSerializer(serializers.Serializer):
@@ -262,6 +263,9 @@ class TenantRentPerformancePointSerializer(StrictSerializer):
             "incomplete_history",
         ]
     )
+    issues = serializers.ListField(
+        child=serializers.ChoiceField(choices=ISSUE_ORDER)
+    )
 
 
 class TenantRentPerformanceResponseSerializer(StrictSerializer):
@@ -272,6 +276,9 @@ class TenantRentPerformanceResponseSerializer(StrictSerializer):
     start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     opening_arrears = serializers.FloatField(allow_null=True)
+    opening_issues = serializers.ListField(
+        child=serializers.ChoiceField(choices=ISSUE_ORDER)
+    )
     status = serializers.ChoiceField(
         choices=[
             "ok",
@@ -281,6 +288,9 @@ class TenantRentPerformanceResponseSerializer(StrictSerializer):
             "missing_fx",
             "incomplete_history",
         ]
+    )
+    issues = serializers.ListField(
+        child=serializers.ChoiceField(choices=ISSUE_ORDER)
     )
     series = SeriesDefinitionSerializer(many=True)
     points = TenantRentPerformancePointSerializer(many=True)

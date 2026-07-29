@@ -14,6 +14,17 @@ from rentals.models import Tenant, Transaction
 from rentals.services.fx import preload_converter
 
 
+ISSUE_ORDER = (
+    "missing_rent_rate",
+    "missing_expected_currency",
+    "missing_expected_fx",
+    "missing_received_currency",
+    "missing_received_fx",
+    "incomplete_opening_history",
+    "incomplete_cumulative_history",
+)
+
+
 @dataclass(frozen=True)
 class TenantRentPerformanceResponse:
     metric: str
@@ -23,7 +34,9 @@ class TenantRentPerformanceResponse:
     start: date
     end: date
     opening_arrears: float | None
+    opening_issues: tuple[str, ...]
     status: str
+    issues: tuple[str, ...]
     series: tuple[SeriesDefinition, ...]
     points: tuple[dict[str, object], ...]
 
@@ -79,6 +92,32 @@ def _converted(converter, amount, currency, target_currency, as_of):
         return None, "missing_fx"
 
 
+def _append_issue(issues, issue):
+    if issue not in issues:
+        issues.append(issue)
+
+
+def _ordered_issues(*groups):
+    present = {issue for group in groups for issue in group}
+    return tuple(issue for issue in ISSUE_ORDER if issue in present)
+
+
+def _conversion_issue(role, error):
+    return f"missing_{role}_{error.removeprefix('missing_')}"
+
+
+def _status_from_issues(issues):
+    if "missing_rent_rate" in issues:
+        return "missing_rent_rate"
+    if any(issue.endswith("_currency") for issue in issues):
+        return "missing_currency"
+    if any(issue.endswith("_fx") for issue in issues):
+        return "missing_fx"
+    if issues:
+        return "incomplete_history"
+    return "ok"
+
+
 def _response_status(point_statuses):
     missing = [status for status in point_statuses if status != "ok"]
     if not missing:
@@ -128,32 +167,37 @@ def tenant_rent_performance(user, tenant_id, filters):
 
     opening_expected = 0.0
     opening_received = 0.0
-    opening_error = None
+    opening_issues = []
     expected_by_period = defaultdict(float)
-    expected_error_by_period = {}
+    expected_issues_by_period = defaultdict(list)
     for due_date, rate in zip(due_dates, rate_rows, strict=True):
         is_opening = due_date < filters.start
         period = None if is_opening else _period_start(due_date, filters.grain)
         if rate is None:
             if is_opening:
-                opening_error = opening_error or "missing_rent_rate"
+                _append_issue(opening_issues, "missing_rent_rate")
             else:
-                expected_error_by_period.setdefault(period, "missing_rent_rate")
+                _append_issue(
+                    expected_issues_by_period[period], "missing_rent_rate"
+                )
             continue
         value, error = _converted(
             converter, rate.rent, rate.currency, filters.currency, due_date
         )
         if is_opening and error:
-            opening_error = opening_error or error
+            _append_issue(opening_issues, _conversion_issue("expected", error))
         elif is_opening:
             opening_expected += value
         elif error:
-            expected_error_by_period.setdefault(period, error)
+            _append_issue(
+                expected_issues_by_period[period],
+                _conversion_issue("expected", error),
+            )
         else:
             expected_by_period[period] += value
 
     received_by_period = defaultdict(float)
-    received_error_by_period = {}
+    received_issues_by_period = defaultdict(list)
     for transaction in transactions:
         is_opening = transaction.date < filters.start
         period = (
@@ -167,46 +211,55 @@ def tenant_rent_performance(user, tenant_id, filters):
             transaction.date,
         )
         if is_opening and error:
-            opening_error = opening_error or error
+            _append_issue(opening_issues, _conversion_issue("received", error))
         elif is_opening:
             opening_received += value
         elif error:
-            received_error_by_period.setdefault(period, error)
+            _append_issue(
+                received_issues_by_period[period],
+                _conversion_issue("received", error),
+            )
         else:
             received_by_period[period] += value
 
     opening_arrears = (
-        opening_received - opening_expected if opening_error is None else None
+        opening_received - opening_expected if not opening_issues else None
     )
     points = []
     point_statuses = []
     cumulative = opening_arrears or 0.0
-    cumulative_known = opening_arrears is not None
+    cumulative_issue = (
+        None if opening_arrears is not None else "incomplete_opening_history"
+    )
     for period_start, period_end in _calendar_periods(filters):
-        error = expected_error_by_period.get(
-            period_start
-        ) or received_error_by_period.get(period_start)
+        value_issues = _ordered_issues(
+            expected_issues_by_period[period_start],
+            received_issues_by_period[period_start],
+        )
         expected = (
             None
-            if period_start in expected_error_by_period
+            if expected_issues_by_period[period_start]
             else expected_by_period[period_start]
         )
         received = (
             None
-            if period_start in received_error_by_period
+            if received_issues_by_period[period_start]
             else received_by_period[period_start]
         )
-        if error is None and expected is not None and received is not None:
+        point_issues = _ordered_issues(
+            value_issues, (cumulative_issue,) if cumulative_issue else ()
+        )
+        if not value_issues:
             variance = received - expected
-            if cumulative_known:
+            if cumulative_issue is None:
                 cumulative += variance
-            cumulative_arrears = cumulative if cumulative_known else None
-            status = "ok" if cumulative_known else "incomplete_history"
+            cumulative_arrears = cumulative if cumulative_issue is None else None
         else:
             variance = None
             cumulative_arrears = None
-            cumulative_known = False
-            status = error or "incomplete_history"
+            if cumulative_issue is None:
+                cumulative_issue = "incomplete_cumulative_history"
+        status = _status_from_issues(point_issues)
         point_statuses.append(status)
         points.append(
             {
@@ -217,8 +270,17 @@ def tenant_rent_performance(user, tenant_id, filters):
                 "variance": variance,
                 "cumulative_arrears": cumulative_arrears,
                 "status": status,
+                "issues": point_issues,
             }
         )
+
+    ordered_opening_issues = _ordered_issues(
+        opening_issues,
+        ("incomplete_opening_history",) if opening_arrears is None else (),
+    )
+    response_issues = _ordered_issues(
+        ordered_opening_issues, *(point["issues"] for point in points)
+    )
 
     return TenantRentPerformanceResponse(
         metric="tenant_rent_performance",
@@ -228,7 +290,9 @@ def tenant_rent_performance(user, tenant_id, filters):
         start=filters.start,
         end=filters.end,
         opening_arrears=opening_arrears,
+        opening_issues=ordered_opening_issues,
         status=_response_status(point_statuses),
+        issues=response_issues,
         series=(
             SeriesDefinition("expected", "Expected rent", "expected"),
             SeriesDefinition("received", "Received rent", "received"),
