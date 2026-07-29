@@ -4,6 +4,7 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 function isCalendarDate(value: string): boolean {
   if (!ISO_DATE_PATTERN.test(value)) return false
+  if (value.startsWith('0000-')) return false
   const parsed = new Date(`${value}T00:00:00.000Z`)
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
@@ -39,9 +40,9 @@ export type TenantRentPerformanceParams = Pick<
 
 export const seriesDefinitionSchema = z
   .object({
-    key: z.string().min(1),
-    label: z.string(),
-    kind: z.string().min(1),
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    kind: z.string().trim().min(1),
   })
   .strict()
 
@@ -53,7 +54,7 @@ const dynamicPointSchema = z
   .catchall(z.number().nullable())
 
 const timeSeriesBaseShape = {
-  metric: z.string().min(1),
+  metric: z.string().trim().min(1),
   grain: analyticsGrainSchema,
   currency: analyticsCurrencySchema.nullable(),
   scale: z.literal(1),
@@ -84,6 +85,20 @@ function validateTimeSeries(
     })
   }
   const keys = value.series.map((series) => series.key)
+  const reservedPointKeys = new Set([
+    'period_start',
+    'period_end',
+    ...Object.getOwnPropertyNames(Object.prototype),
+  ])
+  keys.forEach((key, seriesIndex) => {
+    if (reservedPointKeys.has(key)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['series', seriesIndex, 'key'],
+        message: 'series key collides with a reserved point key',
+      })
+    }
+  })
   if (new Set(keys).size !== keys.length) {
     context.addIssue({
       code: 'custom',
@@ -110,7 +125,7 @@ function validateTimeSeries(
       }
     }
     for (const key of keys) {
-      if (!(key in point)) {
+      if (!Object.hasOwn(point, key)) {
         context.addIssue({
           code: 'custom',
           path: ['points', pointIndex, key],
@@ -196,7 +211,7 @@ export const propertyContributionSchema = z
       z
         .object({
           property_id: z.number().int().positive(),
-          property_name: z.string(),
+          property_name: z.string().trim().min(1),
           revenue: z.number(),
           costs: z.number().nonnegative(),
           net_income: z.number(),
@@ -231,7 +246,7 @@ export const propertyYieldsSchema = z
       z
         .object({
           property_id: z.number().int().positive(),
-          property_name: z.string(),
+          property_name: z.string().trim().min(1),
           valuation_date: isoDateSchema.nullable(),
           property_value: z.number().nullable(),
           annualized_revenue: z.number().nullable(),
@@ -276,7 +291,7 @@ export const currencyExposureSchema = makeTimeSeriesSchema({
   metric: z.literal('currency_exposure'),
   currency: analyticsCurrencySchema,
   measure: exposureMeasureSchema,
-  measure_label: z.string(),
+  measure_label: z.string().trim().min(1),
   coverage: z.array(exposureCoverageSchema),
 })
 
@@ -300,6 +315,30 @@ const propertyValuationPointSchema = z
     message: 'period_end must be on or after period_start',
   })
 
+const propertyValuationSeriesSchema = z.tuple([
+  z
+    .object({
+      key: z.literal('total_value'),
+      label: z.literal('Total value'),
+      kind: z.literal('total'),
+    })
+    .strict(),
+  z
+    .object({
+      key: z.literal('debt'),
+      label: z.literal('Debt'),
+      kind: z.literal('debt'),
+    })
+    .strict(),
+  z
+    .object({
+      key: z.literal('equity'),
+      label: z.literal('Equity'),
+      kind: z.literal('equity'),
+    })
+    .strict(),
+])
+
 export const propertyValuationSchema = z
   .object({
     metric: z.literal('property_valuation'),
@@ -314,7 +353,7 @@ export const propertyValuationSchema = z
       'missing_valuation',
       'missing_currency',
     ]),
-    series: z.array(seriesDefinitionSchema),
+    series: propertyValuationSeriesSchema,
     points: z.array(propertyValuationPointSchema),
   })
   .strict()
@@ -356,6 +395,37 @@ const tenantRentPointSchema = z
     message: 'period_end must be on or after period_start',
   })
 
+const tenantRentSeriesSchema = z.tuple([
+  z
+    .object({
+      key: z.literal('expected'),
+      label: z.literal('Expected rent'),
+      kind: z.literal('expected'),
+    })
+    .strict(),
+  z
+    .object({
+      key: z.literal('received'),
+      label: z.literal('Received rent'),
+      kind: z.literal('received'),
+    })
+    .strict(),
+  z
+    .object({
+      key: z.literal('variance'),
+      label: z.literal('Variance'),
+      kind: z.literal('variance'),
+    })
+    .strict(),
+  z
+    .object({
+      key: z.literal('cumulative_arrears'),
+      label: z.literal('Cumulative arrears'),
+      kind: z.literal('cumulative'),
+    })
+    .strict(),
+])
+
 export const tenantRentPerformanceSchema = z
   .object({
     metric: z.literal('tenant_rent_performance'),
@@ -375,7 +445,7 @@ export const tenantRentPerformanceSchema = z
       'incomplete_history',
     ]),
     issues: z.array(tenantIssueSchema),
-    series: z.array(seriesDefinitionSchema),
+    series: tenantRentSeriesSchema,
     points: z.array(tenantRentPointSchema),
   })
   .strict()

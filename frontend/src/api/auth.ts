@@ -1,22 +1,48 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
 import { apiFetch, ApiError } from './client'
 import { queryKeys } from './keys'
 import type { User } from '@/types/user'
 
 type MeResponse = { user: User }
 
+function removeUserScopedQueryData(qc: QueryClient) {
+  qc.removeQueries({
+    predicate: (query) => query.queryKey[0] !== 'auth',
+  })
+}
+
+function replaceAuthenticatedSession(qc: QueryClient, user: User) {
+  removeUserScopedQueryData(qc)
+  qc.setQueryData(queryKeys.auth.me, user)
+}
+
+function removeDataOnIdentityChange(qc: QueryClient, user: User | null) {
+  const current = qc.getQueryData<User | null>(queryKeys.auth.me)
+  if (current?.id !== user?.id) removeUserScopedQueryData(qc)
+}
+
 export function useMe() {
+  const qc = useQueryClient()
   return useQuery<User | null>({
     queryKey: queryKeys.auth.me,
     queryFn: async () => {
       try {
         const data = await apiFetch<MeResponse>('/auth/me/')
+        removeDataOnIdentityChange(qc, data.user)
         return data.user
       } catch (err: unknown) {
         // DRF's SessionAuthentication returns 403 (not 401) for anonymous
         // requests — there's no WWW-Authenticate header to set. Treat both
         // as "no session" so the SPA falls back to the login redirect.
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) return null
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+          removeDataOnIdentityChange(qc, null)
+          return null
+        }
         throw err
       }
     },
@@ -30,7 +56,7 @@ export function useLogin() {
     mutationFn: (vars: { username: string; password: string }) =>
       apiFetch<MeResponse>('/auth/login/', { method: 'POST', body: vars }),
     onSuccess: (data) => {
-      qc.setQueryData(queryKeys.auth.me, data.user)
+      replaceAuthenticatedSession(qc, data.user)
     },
   })
 }
@@ -52,7 +78,7 @@ export function useRegister() {
     mutationFn: (vars: { username: string; password: string; email: string }) =>
       apiFetch<MeResponse>('/auth/register/', { method: 'POST', body: vars }),
     onSuccess: (data) => {
-      qc.setQueryData(queryKeys.auth.me, data.user)
+      replaceAuthenticatedSession(qc, data.user)
     },
   })
 }

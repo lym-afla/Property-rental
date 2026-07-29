@@ -7,8 +7,12 @@ import { describe, expect, it } from 'vitest'
 import { server } from '@/test/handlers'
 import {
   currencyExposureSchema,
+  isoDateSchema,
   portfolioSummarySchema,
+  propertyContributionSchema,
   propertyValuationSchema,
+  propertyYieldsSchema,
+  seriesDefinitionSchema,
   tenantRentPerformanceSchema,
   timeSeriesSchema,
 } from '@/types/analytics'
@@ -301,6 +305,74 @@ describe('analytics runtime schemas', () => {
       'missing_received_fx',
       'incomplete_opening_history',
     ])
+  })
+
+  it.each(['period_start', 'period_end', 'toString', 'constructor', '__proto__'])(
+    'rejects dynamic series key collision %s',
+    (key) => {
+      expect(() =>
+        timeSeriesSchema.parse({
+          ...cashFlowFixture,
+          series: [{ key, label: 'Collision', kind: 'income' }],
+          points: [
+            {
+              period_start: '2026-01-01',
+              period_end: '2026-01-31',
+            },
+          ],
+        }),
+      ).toThrow()
+    },
+  )
+
+  it('requires exact property valuation series metadata', () => {
+    expect(() =>
+      propertyValuationSchema.parse({
+        ...valuationFixture,
+        series: [
+          { key: 'market_value', label: 'Total value', kind: 'total' },
+          ...valuationFixture.series.slice(1),
+        ],
+      }),
+    ).toThrow()
+  })
+
+  it('requires exact tenant rent series metadata', () => {
+    expect(() =>
+      tenantRentPerformanceSchema.parse({
+        ...tenantFixture,
+        series: tenantFixture.series.map((series) =>
+          series.key === 'received'
+            ? { ...series, label: 'Collected rent' }
+            : series,
+        ),
+      }),
+    ).toThrow()
+  })
+
+  it('rejects year zero like the backend ISO date field', () => {
+    expect(isoDateSchema.safeParse('0000-01-01').success).toBe(false)
+  })
+
+  it('rejects blank DRF CharField values', () => {
+    expect(() =>
+      seriesDefinitionSchema.parse({ key: 'rent', label: '   ', kind: 'income' }),
+    ).toThrow()
+    expect(() =>
+      propertyContributionSchema.parse({
+        ...contributionFixture,
+        rows: [{ ...contributionFixture.rows[0], property_name: '\t' }],
+      }),
+    ).toThrow()
+    expect(() =>
+      currencyExposureSchema.parse({ ...exposureFixture, measure_label: '' }),
+    ).toThrow()
+    expect(() =>
+      propertyYieldsSchema.parse({
+        ...yieldsFixture,
+        rows: [{ ...yieldsFixture.rows[0], property_name: ' ' }],
+      }),
+    ).toThrow()
   })
 })
 

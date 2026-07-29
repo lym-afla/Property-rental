@@ -67,6 +67,15 @@ describe('dashboard URL filters', () => {
     ).toMatchObject({ start: defaults.start, end: defaults.end })
   })
 
+  it('falls year-zero URL dates back to authenticated defaults', () => {
+    expect(
+      parseDashboardFilters(
+        new URLSearchParams('start=0000-01-01&end=2026-06-30'),
+        defaults,
+      ),
+    ).toMatchObject({ start: defaults.start, end: '2026-06-30' })
+  })
+
   it('serializes defaults explicitly so a copied URL restores the same view', () => {
     expect(serializeDashboardFilters(defaults).toString()).toBe(
       'section=overview&start=2026-01-01&end=2026-07-29&currency=USD&grain=month&comparison=none&property=&measure=property_value',
