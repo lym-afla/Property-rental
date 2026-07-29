@@ -1,0 +1,424 @@
+"""Behavior and API tests for tenant rent-performance analytics."""
+
+from datetime import date
+from decimal import Decimal
+
+import pytest
+
+from rentals.analytics.filters import AnalyticsFilters, Grain
+from rentals.tests.factories import (
+    FXFactory,
+    LeaseRentFactory,
+    PropertyFactory,
+    TenantFactory,
+    TransactionFactory,
+)
+
+
+def filters_for(start, end, grain=Grain.MONTH, currency="USD"):
+    return AnalyticsFilters(
+        start=date.fromisoformat(start),
+        end=date.fromisoformat(end),
+        grain=grain,
+        currency=currency,
+        comparison=None,
+        property_ids=(),
+    )
+
+
+@pytest.mark.django_db
+def test_rent_performance_tracks_rate_changes_partial_and_missing_payments(
+    landlord_user, sample_property
+):
+    """Static rates or omitted empty months would hide the tenant's arrears."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        lease_end=date(2026, 4, 15),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 3, 1),
+        rent=Decimal("1200.00"),
+        currency="USD",
+    )
+    for payment_date, amount in (
+        (date(2026, 1, 5), "1000.00"),
+        (date(2026, 2, 5), "600.00"),
+        (date(2026, 4, 10), "1200.00"),
+        (date(2026, 5, 10), "300.00"),
+    ):
+        TransactionFactory(
+            property=sample_property,
+            tenant=tenant,
+            category="rent",
+            amount=Decimal(amount),
+            currency="USD",
+            date=payment_date,
+        )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-05-31"),
+    )
+
+    assert result.scale == 1
+    assert result.currency == "USD"
+    assert [point["expected"] for point in result.points] == [
+        1000.0,
+        1000.0,
+        1200.0,
+        1200.0,
+        0.0,
+    ]
+    assert [point["received"] for point in result.points] == [
+        1000.0,
+        600.0,
+        0.0,
+        1200.0,
+        300.0,
+    ]
+    assert [point["variance"] for point in result.points] == [
+        0.0,
+        -400.0,
+        -1200.0,
+        0.0,
+        300.0,
+    ]
+    assert [point["cumulative_arrears"] for point in result.points] == [
+        0.0,
+        -400.0,
+        -1600.0,
+        -1600.0,
+        -1300.0,
+    ]
+
+
+@pytest.mark.django_db
+def test_rent_performance_uses_contract_due_date_without_collection_grace(
+    landlord_user, sample_property
+):
+    """Applying scheduler collection grace would understate contractual expected rent."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2025, 12, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2025, 12, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-06"),
+    )
+
+    assert result.points[0]["expected"] == 1000.0
+    assert result.points[0]["variance"] == -1000.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_converts_tenant_scoped_received_payments(
+    landlord_user, sample_property
+):
+    """Face-value or property-wide sums would misstate cross-currency receipts."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    peer = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    FXFactory(
+        date=date(2026, 1, 5),
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("1.25"),
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("800.00"),
+        currency="EUR",
+        date=date(2026, 1, 5),
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=peer,
+        category="rent",
+        amount=Decimal("9000.00"),
+        currency="USD",
+        date=date(2026, 1, 5),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.points[0]["expected"] == 1000.0
+    assert result.points[0]["received"] == 1000.0
+    assert result.points[0]["variance"] == 0.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_marks_missing_fx_without_using_face_value(
+    landlord_user, sample_property
+):
+    """A missing conversion path must not silently treat foreign rent as USD."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("800.00"),
+        currency="EUR",
+        date=date(2026, 1, 5),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.status == "missing_fx"
+    assert result.points[0]["expected"] == 1000.0
+    assert result.points[0]["received"] is None
+    assert result.points[0]["variance"] is None
+    assert result.points[0]["status"] == "missing_fx"
+
+
+@pytest.mark.django_db
+def test_rent_performance_keeps_signed_overpayment(
+    landlord_user, sample_property
+):
+    """Clamping the running balance would hide advance rent payments."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("1500.00"),
+        currency="USD",
+        date=date(2026, 1, 5),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.points[0]["variance"] == 500.0
+    assert result.points[0]["cumulative_arrears"] == 500.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_carries_pre_range_unpaid_rent_into_first_point(
+    landlord_user, sample_property
+):
+    """Resetting the running balance at the range start would hide old arrears."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 11, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 11, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("1000.00"),
+        currency="USD",
+        date=date(2026, 12, 5),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-12-01", "2026-12-31"),
+    )
+
+    assert result.opening_arrears == -1000.0
+    assert result.points[0]["variance"] == 0.0
+    assert result.points[0]["cumulative_arrears"] == -1000.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_carries_pre_range_overpayment_into_first_point(
+    landlord_user, sample_property
+):
+    """Clamping the opening balance would discard a tenant's advance payment."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 11, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 11, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("1500.00"),
+        currency="USD",
+        date=date(2026, 11, 5),
+    )
+    TransactionFactory(
+        property=sample_property,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("1000.00"),
+        currency="USD",
+        date=date(2026, 12, 5),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-12-01", "2026-12-31"),
+    )
+
+    assert result.opening_arrears == 500.0
+    assert result.points[0]["variance"] == 0.0
+    assert result.points[0]["cumulative_arrears"] == 500.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_marks_missing_rate_without_fabricating_expected(
+    landlord_user, sample_property
+):
+    """A due month without rate history must not be treated as zero rent."""
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.status == "missing_rent_rate"
+    assert result.points[0]["expected"] is None
+    assert result.points[0]["variance"] is None
+    assert result.points[0]["cumulative_arrears"] is None
+    assert result.points[0]["status"] == "missing_rent_rate"
+
+
+@pytest.mark.django_db
+def test_rent_performance_api_rejects_cross_owner_and_serializes_boundaries(
+    auth_client, sample_property, other_landlord_user
+):
+    """The API must expose ISO buckets without allowing tenant enumeration."""
+    tenant = TenantFactory(
+        property=sample_property,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="USD",
+    )
+    other_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    other_tenant = TenantFactory(property=other_property)
+
+    response = auth_client.get(
+        f"/api/v1/analytics/tenants/{tenant.id}/rent-performance/",
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "grain": "month",
+            "currency": "USD",
+        },
+    )
+    forbidden = auth_client.get(
+        f"/api/v1/analytics/tenants/{other_tenant.id}/rent-performance/",
+        {"start": "2026-01-01", "end": "2026-01-31"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["opening_arrears"] == 0.0
+    assert response.json()["points"][0] == {
+        "period_start": "2026-01-01",
+        "period_end": "2026-01-31",
+        "expected": 1000.0,
+        "received": 0.0,
+        "variance": -1000.0,
+        "cumulative_arrears": -1000.0,
+        "status": "ok",
+    }
+    assert forbidden.status_code == 404

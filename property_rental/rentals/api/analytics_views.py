@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
-from rentals.analytics.filters import AnalyticsFilters
+from rentals.analytics.filters import AnalyticsFilters, ISODateField
 from rentals.analytics.portfolio import (
     currency_exposure,
     portfolio_occupancy,
@@ -14,15 +14,23 @@ from rentals.analytics.portfolio import (
     property_contribution,
     property_yields,
 )
+from rentals.analytics.property import property_valuation_history
+from rentals.analytics.tenant import tenant_rent_performance
 from rentals.constants import CURRENCY_CHOICES
 from rentals.api.analytics_serializers import (
     ContributionResponseSerializer,
     CurrencyExposureResponseSerializer,
     PortfolioSummarySerializer,
+    PropertyValuationResponseSerializer,
+    TenantRentPerformanceResponseSerializer,
     TimeSeriesResponseSerializer,
     YieldResponseSerializer,
 )
 from rentals.utils import get_effective_date
+
+
+class _ValuationEndSerializer(serializers.Serializer):
+    end = ISODateField(required=False)
 
 
 class _PortfolioAnalyticsView(APIView):
@@ -112,3 +120,33 @@ class PortfolioOccupancyView(_PortfolioAnalyticsView):
     def get(self, request):
         result = portfolio_occupancy(request.user, self.filters(request))
         return self.response(result)
+
+
+class PropertyValuationAnalyticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, property_id):
+        unknown = set(request.query_params) - {"end"}
+        if unknown:
+            raise serializers.ValidationError(
+                {key: "Unknown filter." for key in sorted(unknown)}
+            )
+        query = _ValuationEndSerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        end = query.validated_data.get("end", get_effective_date(request.user))
+        result = property_valuation_history(request.user, property_id, end=end)
+        return Response(PropertyValuationResponseSerializer(result).data)
+
+
+class TenantRentPerformanceAnalyticsView(_PortfolioAnalyticsView):
+    def get(self, request, tenant_id):
+        allowed = {"start", "end", "grain", "currency"}
+        unknown = set(request.query_params) - allowed
+        if unknown:
+            raise serializers.ValidationError(
+                {key: "Unknown filter." for key in sorted(unknown)}
+            )
+        result = tenant_rent_performance(
+            request.user, tenant_id, self.filters(request)
+        )
+        return Response(TenantRentPerformanceResponseSerializer(result).data)

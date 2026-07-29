@@ -219,3 +219,68 @@ class CurrencyExposureResponseSerializer(TimeSeriesResponseSerializer):
     )
     measure_label = serializers.CharField()
     coverage = ExposureCoverageSerializer(many=True)
+
+
+class PropertyValuationPointSerializer(StrictSerializer):
+    period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    total_value = serializers.FloatField(allow_null=True)
+    debt = serializers.FloatField(allow_null=True)
+    equity = serializers.FloatField(allow_null=True)
+    status = serializers.ChoiceField(
+        choices=["ok", "missing_value", "missing_debt", "missing_value_and_debt"]
+    )
+
+
+class PropertyValuationResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["property_valuation"])
+    grain = serializers.ChoiceField(choices=["record"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$", allow_null=True)
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    status = serializers.ChoiceField(
+        choices=["ok", "partial_valuation", "missing_valuation", "missing_currency"]
+    )
+    series = SeriesDefinitionSerializer(many=True)
+    points = PropertyValuationPointSerializer(many=True)
+
+
+class TenantRentPerformancePointSerializer(StrictSerializer):
+    period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    expected = serializers.FloatField(allow_null=True)
+    received = serializers.FloatField(allow_null=True)
+    variance = serializers.FloatField(allow_null=True)
+    cumulative_arrears = serializers.FloatField(allow_null=True)
+    status = serializers.ChoiceField(
+        choices=[
+            "ok",
+            "missing_rent_rate",
+            "missing_currency",
+            "missing_fx",
+            "incomplete_history",
+        ]
+    )
+
+
+class TenantRentPerformanceResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["tenant_rent_performance"])
+    grain = serializers.ChoiceField(choices=[grain.value for grain in Grain])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    opening_arrears = serializers.FloatField(allow_null=True)
+    status = serializers.ChoiceField(
+        choices=[
+            "ok",
+            "partial_data",
+            "missing_rent_rate",
+            "missing_currency",
+            "missing_fx",
+            "incomplete_history",
+        ]
+    )
+    series = SeriesDefinitionSerializer(many=True)
+    points = TenantRentPerformancePointSerializer(many=True)

@@ -44,6 +44,8 @@ from .analytics_views import (
     PortfolioOccupancyView,
     PortfolioSummaryView,
     PortfolioYieldsView,
+    PropertyValuationAnalyticsView,
+    TenantRentPerformanceAnalyticsView,
 )
 from .views import (
     ChartDataView,
@@ -96,6 +98,14 @@ urlpatterns = [
         PortfolioCurrencyExposureView.as_view(),
     ),
     path("analytics/portfolio/occupancy/", PortfolioOccupancyView.as_view()),
+    path(
+        "analytics/properties/<int:property_id>/valuation/",
+        PropertyValuationAnalyticsView.as_view(),
+    ),
+    path(
+        "analytics/tenants/<int:tenant_id>/rent-performance/",
+        TenantRentPerformanceAnalyticsView.as_view(),
+    ),
     path("chart-data/", ChartDataView.as_view()),
 ]
 urlpatterns += router.urls
