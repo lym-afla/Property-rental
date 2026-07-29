@@ -235,3 +235,57 @@ def test_cash_flow_preloads_cross_currency_rates_for_long_ranges(
     assert result.points[0]["rent"] == 125.0
     assert result.points[-1]["rent"] == 125.0
     assert len(queries) <= 2
+
+
+@pytest.mark.django_db
+def test_preloaded_converter_matches_legacy_equal_hop_path_selection(
+    landlord_user, sample_property
+):
+    """Reordering FX rows must not choose a different equal-hop conversion path."""
+    from rentals.services import fx as fx_service
+    from rentals.services.fx import preload_converter
+
+    # The legacy graph receives the RUB path first through natural ORM order,
+    # even though the EUR path's rows carry earlier dates. Both paths are two
+    # hops, but their rates intentionally produce different GBP->USD values.
+    FXFactory(
+        from_currency="GBP",
+        to_currency="RUB",
+        rate=Decimal("4.00"),
+        date=date(2026, 1, 2),
+    )
+    FXFactory(
+        from_currency="RUB",
+        to_currency="USD",
+        rate=Decimal("5.00"),
+        date=date(2026, 1, 2),
+    )
+    FXFactory(
+        from_currency="GBP",
+        to_currency="EUR",
+        rate=Decimal("2.00"),
+        date=date(2026, 1, 1),
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("3.00"),
+        date=date(2026, 1, 1),
+    )
+    transaction = TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("100.00"),
+        date=date(2026, 1, 3),
+        currency="GBP",
+    )
+
+    legacy_value = fx_service.convert(
+        transaction.amount, transaction.currency, "USD", transaction.date
+    )
+    preloaded_value = preload_converter([transaction], "USD").convert(
+        transaction.amount, transaction.currency, "USD", transaction.date
+    )
+
+    assert legacy_value == Decimal("2000.00")
+    assert preloaded_value == legacy_value

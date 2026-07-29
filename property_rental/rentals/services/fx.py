@@ -286,7 +286,7 @@ class PreloadedConverter:
             self._rows = tuple(
                 FX.objects.filter(
                     date__lte=max(cross_currency_dates), rate__isnull=False
-                ).order_by("date", "id")
+                )
             )
 
     def _graph(self, as_of):
@@ -296,22 +296,26 @@ class PreloadedConverter:
 
         graph = nx.Graph()
         for fx in self._rows:
-            if fx.date > as_of:
-                break
-            graph.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
+            if fx.date <= as_of:
+                graph.add_edge(
+                    fx.from_currency, fx.to_currency, weight=float(fx.rate)
+                )
         self._graphs[as_of] = graph
         return graph
 
     def _latest_rate(self, source, target, as_of):
-        for fx in reversed(self._rows):
-            if fx.date > as_of:
-                continue
-            if (
+        matches = [
+            fx
+            for fx in self._rows
+            if fx.date <= as_of
+            and (
                 (fx.from_currency == source and fx.to_currency == target)
                 or (fx.from_currency == target and fx.to_currency == source)
-            ):
-                return fx
-        raise ValueError(f"FX rate for {source} to {target} not found.")
+            )
+        ]
+        if not matches:
+            raise ValueError(f"FX rate for {source} to {target} not found.")
+        return max(matches, key=lambda fx: fx.date)
 
     def convert(self, amount, from_currency, to_currency, as_of):
         if from_currency == to_currency:
