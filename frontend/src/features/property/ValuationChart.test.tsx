@@ -41,6 +41,7 @@ describe('ValuationChart', () => {
     render(<ValuationChart data={data} />)
 
     expect(screen.getByTestId('valuation-axis')).toHaveTextContent('£500k')
+    expect(screen.getByText(/All time: 2018-01-01 to 2026-07-29/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('1 Jan 2018')
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('£500,000')

@@ -103,9 +103,10 @@ describe('PropertyDetailPage', () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText(fixtureProperty.name)
-    await user.click(screen.getByRole('tab', { name: /valuations/i }))
+    expect(screen.queryByRole('heading', { name: /capital structure/i })).not.toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: /view valuation history/i }))
     expect(screen.getByRole('heading', { name: /capital structure/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new valuation/i })).toBeInTheDocument()
   })
 
   it('renders ErrorState when the property request fails', async () => {

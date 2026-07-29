@@ -6,12 +6,11 @@
 //   - Header card: tenant name + property name + lease dates + rent rate
 //     + debt + status badge, with Edit / Update rent / Vacate actions.
 //   - Overview section: Rent & debt card (revenue + net income all-time
-//     and YTD), TenantRentChart, and the 5 most-recent transactions for
+//     and YTD), typed rent-performance analytics, and the 5 most-recent transactions for
 //     THIS tenant (filtered server-side via `?tenant=<id>`).
 //
-// Charts (Plan C): the Overview section mounts TenantRentChart (rent
-// received per period), wired to useChartData({type: 'tenant',
-// elementId: id}).
+// Charts: the Overview section mounts RentPerformanceChart with the
+// server-provided expected, received, variance, and arrears series.
 //
 // B1 adaptation notes (vs the original task-5 brief):
 //   - `useTenant(id)` returns the plain `Tenant` shape, but the header

@@ -13,10 +13,8 @@
 //         property via `DataTable`, with create / edit / delete wired
 //         through `EntityFormDialog` + `ConfirmDialog`.
 //
-// Charts (Plan C): the Overview tab mounts RentYieldChart (rent / value
-// per period); the Valuations tab mounts ValuationChart (Debt + Equity
-// stacked with total-value line). Both pull from a single
-// `useChartData({type: 'property', elementId: id})` round-trip.
+// Charts: the Overview tab shows rent yield and server-provided valuation
+// history; the Valuations tab contains the editable capital-structure rows.
 //
 // B1 adaptation notes (vs the original task-3 brief):
 //   - `EntityFormDialog` takes `title` + `children` (the form), not a
@@ -426,6 +424,14 @@ export function PropertyDetailPage() {
             currency={property.currency}
           />
 
+          <ValuationChart
+            data={valuationAnalyticsQuery.data}
+            isLoading={valuationAnalyticsQuery.isLoading}
+            isError={valuationAnalyticsQuery.isError}
+            onRetry={() => valuationAnalyticsQuery.refetch()}
+            onViewHistory={() => setActiveTab('valuations')}
+          />
+
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Recent transactions</h2>
             {transactionsQuery.isLoading ? (
@@ -488,14 +494,6 @@ export function PropertyDetailPage() {
               New Valuation
             </Button>
           </div>
-
-          <ValuationChart
-            data={valuationAnalyticsQuery.data}
-            isLoading={valuationAnalyticsQuery.isLoading}
-            isError={valuationAnalyticsQuery.isError}
-            onRetry={() => valuationAnalyticsQuery.refetch()}
-            onViewHistory={() => setActiveTab('valuations')}
-          />
 
           {valuationsQuery.isLoading ? (
             <Skeleton className="h-40 w-full" />

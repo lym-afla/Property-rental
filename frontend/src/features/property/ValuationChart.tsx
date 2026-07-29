@@ -62,7 +62,9 @@ export function ValuationChart(props: Props) {
     <AnalyticsChartCard
       state={state}
       title="Property valuation"
-      subtitle="All server-provided valuation records; the chart never applies a client-side time cutoff."
+      subtitle={data
+        ? `All time: ${data.start} to ${data.end}. Server-provided valuation records; no client-side time cutoff.`
+        : 'Server-provided valuation records; no client-side time cutoff.'}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
         next.has(key) ? next.delete(key) : next.add(key)
