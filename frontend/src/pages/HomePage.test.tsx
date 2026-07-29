@@ -78,6 +78,14 @@ const cashFlow = {
 
 const expenses = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'utilities', label: 'Utilities', kind: 'expense_category' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', utilities: -250 }] } as const
 
+const currencyExposure = {
+  metric: 'currency_exposure', grain: 'month', currency: 'USD', scale: 1,
+  start: '2026-01-01', end: '2026-07-29', measure: 'property_value', measure_label: 'Property value',
+  series: [{ key: 'USD', label: 'USD', kind: 'native_currency' }],
+  points: [{ period_start: '2026-01-01', period_end: '2026-01-31', USD: 1000 }],
+  coverage: [],
+} as const
+
 function LocationProbe() {
   const location = useLocation()
   return <output aria-label="Current dashboard URL">{location.search}</output>
@@ -138,6 +146,7 @@ describe('HomePage dashboard shell', () => {
   it('updates router URL and analytics request from filter interactions, then fully serializes reset defaults', async () => {
     const user = userEvent.setup()
     const requestedUrls: string[] = []
+    const exposureUrls: string[] = []
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
         requestedUrls.push(request.url)
@@ -145,11 +154,22 @@ describe('HomePage dashboard shell', () => {
       }),
       http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
       http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
+      http.get('/api/v1/analytics/portfolio/currency-exposure/', ({ request }) => {
+        exposureUrls.push(request.url)
+        return HttpResponse.json(currencyExposure)
+      }),
     )
     renderPage('/?section=risk&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&comparison=none&property=&measure=property_value')
 
-    expect(screen.getByText('Currency exposure migration pending')).toBeInTheDocument()
-    expect(screen.getByText('Occupancy migration pending')).toBeInTheDocument()
+    expect(screen.getByText('Currency exposure')).toBeInTheDocument()
+    expect(screen.getByText('Occupancy risk')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Exposure measure'), 'debt')
+    await waitFor(() => {
+      const currentUrl = screen.getByLabelText('Current dashboard URL').textContent ?? ''
+      expect(new URLSearchParams(currentUrl).get('measure')).toBe('debt')
+      expect(new URL(exposureUrls.at(-1) ?? 'http://invalid').searchParams.get('measure')).toBe('debt')
+    })
 
     await user.click(screen.getByRole('button', { name: 'Income & Costs' }))
     await waitFor(() => {

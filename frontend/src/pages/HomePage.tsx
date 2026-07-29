@@ -2,17 +2,20 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, subYears } from 'date-fns'
 
-import { useExpenseDrivers, usePortfolioCashFlow, usePortfolioSummary } from '@/api/analytics'
+import { useCurrencyExposure, useExpenseDrivers, usePortfolioCashFlow, usePortfolioOccupancy, usePortfolioSummary, usePropertyContribution, usePropertyYields } from '@/api/analytics'
 import { useProperties } from '@/api/properties'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
 import { CumulativeCashChart } from '@/features/dashboard/charts/CumulativeCashChart'
+import { CurrencyExposureChart } from '@/features/dashboard/charts/CurrencyExposureChart'
 import { ExpenseDriversChart } from '@/features/dashboard/charts/ExpenseDriversChart'
 import { NetCashFlowChart } from '@/features/dashboard/charts/NetCashFlowChart'
+import { OccupancyRiskChart } from '@/features/dashboard/charts/OccupancyRiskChart'
+import { PropertyContributionChart } from '@/features/dashboard/charts/PropertyContributionChart'
 import { RevenueExpenseTrendChart } from '@/features/dashboard/charts/RevenueExpenseTrendChart'
+import { YieldComparisonChart } from '@/features/dashboard/charts/YieldComparisonChart'
 import type { DrillDown } from '@/features/dashboard/charts/chartUtils'
 import type { DashboardFilterState, DashboardGrain } from '@/features/dashboard/filters'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -71,12 +74,12 @@ export function HomePage() {
       defaults={defaults}
       properties={(properties.data ?? []).map(({ id, name }) => ({ id, name }))}
     >
-      {(filters) => <DashboardContent filters={filters} />}
+      {(filters, onFiltersChange) => <DashboardContent filters={filters} onFiltersChange={onFiltersChange} />}
     </DashboardLayout>
   )
 }
 
-function DashboardContent({ filters }: { filters: DashboardFilterState }) {
+function DashboardContent({ filters, onFiltersChange }: { filters: DashboardFilterState; onFiltersChange: (next: DashboardFilterState) => void }) {
   const navigate = useNavigate()
   const range = { from: filters.start, to: filters.end }
   const analyticsParams = {
@@ -88,6 +91,10 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
   }
   const cashFlowQuery = usePortfolioCashFlow(analyticsParams)
   const expenseQuery = useExpenseDrivers(analyticsParams)
+  const contributionQuery = usePropertyContribution(analyticsParams)
+  const yieldsQuery = usePropertyYields(analyticsParams)
+  const exposureQuery = useCurrencyExposure({ ...analyticsParams, measure: filters.exposureMeasure })
+  const occupancyQuery = usePortfolioOccupancy(analyticsParams)
 
   const onDrillDown = ({ from, to, category, currency, propertyIds }: DrillDown) => {
     const params = new URLSearchParams({ from, to, category, currency })
@@ -103,18 +110,17 @@ function DashboardContent({ filters }: { filters: DashboardFilterState }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <CumulativeCashChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
-        <MigrationPlaceholder
-          title="Occupancy migration pending"
-          description="Task 9 will restore occupancy using the shared dashboard range and as-of date."
-        />
+        <OccupancyRiskChart data={occupancyQuery.data} isLoading={occupancyQuery.isLoading} isError={occupancyQuery.isError} onRetry={() => { void occupancyQuery.refetch() }} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
-        <MigrationPlaceholder
-          title="Currency exposure migration pending"
-          description="Task 9 will restore currency exposure using the shared range, currency, properties, and exposure measure."
-        />
+        <CurrencyExposureChart data={exposureQuery.data} isLoading={exposureQuery.isLoading} isError={exposureQuery.isError} onRetry={() => { void exposureQuery.refetch() }} measure={filters.exposureMeasure} onMeasureChange={(exposureMeasure) => onFiltersChange({ ...filters, exposureMeasure })} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PropertyContributionChart data={contributionQuery.data} isLoading={contributionQuery.isLoading} isError={contributionQuery.isError} onRetry={() => { void contributionQuery.refetch() }} />
+        <YieldComparisonChart data={yieldsQuery.data} isLoading={yieldsQuery.isLoading} isError={yieldsQuery.isError} onRetry={() => { void yieldsQuery.refetch() }} />
       </div>
 
       <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
@@ -187,18 +193,5 @@ function PortfolioSummary({ filters }: { filters: DashboardFilterState }) {
         description={`${data.occupied} of ${data.rental_inventory_count} rental units`}
       />
     </div>
-  )
-}
-
-function MigrationPlaceholder({ title, description }: { title: string; description: string }) {
-  return (
-    <Card className="min-h-52 border-dashed">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
   )
 }

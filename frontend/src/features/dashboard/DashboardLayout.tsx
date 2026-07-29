@@ -12,7 +12,7 @@ import {
 type Props = {
   defaults: DashboardFilterState
   properties: readonly { id: number; name: string }[]
-  children: (filters: DashboardFilterState) => ReactNode
+  children: (filters: DashboardFilterState, onChange: (next: DashboardFilterState) => void) => ReactNode
 }
 
 const SECTION_LABELS: Record<DashboardFilterState['section'], string> = {
@@ -62,7 +62,7 @@ export function DashboardLayout({ defaults, properties, children }: Props) {
             {filters.start} to {filters.end} · {filters.grain} · {filters.currency}
           </p>
         </div>
-        {children(filters)}
+        {children(filters, setFilters)}
       </section>
     </div>
   )
