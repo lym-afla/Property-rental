@@ -31,8 +31,8 @@ function statusLabel(status: PropertyYieldsResponse['rows'][number]['status']) {
   return status.replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase())
 }
 
-function formatYield(value: number | null) {
-  return value === null ? '—' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+function formatYield(value: number | null | undefined) {
+  return value === null || value === undefined || Number.isNaN(value) ? '—' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
 }
 
 export function YieldComparisonChart(props: Props) {
@@ -71,7 +71,7 @@ export function YieldComparisonChart(props: Props) {
                   <XAxis type="number" dataKey="yield" unit="%" name="Yield" />
                   <YAxis type="category" dataKey="property_name" name="Property" width={132} />
                   {average !== null && <ReferenceLine x={average} stroke="currentColor" strokeDasharray="4 4" label="Average displayed yield" />}
-                  <Tooltip content={({ active, payload }) => active ? <ChartTooltip label="Property yield" rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatYield(Number(item.value)) }))} /> : null} />
+                  <Tooltip content={({ active, payload }) => active ? <ChartTooltip label="Property yield" rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatYield(typeof item.value === 'number' ? item.value : null) }))} /> : null} />
                   {visibleSeries.map((series) => {
                     const key: YieldKey = series.key
                     return <Scatter key={key} name={series.label} fill={chartSeriesStyle(series.visualToken).color} data={data.rows.filter((row) => row[key] !== null).map((row) => ({ property_name: row.property_name, yield: row[key] }))} />

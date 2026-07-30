@@ -46,7 +46,7 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
             <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
-            <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
+            <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
             {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>

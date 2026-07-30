@@ -9,6 +9,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ScatterChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Scatter: ({ name, fill, shape }: { name: string; fill?: string; shape?: string }) => <span data-testid={`yield-${name}`} data-fill={fill} data-shape={shape} />,
+  Tooltip: ({ content }: { content: (props: { active: boolean; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
 const data = {
@@ -47,5 +48,11 @@ describe('YieldComparisonChart', () => {
     expect(screen.getByTestId('yield-Gross yield').getAttribute('data-fill')).not.toBe(
       screen.getByTestId('yield-Net yield').getAttribute('data-fill'),
     )
+  })
+
+  it('renders missing and invalid tooltip values as em dashes', () => {
+    render(<YieldComparisonChart data={data} />)
+
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 })

@@ -9,6 +9,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Line: ({ name, stroke, strokeDasharray }: { name: string; stroke?: string; strokeDasharray?: string }) => <span data-testid={`trend-${name}`} data-color={stroke} data-dasharray={strokeDasharray} />,
+  Tooltip: ({ content }: { content: (props: { active: boolean; label: string; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, label: '2026-01-01', payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
 const data = { metric: 'portfolio_cash_flow' as const, grain: 'month' as const, currency: 'USD', scale: 1 as const, start: '2026-01-01', end: '2026-03-31', series: [{ key: 'total_income', label: 'Total income', kind: 'income_total' }, { key: 'total_expenses', label: 'Total expenses', kind: 'expense_total' }], points: [
@@ -39,5 +40,11 @@ describe('RevenueExpenseTrendChart', () => {
   it('shows an empty state when periods have no income or expense series', () => {
     render(<RevenueExpenseTrendChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }] }} />)
     expect(screen.getByText('No revenue and expenses data for this selection.')).toBeInTheDocument()
+  })
+
+  it('renders missing and invalid tooltip values as em dashes', () => {
+    render(<RevenueExpenseTrendChart data={data} />)
+
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 })

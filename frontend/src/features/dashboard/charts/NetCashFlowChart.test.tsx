@@ -9,6 +9,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children, stackOffset }: { children: React.ReactNode; stackOffset?: string }) => <div data-testid="cash-flow-plot" data-stack-offset={stackOffset}>{children}</div>,
   Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid="cash-bar" aria-label={name} data-fill={fill} />,
+  Tooltip: ({ content }: { content: (props: { active: boolean; label: string; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, label: '2026-01-01', payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
 const data = {
@@ -90,5 +91,11 @@ describe('NetCashFlowChart', () => {
   it('shows an empty state when a response has periods but no income or expense series', () => {
     render(<NetCashFlowChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', net_income: 750 }] }} />)
     expect(screen.getByText('No net cash flow data for this selection.')).toBeInTheDocument()
+  })
+
+  it('renders missing and invalid tooltip values as em dashes', () => {
+    render(<NetCashFlowChart data={data} />)
+
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 })
