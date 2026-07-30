@@ -71,6 +71,58 @@ class CategoryValueSerializer(StrictSerializer):
     value = serializers.JSONField()
 
 
+class ProfitLossColumnSerializer(StrictSerializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+
+
+class ProfitLossRowSerializer(StrictSerializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    kind = serializers.ChoiceField(
+        choices=[
+            "income",
+            "expense",
+            "total_revenue",
+            "total_expenses",
+            "net_income",
+        ]
+    )
+    values = serializers.DictField(child=FiniteFloatField())
+
+
+class ProfitLossResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["profit_and_loss"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    columns = ProfitLossColumnSerializer(many=True)
+    rows = ProfitLossRowSerializer(many=True)
+
+    def validate(self, attrs):
+        column_keys = [column["key"] for column in attrs["columns"]]
+        if len(column_keys) != len(set(column_keys)):
+            raise serializers.ValidationError({"columns": "Keys must be unique."})
+        declared = set(column_keys)
+        for index, row in enumerate(attrs["rows"]):
+            actual = set(row["values"])
+            if actual != declared:
+                raise serializers.ValidationError(
+                    {
+                        "rows": {
+                            index: {
+                                "values": (
+                                    "Must contain exactly every declared column key."
+                                )
+                            }
+                        }
+                    }
+                )
+        return attrs
+
+
 class TimeSeriesResponseSerializer(StrictSerializer):
     metric = serializers.CharField()
     grain = serializers.ChoiceField(choices=[grain.value for grain in Grain])

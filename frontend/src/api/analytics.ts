@@ -5,6 +5,7 @@ import {
   expenseDriversSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
+  profitLossSchema,
   portfolioSummarySchema,
   propertyContributionSchema,
   propertyValuationSchema,
@@ -12,6 +13,7 @@ import {
   tenantRentPerformanceSchema,
   type CurrencyExposureParams,
   type PortfolioAnalyticsParams,
+  type ProfitLossParams,
   type TenantRentPerformanceParams,
 } from '@/types/analytics'
 import { apiFetch } from './client'
@@ -75,6 +77,18 @@ export function useExpenseDrivers(params: PortfolioAnalyticsParams) {
         analyticsUrl('/analytics/portfolio/expenses/', params),
         expenseDriversSchema,
       ),
+  })
+}
+
+export function useProfitLoss(params: ProfitLossParams) {
+  return useQuery({
+    queryKey: queryKeys.analytics.portfolio.profitLoss(params),
+    queryFn: () =>
+      fetchValidated(
+        analyticsUrl('/analytics/portfolio/profit-loss/', params),
+        profitLossSchema,
+      ),
+    enabled: Boolean(params.end && params.currency),
   })
 }
 

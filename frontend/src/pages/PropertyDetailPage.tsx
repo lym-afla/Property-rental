@@ -20,8 +20,8 @@
 //     render-prop — we wire mutations inside each form's `onSubmit` and
 //     close the dialog on success, mirroring PropertiesPage.
 //   - `useProperty(id)` returns the plain `Property` shape (no stats), while
-//     `usePortfolioSummary()` provides the scoped P&L totals in the property's
-//     natural currency through the shared analytics contract.
+//     `useProfitLoss()` provides the scoped annual/YTD statement in the
+//     property's natural currency through the shared analytics contract.
 //   - `usePropertyValuations(propertyId)` already filters server-side via
 //     `?property=<id>`, so no client-side filter is needed.
 import { useMemo, useState } from 'react'
@@ -42,8 +42,9 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
-import { usePortfolioSummary, usePropertyValuationAnalytics } from '@/api/analytics'
+import { useProfitLoss, usePropertyValuationAnalytics } from '@/api/analytics'
 import { useSession } from '@/context/SessionProvider'
+import { ProfitLossTable } from '@/components/analytics/ProfitLossTable'
 import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
@@ -97,11 +98,9 @@ export function PropertyDetailPage() {
   // not pass an end date or derive a client-side five-year cutoff.
   const valuationAnalyticsQuery = usePropertyValuationAnalytics(propertyId)
   const performanceEnd = user?.effective_date ?? new Date().toISOString().slice(0, 10)
-  const propertyPerformanceQuery = usePortfolioSummary({
-    start: `${performanceEnd.slice(0, 4)}-01-01`,
+  const propertyPerformanceQuery = useProfitLoss({
     end: performanceEnd,
-    currency: propertyQuery.data?.currency,
-    grain: 'year',
+    currency: propertyQuery.data?.currency ?? '',
     propertyIds: Number.isFinite(propertyId) && propertyId > 0 ? [propertyId] : [],
   })
 
@@ -312,7 +311,7 @@ export function PropertyDetailPage() {
             <CardHeader>
               <CardTitle>Profit &amp; Loss</CardTitle>
               <CardDescription>
-                Server-calculated year-to-date performance through {performanceEnd}.
+                Annual history and year to date in {property.currency}.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -323,16 +322,12 @@ export function PropertyDetailPage() {
                   message="Failed to load P&L"
                   onRetry={() => propertyPerformanceQuery.refetch()}
                 />
-              ) : !propertyPerformanceQuery.data || propertyPerformanceQuery.data.property_count === 0 ? (
+              ) : !propertyPerformanceQuery.data ? (
                 <p className="text-sm text-muted-foreground">
                   No performance data available for this property yet.
                 </p>
               ) : (
-                <dl className="grid gap-4 sm:grid-cols-3">
-                  <Stat label="Revenue (YTD)" value={formatCurrency(propertyPerformanceQuery.data.revenue, propertyPerformanceQuery.data.currency)} />
-                  <Stat label="Costs (YTD)" value={formatCurrency(propertyPerformanceQuery.data.costs, propertyPerformanceQuery.data.currency)} />
-                  <Stat label="Net income (YTD)" value={formatCurrency(propertyPerformanceQuery.data.net_income, propertyPerformanceQuery.data.currency)} />
-                </dl>
+                <ProfitLossTable data={propertyPerformanceQuery.data} />
               )}
             </CardContent>
           </Card>

@@ -94,6 +94,21 @@ const currencyExposure = {
   coverage: [],
 } as const
 
+const profitLoss = {
+  metric: 'profit_and_loss', currency: 'USD', scale: 1, end: '2026-07-29',
+  columns: [
+    { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
+    { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
+    { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+  ],
+  rows: [
+    { key: 'rent', label: 'Rent', kind: 'income', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2025': 0, '2026': 0, ytd: 0 } },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+  ],
+} as const
+
 function LocationProbe() {
   const location = useLocation()
   return <output aria-label="Current dashboard URL">{location.search}</output>
@@ -114,6 +129,28 @@ function renderPage(initialEntry = '/') {
 }
 
 describe('HomePage dashboard shell', () => {
+  it('keeps a scoped annual and YTD P&L visible below Income & Costs charts', async () => {
+    let pnlSearch = ''
+    server.use(
+      http.get('/api/v1/analytics/portfolio/summary/', () => HttpResponse.json(summary)),
+      http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
+      http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
+      http.get('/api/v1/analytics/portfolio/profit-loss/', ({ request }) => {
+        pnlSearch = new URL(request.url).searchParams.toString()
+        return HttpResponse.json(profitLoss)
+      }),
+    )
+
+    renderPage('/?section=income-costs&start=2026-04-01&end=2026-07-29&currency=USD&grain=month&property=3&property=1&measure=property_value')
+
+    expect(await screen.findByRole('table', { name: 'Profit and Loss statement' })).toBeVisible()
+    expect(screen.getByText('Revenue and expenses')).toBeVisible()
+    expect(screen.getByText('Expense drivers')).toBeVisible()
+    expect(screen.getByText('2025')).toBeVisible()
+    expect(screen.getByText('YTD')).toBeVisible()
+    expect(pnlSearch).toBe('end=2026-07-29&currency=USD&property=1&property=3')
+  })
+
   it('normalizes a saved all-history monthly dashboard to a bounded request grain', async () => {
     savedChartTimeline = 'All'
     savedChartFrequency = 'M'
@@ -214,6 +251,7 @@ describe('HomePage dashboard shell', () => {
       }),
       http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
       http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
+      http.get('/api/v1/analytics/portfolio/profit-loss/', () => HttpResponse.json(profitLoss)),
       http.get('/api/v1/analytics/portfolio/currency-exposure/', ({ request }) => {
         exposureUrls.push(request.url)
         return HttpResponse.json(currencyExposure)
@@ -236,6 +274,7 @@ describe('HomePage dashboard shell', () => {
       expect(screen.getByLabelText('Current dashboard URL')).toHaveTextContent('section=income-costs')
     })
 
+    await user.click(screen.getByRole('button', { name: 'Show settings' }))
     await user.click(screen.getByLabelText('Reporting currency'))
     await user.click(screen.getByRole('option', { name: 'EUR' }))
     await waitFor(() => {

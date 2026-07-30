@@ -13,7 +13,7 @@
 // `useParams` only returns a value when the page is rendered inside a
 // matching `<Route path="/properties/:id">`, so the test wrapper includes
 // the route definition rather than just `<MemoryRouter>`.
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -30,6 +30,37 @@ vi.mock('@/context/SessionProvider', () => ({
     isLoading: false,
   }),
 }))
+
+beforeEach(() => {
+  server.use(
+    http.get('/api/v1/analytics/portfolio/profit-loss/', () =>
+      HttpResponse.json({
+        metric: 'profit_and_loss', currency: 'EUR', scale: 1, end: '2026-07-29',
+        columns: [
+          { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
+          { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+        ],
+        rows: [
+          { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2026': 0, ytd: 0 } },
+          { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2026': 0, ytd: 0 } },
+          { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2026': 0, ytd: 0 } },
+        ],
+      }),
+    ),
+    http.get('/api/v1/analytics/properties/:id/valuation/', () =>
+      HttpResponse.json({
+        metric: 'property_valuation', grain: 'record', currency: 'EUR', scale: 1,
+        start: '2026-01-01', end: '2026-07-29', status: 'missing_valuation',
+        series: [
+          { key: 'total_value', label: 'Total value', kind: 'total' },
+          { key: 'debt', label: 'Debt', kind: 'debt' },
+          { key: 'equity', label: 'Equity', kind: 'equity' },
+        ],
+        points: [],
+      }),
+    ),
+  )
+})
 
 function renderPage(route = '/properties/1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -64,23 +95,39 @@ describe('PropertyDetailPage', () => {
   })
 
   it('renders the Overview tab with P&L labels', async () => {
+    let pnlSearch = ''
     server.use(
-      http.get('/api/v1/analytics/portfolio/summary/', () =>
+      http.get('/api/v1/analytics/portfolio/profit-loss/', ({ request }) => {
+        pnlSearch = new URL(request.url).searchParams.toString()
+        return (
         HttpResponse.json({
-          currency: 'EUR', scale: 1, start: '2026-01-01', end: '2026-07-29',
-          property_count: 1, rental_inventory_count: 1, occupied: 1,
-          occupancy_rate: 100, revenue: 300, costs: 100, net_income: 200,
-          property_value: null, debt: null, equity: null,
-          valuation_status: 'missing_valuation',
-          property_value_status: 'missing_valuation', debt_status: 'missing_valuation',
-        }),
-      ),
+          metric: 'profit_and_loss', currency: 'EUR', scale: 1, end: '2026-07-29',
+          columns: [
+            { key: '2024', label: '2024', start: '2024-01-01', end: '2024-12-31' },
+            { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
+            { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
+            { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+          ],
+          rows: [
+            { key: 'rent', label: 'Rent', kind: 'income', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
+            { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
+            { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2024': 0, '2025': 0, '2026': 0, ytd: 0 } },
+            { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
+          ],
+        })
+        )
+      }),
     )
     renderPage()
     expect(await screen.findByText(/profit & loss/i)).toBeInTheDocument()
-    expect(await screen.findByText('€300')).toBeInTheDocument()
-    expect(screen.getByText('€100')).toBeInTheDocument()
-    expect(screen.getByText('€200')).toBeInTheDocument()
+    const table = await screen.findByRole('table', { name: 'Profit and Loss statement' })
+    expect(table).toBeVisible()
+    expect(screen.getByText('2024')).toBeInTheDocument()
+    expect(screen.getByText('2025')).toBeInTheDocument()
+    expect(screen.getByText('YTD')).toBeInTheDocument()
+    expect(screen.getAllByText('€12,000').length).toBeGreaterThan(0)
+    expect(pnlSearch).toBe('end=2026-07-29&currency=EUR&property=1')
+    expect(screen.queryByText(/Server-calculated year-to-date performance/)).not.toBeInTheDocument()
   })
 
   it('switches to the Valuations tab on click', async () => {

@@ -39,6 +39,7 @@ from .analytics_views import (
     PortfolioCurrencyExposureView,
     PortfolioExpenseDriversView,
     PortfolioOccupancyView,
+    PortfolioProfitLossView,
     PortfolioSummaryView,
     PortfolioYieldsView,
     PropertyValuationAnalyticsView,
@@ -83,6 +84,7 @@ urlpatterns = [
     path("auth/csrf/", CsrfView.as_view()),
     path("analytics/portfolio/cash-flow/", PortfolioCashFlowView.as_view()),
     path("analytics/portfolio/expenses/", PortfolioExpenseDriversView.as_view()),
+    path("analytics/portfolio/profit-loss/", PortfolioProfitLossView.as_view()),
     path("analytics/portfolio/summary/", PortfolioSummaryView.as_view()),
     path(
         "analytics/portfolio/property-contribution/",

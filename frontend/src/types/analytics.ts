@@ -30,6 +30,10 @@ export type PortfolioAnalyticsParams = {
   comparison?: 'previous_period' | null
   propertyIds?: readonly number[]
 }
+export type ProfitLossParams = Pick<
+  PortfolioAnalyticsParams,
+  'end' | 'currency' | 'propertyIds'
+> & { end: string; currency: string }
 export type CurrencyExposureParams = PortfolioAnalyticsParams & {
   measure: ExposureMeasure
 }
@@ -45,6 +49,75 @@ export const seriesDefinitionSchema = z
     kind: z.string().trim().min(1),
   })
   .strict()
+
+const profitLossCategoryKeySchema = z.string().trim().min(1).refine(
+  (key) => !['total_revenue', 'total_expenses', 'net_income'].includes(key),
+  { message: 'Category key collides with a total row key' },
+)
+
+const profitLossValuesSchema = z.record(z.string(), z.number())
+const profitLossCategoryRowBase = {
+  key: profitLossCategoryKeySchema,
+  label: z.string().trim().min(1),
+  values: profitLossValuesSchema,
+}
+const profitLossRowSchema = z.discriminatedUnion('kind', [
+  z.object({ ...profitLossCategoryRowBase, kind: z.literal('income') }).strict(),
+  z.object({ ...profitLossCategoryRowBase, kind: z.literal('expense') }).strict(),
+  z.object({ key: z.literal('total_revenue'), label: z.string().trim().min(1), kind: z.literal('total_revenue'), values: profitLossValuesSchema }).strict(),
+  z.object({ key: z.literal('total_expenses'), label: z.string().trim().min(1), kind: z.literal('total_expenses'), values: profitLossValuesSchema }).strict(),
+  z.object({ key: z.literal('net_income'), label: z.string().trim().min(1), kind: z.literal('net_income'), values: profitLossValuesSchema }).strict(),
+])
+
+export const profitLossSchema = z
+  .object({
+    metric: z.literal('profit_and_loss'),
+    currency: analyticsCurrencySchema,
+    scale: z.literal(1),
+    end: isoDateSchema,
+    columns: z.array(z.object({
+      key: z.string().trim().min(1),
+      label: z.string().trim().min(1),
+      start: isoDateSchema,
+      end: isoDateSchema,
+    }).strict()).min(2),
+    rows: z.array(profitLossRowSchema),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const columnKeys = value.columns.map(({ key }) => key)
+    if (new Set(columnKeys).size !== columnKeys.length) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'column keys must be unique' })
+    }
+    if (columnKeys.at(-1) !== 'ytd') {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'YTD must be the final column' })
+    }
+    const annualKeys = columnKeys.slice(0, -1)
+    if (annualKeys.some((key) => !/^\d{4}$/.test(key)) || annualKeys.some((key, index) => index > 0 && key <= annualKeys[index - 1])) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'annual columns must be chronological years' })
+    }
+    value.columns.forEach((column, index) => {
+      if (column.end < column.start) {
+        context.addIssue({ code: 'custom', path: ['columns', index, 'end'], message: 'end must be on or after start' })
+      }
+    })
+    const expectedKeys = new Set(columnKeys)
+    const rowKeys = value.rows.map(({ key }) => key)
+    if (new Set(rowKeys).size !== rowKeys.length) {
+      context.addIssue({ code: 'custom', path: ['rows'], message: 'row keys must be unique' })
+    }
+    for (const kind of ['total_revenue', 'total_expenses', 'net_income'] as const) {
+      if (value.rows.filter((row) => row.kind === kind).length !== 1) {
+        context.addIssue({ code: 'custom', path: ['rows'], message: `statement must contain exactly one ${kind} row` })
+      }
+    }
+    value.rows.forEach((row, index) => {
+      const actualKeys = Object.keys(row.values)
+      if (actualKeys.length !== expectedKeys.size || actualKeys.some((key) => !expectedKeys.has(key))) {
+        context.addIssue({ code: 'custom', path: ['rows', index, 'values'], message: 'values must contain exactly every declared column key' })
+      }
+    })
+  })
 
 const dynamicPointSchema = z
   .object({
@@ -571,6 +644,7 @@ export type PortfolioOccupancyResponse = z.infer<
   typeof portfolioOccupancySchema
 >
 export type PortfolioSummaryResponse = z.infer<typeof portfolioSummarySchema>
+export type ProfitLossResponse = z.infer<typeof profitLossSchema>
 export type PropertyContributionResponse = z.infer<
   typeof propertyContributionSchema
 >

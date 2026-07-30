@@ -132,6 +132,13 @@ export const queryKeys = {
           'expense-drivers',
           normalizeAnalyticsFilters(filters),
         ] as const,
+      profitLoss: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'profit-loss',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
       propertyContribution: (filters: AnalyticsFilters) =>
         [
           'analytics',

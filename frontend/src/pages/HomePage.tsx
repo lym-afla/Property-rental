@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, subYears } from 'date-fns'
 
-import { useCurrencyExposure, useExpenseDrivers, usePortfolioCashFlow, usePortfolioOccupancy, usePortfolioSummary, usePropertyContribution, usePropertyYields } from '@/api/analytics'
+import { useCurrencyExposure, useExpenseDrivers, usePortfolioCashFlow, usePortfolioOccupancy, usePortfolioSummary, useProfitLoss, usePropertyContribution, usePropertyYields } from '@/api/analytics'
 import { useProperties } from '@/api/properties'
+import { ProfitLossTable } from '@/components/analytics/ProfitLossTable'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
 import { CumulativeCashChart } from '@/features/dashboard/charts/CumulativeCashChart'
 import { CurrencyExposureChart } from '@/features/dashboard/charts/CurrencyExposureChart'
@@ -130,9 +132,31 @@ function IncomeCostsSection({ filters }: { filters: DashboardFilterState }) {
   const params = analyticsParams(filters)
   const cashFlowQuery = usePortfolioCashFlow(params)
   const expenseQuery = useExpenseDrivers(params)
-  return <div className="grid gap-4 lg:grid-cols-2">
-    <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
-    <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
+  const profitLossQuery = useProfitLoss({
+    end: filters.end,
+    currency: filters.currency,
+    propertyIds: filters.propertyIds,
+  })
+  return <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-2">
+      <RevenueExpenseTrendChart data={cashFlowQuery.data} isLoading={cashFlowQuery.isLoading} isError={cashFlowQuery.isError} onRetry={() => { void cashFlowQuery.refetch() }} />
+      <ExpenseDriversChart data={expenseQuery.data} isLoading={expenseQuery.isLoading} isError={expenseQuery.isError} onRetry={() => { void expenseQuery.refetch() }} />
+    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Profit &amp; Loss</CardTitle>
+        <CardDescription>Annual history and year to date through {filters.end}.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {profitLossQuery.isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : profitLossQuery.isError ? (
+          <ErrorState message="Failed to load P&L" onRetry={() => { void profitLossQuery.refetch() }} />
+        ) : profitLossQuery.data ? (
+          <ProfitLossTable data={profitLossQuery.data} />
+        ) : null}
+      </CardContent>
+    </Card>
   </div>
 }
 

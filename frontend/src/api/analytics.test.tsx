@@ -10,6 +10,7 @@ import {
   isoDateSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
+  profitLossSchema,
   portfolioSummarySchema,
   propertyContributionSchema,
   propertyValuationSchema,
@@ -23,6 +24,7 @@ import {
   useExpenseDrivers,
   usePortfolioCashFlow,
   usePortfolioOccupancy,
+  useProfitLoss,
   usePortfolioSummary,
   usePropertyContribution,
   usePropertyValuationAnalytics,
@@ -265,6 +267,25 @@ const tenantFixture = {
   ],
 }
 
+const profitLossFixture = {
+  metric: 'profit_and_loss',
+  currency: 'GBP',
+  scale: 1,
+  end: '2026-07-29',
+  columns: [
+    { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
+    { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
+    { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+  ],
+  rows: [
+    { key: 'rent', label: 'Rent', kind: 'income', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'tax', label: 'Tax', kind: 'expense', values: { '2025': -1200, '2026': 0, ytd: 0 } },
+    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2025': -1200, '2026': 0, ytd: 0 } },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2025': 10800, '2026': 7000, ytd: 7000 } },
+  ],
+} as const
+
 function makeWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -275,6 +296,40 @@ function makeWrapper() {
 }
 
 describe('analytics runtime schemas', () => {
+  it('accepts complete P&L rows and rejects missing or undeclared value keys', () => {
+    expect(profitLossSchema.parse(profitLossFixture).rows[0].kind).toBe('income')
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[0], values: { '2025': 12000, ytd: 7000 } }],
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[0], values: { ...profitLossFixture.rows[0].values, surprise: 1 } }],
+    })).toThrow()
+  })
+
+  it('rejects P&L totals disguised as category rows and non-final YTD columns', () => {
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[2], kind: 'income' }],
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      columns: [profitLossFixture.columns[0], profitLossFixture.columns[2], profitLossFixture.columns[1]],
+    })).toThrow()
+  })
+
+  it('rejects P&L statements with missing or duplicate mandatory totals', () => {
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: profitLossFixture.rows.filter((row) => row.kind !== 'net_income'),
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [...profitLossFixture.rows, profitLossFixture.rows[2]],
+    })).toThrow()
+  })
+
   it('accepts raw ISO-bounded time series', () => {
     expect(timeSeriesSchema.parse(cashFlowFixture).metric).toBe(
       'portfolio_cash_flow',
@@ -463,6 +518,16 @@ describe('analytics runtime schemas', () => {
 })
 
 describe('analytics query keys', () => {
+  it('normalizes P&L property IDs and keys its period and currency', () => {
+    const pnlFilters = { end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }
+    expect(queryKeys.analytics.portfolio.profitLoss(pnlFilters)).toEqual(
+      queryKeys.analytics.portfolio.profitLoss({ ...pnlFilters, propertyIds: [1, 3] }),
+    )
+    expect(queryKeys.analytics.portfolio.profitLoss(pnlFilters)).not.toEqual(
+      queryKeys.analytics.portfolio.profitLoss({ ...pnlFilters, currency: 'USD' }),
+    )
+  })
+
   it('normalizes repeated property IDs without losing data filters', () => {
     expect(queryKeys.analytics.portfolio.cashFlow(filters)).toEqual(
       queryKeys.analytics.portfolio.cashFlow({
@@ -529,6 +594,9 @@ describe('analytics hooks', () => {
       http.get('/api/v1/analytics/portfolio/occupancy/', () =>
         HttpResponse.json(occupancyFixture),
       ),
+      http.get('/api/v1/analytics/portfolio/profit-loss/', () =>
+        HttpResponse.json(profitLossFixture),
+      ),
       http.get('/api/v1/analytics/properties/7/valuation/', () =>
         HttpResponse.json(valuationFixture),
       ),
@@ -545,6 +613,7 @@ describe('analytics hooks', () => {
       () => usePropertyYields(filters),
       () => useCurrencyExposure({ ...filters, measure: 'property_value' }),
       () => usePortfolioOccupancy(filters),
+      () => useProfitLoss({ end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }),
       () => usePropertyValuationAnalytics(7, '2026-07-29'),
       () => useTenantRentPerformance(9, filters),
     ]
@@ -571,6 +640,23 @@ describe('analytics hooks', () => {
     })
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(result.current.data).toBeUndefined()
+  })
+
+  it('requests P&L with only its end, currency, and normalized property scope', async () => {
+    let receivedSearch = ''
+    server.use(
+      http.get('/api/v1/analytics/portfolio/profit-loss/', ({ request }) => {
+        receivedSearch = new URL(request.url).searchParams.toString()
+        return HttpResponse.json(profitLossFixture)
+      }),
+    )
+
+    const { result } = renderHook(
+      () => useProfitLoss({ end: '2026-07-29', currency: 'GBP', propertyIds: [3, 1, 3] }),
+      { wrapper: makeWrapper() },
+    )
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(receivedSearch).toBe('end=2026-07-29&currency=GBP&property=1&property=3')
   })
 
   it('sends normalized repeated property filters and exposure measure', async () => {

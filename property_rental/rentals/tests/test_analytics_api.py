@@ -242,3 +242,92 @@ def test_portfolio_endpoints_return_typed_non_500_when_fx_is_missing(
 
     assert response.status_code == 422
     assert response.json()["code"] == "missing_fx"
+
+
+@pytest.mark.django_db
+def test_profit_loss_requires_authentication():
+    """Removing the auth gate would expose a complete financial statement."""
+    response = Client().get("/api/v1/analytics/portfolio/profit-loss/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_profit_loss_endpoint_returns_typed_statement_and_excludes_foreign_property(
+    auth_client, landlord_user, other_landlord_user
+):
+    """Requested property IDs must remain subordinate to authenticated ownership."""
+    own_property = PropertyFactory(owned_by=landlord_user.landlord)
+    foreign_property = PropertyFactory(owned_by=other_landlord_user.landlord)
+    TransactionFactory(
+        property=own_property,
+        category="rent",
+        amount=Decimal("2000.00"),
+        date=date(2026, 1, 10),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=foreign_property,
+        category="rent",
+        amount=Decimal("9000.00"),
+        date=date(2026, 1, 10),
+        currency="USD",
+    )
+
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/profit-loss/",
+        {
+            "end": "2026-07-30",
+            "currency": "USD",
+            "property": [own_property.id, foreign_property.id],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["metric"] == "profit_and_loss"
+    assert payload["currency"] == "USD"
+    assert payload["columns"][-1] == {
+        "key": "ytd",
+        "label": "YTD",
+        "start": "2026-01-01",
+        "end": "2026-07-30",
+    }
+    rent = next(row for row in payload["rows"] if row["key"] == "rent")
+    assert rent == {
+        "key": "rent",
+        "label": "Rent",
+        "kind": "income",
+        "values": {"2026": 2000.0, "ytd": 2000.0},
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"end": "2026-7-30"}, "end"),
+        ({"currency": "CAD"}, "currency"),
+        ({"property": "not-an-id"}, "property"),
+        ({"property": "0"}, "property"),
+    ],
+)
+def test_profit_loss_rejects_invalid_filters(auth_client, params, field):
+    """Permissive query parsing would make statement scope or units ambiguous."""
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/profit-loss/", params
+    )
+
+    assert response.status_code == 400
+    assert field in response.json()
+
+
+@pytest.mark.django_db
+def test_profit_loss_rejects_filters_outside_its_contract(auth_client):
+    """Accepting chart filters would imply unsupported P&L period semantics."""
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/profit-loss/", {"grain": "month"}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"grain": "Unknown filter."}

@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
 from rentals.analytics.filters import AnalyticsFilters, ISODateField
+from rentals.analytics.pnl import profit_and_loss
 from rentals.analytics.portfolio import (
     currency_exposure,
     portfolio_occupancy,
@@ -21,6 +22,7 @@ from rentals.api.analytics_serializers import (
     ContributionResponseSerializer,
     CurrencyExposureResponseSerializer,
     PortfolioSummarySerializer,
+    ProfitLossResponseSerializer,
     PropertyValuationResponseSerializer,
     TenantRentPerformanceResponseSerializer,
     TimeSeriesResponseSerializer,
@@ -92,6 +94,25 @@ class PortfolioExpenseDriversView(_PortfolioAnalyticsView):
 
     def get(self, request):
         return self.response(expense_drivers(request.user, self.filters(request)))
+
+
+class PortfolioProfitLossView(_PortfolioAnalyticsView):
+    """GET the shared annual and YTD portfolio/property P&L statement."""
+
+    def get(self, request):
+        unknown = set(request.query_params) - {"end", "currency", "property"}
+        if unknown:
+            raise serializers.ValidationError(
+                {key: "Unknown filter." for key in sorted(unknown)}
+            )
+        filters = self.filters(request)
+        result = profit_and_loss(
+            request.user,
+            end=filters.end,
+            currency=filters.currency,
+            property_ids=filters.property_ids,
+        )
+        return Response(ProfitLossResponseSerializer(result).data)
 
 
 class PortfolioSummaryView(_PortfolioAnalyticsView):
