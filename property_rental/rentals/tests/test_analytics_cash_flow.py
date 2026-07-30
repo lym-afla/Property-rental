@@ -182,6 +182,42 @@ def test_cash_flow_safely_terminates_a_bucket_at_date_max(landlord_user):
     assert result.points[0]["period_end"] == date.max
 
 
+@pytest.mark.parametrize(
+    ("start", "end", "grain", "expected_periods"),
+    [
+        (
+            "9999-01-01",
+            "9999-02-28",
+            Grain.MONTH,
+            [
+                (date(9999, 1, 1), date(9999, 1, 31)),
+                (date(9999, 2, 1), date(9999, 2, 28)),
+            ],
+        ),
+        (
+            "9999-01-01",
+            "9999-06-30",
+            Grain.QUARTER,
+            [
+                (date(9999, 1, 1), date(9999, 3, 31)),
+                (date(9999, 4, 1), date(9999, 6, 30)),
+            ],
+        ),
+    ],
+)
+def test_cash_flow_preserves_requested_grain_near_date_max(
+    landlord_user, start, end, grain, expected_periods
+):
+    """Stopping on the year alone would collapse valid month or quarter buckets."""
+    from rentals.analytics.cash_flow import portfolio_cash_flow
+
+    result = portfolio_cash_flow(landlord_user, filters_for(start, end, grain))
+
+    assert [
+        (point["period_start"], point["period_end"]) for point in result.points
+    ] == expected_periods
+
+
 @pytest.mark.django_db
 def test_expense_drivers_exclude_income_and_define_expense_kind(
     landlord_user, sample_property

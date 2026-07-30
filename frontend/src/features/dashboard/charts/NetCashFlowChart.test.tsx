@@ -8,7 +8,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children, stackOffset }: { children: React.ReactNode; stackOffset?: string }) => <div data-testid="cash-flow-plot" data-stack-offset={stackOffset}>{children}</div>,
-  Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`cash-bar-${name}`} data-fill={fill} />,
+  Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid="cash-bar" aria-label={name} data-fill={fill} />,
 }))
 
 const data = {
@@ -37,11 +37,36 @@ describe('NetCashFlowChart', () => {
 
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
-    expect(screen.getByTestId('cash-bar-Rent').getAttribute('data-fill')).toMatch(/^url\(#/)
-    expect(screen.getByTestId('cash-bar-Rent').getAttribute('data-fill')).not.toBe(screen.getByTestId('cash-bar-Utilities').getAttribute('data-fill'))
+    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toBe(screen.getByRole('generic', { name: 'Utilities' }).getAttribute('data-fill'))
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$1,000')
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$-250')
+  })
+
+  it('gives every supported cash-flow category a distinct visible mark identity', () => {
+    const categories = [
+      { key: 'rent', label: 'Rent', kind: 'income_category' },
+      { key: 'tax', label: 'Tax', kind: 'expense_category' },
+      { key: 'capex', label: 'Capex', kind: 'expense_category' },
+      { key: 'management', label: 'Management', kind: 'expense_category' },
+      { key: 'electricity', label: 'Electricity', kind: 'expense_category' },
+      { key: 'utilities', label: 'Utilities', kind: 'expense_category' },
+      { key: 'internet', label: 'Internet', kind: 'expense_category' },
+      { key: 'cost_reimbursement', label: 'Cost reimbursement', kind: 'expense_category' },
+      { key: 'other_expenses', label: 'Other expenses', kind: 'expense_category' },
+    ]
+    const categoryPoint = Object.fromEntries(categories.map(({ key }, index) => [key, index === 0 ? 1000 : -(index * 10)]))
+
+    render(<NetCashFlowChart data={{
+      ...data,
+      series: [...categories, ...data.series.slice(2)],
+      points: [{ ...data.points[0], ...categoryPoint }],
+    }} />)
+
+    const fills = screen.getAllByTestId('cash-bar').map((bar) => bar.getAttribute('data-fill'))
+    expect(fills).toHaveLength(categories.length)
+    expect(new Set(fills).size).toBe(categories.length)
   })
 
   it('uses a visible drill-down disclosure for pointer and keyboard activation', async () => {

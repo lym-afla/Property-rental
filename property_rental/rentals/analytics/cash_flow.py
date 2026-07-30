@@ -21,13 +21,21 @@ def _period_start(value: date, grain: str) -> date:
     return value.replace(month=1, day=1)
 
 
-def _next_period_start(value: date, grain: str) -> date:
+def _next_period_start(value: date, grain: str) -> date | None:
     if grain == "month":
-        return (value.replace(day=28) + timedelta(days=4)).replace(day=1)
+        if value.month < 12:
+            return value.replace(month=value.month + 1, day=1)
+        if value.year == date.max.year:
+            return None
+        return value.replace(year=value.year + 1, month=1, day=1)
     if grain == "quarter":
         if value.month == 10:
+            if value.year == date.max.year:
+                return None
             return value.replace(year=value.year + 1, month=1, day=1)
         return value.replace(month=value.month + 3, day=1)
+    if value.year == date.max.year:
+        return None
     return value.replace(year=value.year + 1, month=1, day=1)
 
 
@@ -35,10 +43,10 @@ def _calendar_periods(filters):
     period_start = _period_start(filters.start, filters.grain)
     periods = []
     while period_start <= filters.end:
-        if period_start.year == date.max.year:
+        next_start = _next_period_start(period_start, filters.grain)
+        if next_start is None:
             periods.append((period_start, date.max))
             break
-        next_start = _next_period_start(period_start, filters.grain)
         periods.append((period_start, next_start - timedelta(days=1)))
         period_start = next_start
     return tuple(periods)

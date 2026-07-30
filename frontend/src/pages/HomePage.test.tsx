@@ -3,12 +3,20 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import { fixtureUser } from '@/__fixtures__/user'
 import { server } from '@/test/handlers'
 import { HomePage } from './HomePage'
+
+let savedChartTimeline = '6m'
+let savedChartFrequency = 'M'
+
+afterEach(() => {
+  savedChartTimeline = '6m'
+  savedChartFrequency = 'M'
+})
 
 vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>()
@@ -24,8 +32,8 @@ vi.mock('@/context/SessionProvider', () => ({
       ...fixtureUser,
       effective_date: '2026-07-29',
       default_currency: 'USD',
-      chart_frequency: 'M',
-      chart_timeline: '6m',
+      chart_frequency: savedChartFrequency,
+      chart_timeline: savedChartTimeline,
     },
     isLoading: false,
   }),
@@ -106,6 +114,32 @@ function renderPage(initialEntry = '/') {
 }
 
 describe('HomePage dashboard shell', () => {
+  it('normalizes a saved all-history monthly dashboard to a bounded request grain', async () => {
+    savedChartTimeline = 'All'
+    savedChartFrequency = 'M'
+    const requestedQueries: URLSearchParams[] = []
+    server.use(
+      http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
+        requestedQueries.push(new URL(request.url).searchParams)
+        return HttpResponse.json(summary)
+      }),
+      http.get('/api/v1/analytics/portfolio/cash-flow/', ({ request }) => {
+        requestedQueries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ ...cashFlow, grain: 'year', start: '1900-01-01' })
+      }),
+    )
+
+    const page = renderPage()
+
+    expect(await screen.findByText('Portfolio value')).toBeInTheDocument()
+    await waitFor(() => expect(requestedQueries).toHaveLength(2))
+    expect(requestedQueries.map((query) => [query.get('start'), query.get('grain')])).toEqual([
+      ['1900-01-01', 'year'],
+      ['1900-01-01', 'year'],
+    ])
+    page.unmount()
+  })
+
   it('restores a copied URL and requests only overview analytics for every selected property', async () => {
     const user = userEvent.setup()
     let requestedUrl = ''

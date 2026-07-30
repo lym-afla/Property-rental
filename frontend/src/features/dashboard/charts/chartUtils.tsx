@@ -47,7 +47,17 @@ export function hasSeriesValues(
 export function seriesWithVisualTokens(
   series: readonly { key: string; label: string; kind: string }[],
 ): AnalyticsSeriesDefinition[] {
-  const tokens = ['primary', 'secondary', 'tertiary'] as const
+  const tokens = [
+    'primary',
+    'secondary',
+    'tertiary',
+    'quaternary',
+    'quinary',
+    'senary',
+    'septenary',
+    'octonary',
+    'nonary',
+  ] as const
   return series.map((item, index) => ({ ...item, visualToken: tokens[index % tokens.length] }))
 }
 

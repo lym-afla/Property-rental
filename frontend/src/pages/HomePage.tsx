@@ -47,11 +47,14 @@ function dashboardDefaults(user: User | null): DashboardFilterState {
   const currencies = ['USD', 'EUR', 'GBP', 'RUB'] as const
   const userCurrency = user?.default_currency?.toUpperCase()
   const currency = currencies.find((value) => value === userCurrency) ?? 'USD'
-  const grain: DashboardGrain = user?.chart_frequency === 'Q'
+  const preferredGrain: DashboardGrain = user?.chart_frequency === 'Q'
     ? 'quarter'
     : user?.chart_frequency === 'Y'
       ? 'year'
       : 'month'
+  const grain: DashboardGrain = user?.chart_timeline === 'All' && preferredGrain === 'month'
+    ? 'year'
+    : preferredGrain
   return {
     section: 'overview',
     start: timelineStart(end, user?.chart_timeline ?? '6m'),
