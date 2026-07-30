@@ -68,10 +68,12 @@ class YieldRow:
     property_name: str
     valuation_date: date | None
     property_value: float | None
+    debt: float | None
+    equity: float | None
     annualized_revenue: float | None
     annualized_costs: float | None
     gross_yield: float | None
-    net_yield: float | None
+    equity_yield: float | None
     status: str
 
 
@@ -237,27 +239,39 @@ def property_contribution(user, filters):
 
 
 def property_yields(user, filters):
-    """Return annualized selected-period yields on the latest known valuation."""
+    """Return annualized selected-period yields on value and equity."""
     properties = _scoped_properties(user, filters)
     totals = _transaction_totals(properties, filters.currency)
     selected_days = (filters.end - filters.start).days + 1
     annualization = 365.0 / selected_days
-    value_rows = []
+    capital_rows = []
     value_snapshots = []
     value_property_ids = []
+    debt_snapshots = []
+    debt_property_ids = []
     for property_ in properties:
         valuation = _latest_capital(property_, "capital_structure_value", filters.end)
-        value_rows.append(valuation)
+        debt_row = _latest_capital(property_, "capital_structure_debt", filters.end)
+        capital_rows.append((valuation, debt_row))
         native_currency = _native_currency(property_, filters.currency)
         if valuation is not None and native_currency is not None:
             value_snapshots.append(
                 (
                     valuation.capital_structure_value,
-                    _native_currency(property_, filters.currency),
-                    filters.end,
+                    native_currency,
+                    valuation.capital_structure_date,
                 )
             )
             value_property_ids.append(property_.id)
+        if debt_row is not None and native_currency is not None:
+            debt_snapshots.append(
+                (
+                    debt_row.capital_structure_debt,
+                    native_currency,
+                    debt_row.capital_structure_date,
+                )
+            )
+            debt_property_ids.append(property_.id)
     converted_values = dict(
         zip(
             value_property_ids,
@@ -265,77 +279,87 @@ def property_yields(user, filters):
             strict=True,
         )
     )
+    converted_debts = dict(
+        zip(
+            debt_property_ids,
+            _convert_snapshots(debt_snapshots, filters.currency),
+            strict=True,
+        )
+    )
 
     rows = []
-    for property_, valuation in zip(properties, value_rows, strict=True):
+    for property_, (valuation, debt_row) in zip(
+        properties, capital_rows, strict=True
+    ):
         revenue, costs = totals[property_.id]
         annualized_revenue = revenue * annualization
         annualized_costs = costs * annualization
-        if valuation is None:
-            rows.append(
-                YieldRow(
-                    property_id=property_.id,
-                    property_name=property_.name,
-                    valuation_date=None,
-                    property_value=None,
-                    annualized_revenue=annualized_revenue,
-                    annualized_costs=annualized_costs,
-                    gross_yield=None,
-                    net_yield=None,
-                    status="missing_valuation",
-                )
-            )
-            continue
-
         if _native_currency(property_, filters.currency) is None:
             rows.append(
                 YieldRow(
                     property_id=property_.id,
                     property_name=property_.name,
-                    valuation_date=valuation.capital_structure_date,
+                    valuation_date=(
+                        valuation.capital_structure_date
+                        if valuation is not None
+                        else None
+                    ),
                     property_value=None,
+                    debt=None,
+                    equity=None,
                     annualized_revenue=annualized_revenue,
                     annualized_costs=annualized_costs,
                     gross_yield=None,
-                    net_yield=None,
+                    equity_yield=None,
                     status="missing_currency",
                 )
             )
             continue
 
-        property_value = converted_values[property_.id]
-        status = (
-            "negative_valuation"
-            if property_value < 0
-            else (
-                "zero_valuation"
-                if property_value == 0
-                else (
-                    "stale_valuation"
-                    if valuation.capital_structure_date < filters.start
-                    else "ok"
-                )
-            )
+        property_value = converted_values.get(property_.id)
+        debt = converted_debts.get(property_.id)
+        equity = (
+            property_value - debt
+            if property_value is not None and debt is not None
+            else None
         )
-        has_denominator = property_value > 0
+        if property_value is not None and property_value < 0:
+            status = "negative_valuation"
+        elif property_value == 0:
+            status = "zero_valuation"
+        elif valuation is None or debt_row is None:
+            status = "missing_valuation"
+        elif (
+            valuation.capital_structure_date < filters.start
+            or debt_row.capital_structure_date < filters.start
+        ):
+            status = "stale_valuation"
+        else:
+            status = "ok"
+        has_value_denominator = property_value is not None and property_value > 0
+        has_equity_denominator = equity is not None and equity > 0
         rows.append(
             YieldRow(
                 property_id=property_.id,
                 property_name=property_.name,
-                valuation_date=valuation.capital_structure_date,
+                valuation_date=(
+                    valuation.capital_structure_date
+                    if valuation is not None
+                    else None
+                ),
                 property_value=property_value,
+                debt=debt,
+                equity=equity,
                 annualized_revenue=annualized_revenue,
                 annualized_costs=annualized_costs,
                 gross_yield=(
                     annualized_revenue / property_value * 100.0
-                    if has_denominator
+                    if has_value_denominator
                     else None
                 ),
-                net_yield=(
-                    (annualized_revenue - annualized_costs)
-                    / property_value
-                    * 100.0
-                    if has_denominator
+                equity_yield=(
+                    (annualized_revenue - annualized_costs) / equity * 100.0
+                    if has_equity_denominator
                     else None
                 ),
                 status=status,
@@ -625,7 +649,7 @@ def portfolio_summary(user, filters):
         (
             row.capital_structure_value,
             _native_currency(property_, filters.currency),
-            filters.end,
+            row.capital_structure_date,
         )
         for property_, row in zip(active_properties, value_rows, strict=True)
         if row is not None
@@ -635,7 +659,7 @@ def portfolio_summary(user, filters):
         (
             row.capital_structure_debt,
             _native_currency(property_, filters.currency),
-            filters.end,
+            row.capital_structure_date,
         )
         for property_, row in zip(active_properties, debt_rows, strict=True)
         if row is not None

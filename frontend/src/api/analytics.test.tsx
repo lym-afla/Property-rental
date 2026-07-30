@@ -159,8 +159,10 @@ const yieldsFixture = {
       property_value: null,
       annualized_revenue: 2737.5,
       annualized_costs: 456.25,
+      debt: null,
+      equity: null,
       gross_yield: null,
-      net_yield: null,
+      equity_yield: null,
       status: 'missing_valuation',
     },
   ],
@@ -326,6 +328,28 @@ describe('analytics runtime schemas', () => {
       timeSeriesSchema.parse({
         ...cashFlowFixture,
         points: [{ ...cashFlowFixture.points[0], client_total: 1500 }],
+      }),
+    ).toThrow()
+  })
+
+  it('rejects omitted, non-finite, and legacy yield denominator contracts', () => {
+    const row = yieldsFixture.rows[0]
+    const { equity: _equity, ...withoutEquity } = row
+    const { equity_yield: _equityYield, ...withoutEquityYield } = row
+
+    expect(() =>
+      propertyYieldsSchema.parse({
+        ...yieldsFixture,
+        rows: [{ ...row, debt: Number.NaN }],
+      }),
+    ).toThrow()
+    expect(() =>
+      propertyYieldsSchema.parse({ ...yieldsFixture, rows: [withoutEquity] }),
+    ).toThrow()
+    expect(() =>
+      propertyYieldsSchema.parse({
+        ...yieldsFixture,
+        rows: [{ ...withoutEquityYield, net_yield: null }],
       }),
     ).toThrow()
   })

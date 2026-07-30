@@ -43,7 +43,7 @@ const contribution = {
 }
 const yields = {
   metric: 'property_yields', currency: 'USD', scale: 1, ...range,
-  rows: [{ property_id: 1, property_name: properties[0].name, valuation_date: range.end, property_value: 250000, annualized_revenue: 12000, annualized_costs: 4800, gross_yield: 4.8, net_yield: 2.88, status: 'ok' }],
+  rows: [{ property_id: 1, property_name: properties[0].name, valuation_date: range.end, property_value: 250000, debt: 100000, equity: 150000, annualized_revenue: 12000, annualized_costs: 4800, gross_yield: 4.8, equity_yield: 4.8, status: 'ok' }],
 }
 const exposure = {
   metric: 'currency_exposure', grain: 'month', currency: 'USD', scale: 1, ...range, measure: 'property_value', measure_label: 'Property value',

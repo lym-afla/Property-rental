@@ -6,11 +6,57 @@ from decimal import Decimal
 import pytest
 from django.test import Client
 
+from rentals.api.analytics_serializers import YieldRowSerializer
 from rentals.tests.factories import (
     PropertyCapitalStructureFactory,
     PropertyFactory,
     TransactionFactory,
 )
+
+
+def valid_yield_row():
+    return {
+        "property_id": 1,
+        "property_name": "Alpha",
+        "valuation_date": "2026-01-01",
+        "property_value": 100000.0,
+        "debt": 40000.0,
+        "equity": 60000.0,
+        "annualized_revenue": 10000.0,
+        "annualized_costs": 2000.0,
+        "gross_yield": 10.0,
+        "equity_yield": 13.333333,
+        "status": "ok",
+    }
+
+
+@pytest.mark.parametrize("field", ["debt", "equity", "equity_yield"])
+def test_yield_serializer_rejects_omitted_denominator_contract_fields(field):
+    """Optional serializer fields would erase missing-versus-omitted semantics."""
+    payload = valid_yield_row()
+    del payload[field]
+
+    serializer = YieldRowSerializer(data=payload)
+
+    assert serializer.is_valid() is False
+    assert field in serializer.errors
+
+
+def test_yield_serializer_rejects_non_finite_and_legacy_yield_fields():
+    """NaN and the legacy net-yield alias are not valid wire values."""
+    non_finite = valid_yield_row()
+    non_finite["debt"] = float("nan")
+    legacy = valid_yield_row()
+    del legacy["equity_yield"]
+    legacy["net_yield"] = 8.0
+
+    nan_serializer = YieldRowSerializer(data=non_finite)
+    legacy_serializer = YieldRowSerializer(data=legacy)
+
+    assert nan_serializer.is_valid() is False
+    assert "debt" in nan_serializer.errors
+    assert legacy_serializer.is_valid() is False
+    assert "net_yield" in legacy_serializer.errors
 
 
 @pytest.mark.django_db

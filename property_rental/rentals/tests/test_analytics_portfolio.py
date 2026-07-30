@@ -103,13 +103,19 @@ def test_occupancy_handles_inventory_entry_lease_gaps_and_sale(
 def test_yields_use_raw_latest_valuation_and_annualized_selected_period(
     landlord_user, sample_property
 ):
-    """Scaling values or using a future valuation would corrupt yield denominators."""
+    """Value-based net yield would understate the return on invested equity."""
     from rentals.analytics.portfolio import property_yields
 
     PropertyCapitalStructureFactory(
         property=sample_property,
-        capital_structure_date=date(2025, 12, 31),
+        capital_structure_date=date(2025, 12, 30),
         capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2025, 12, 31),
+        capital_structure_value=None,
         capital_structure_debt=Decimal("40000.00"),
     )
     PropertyCapitalStructureFactory(
@@ -138,11 +144,13 @@ def test_yields_use_raw_latest_valuation_and_annualized_selected_period(
 
     row = result.rows[0]
     assert row.property_value == 100000.0
-    assert row.valuation_date == date(2025, 12, 31)
+    assert row.valuation_date == date(2025, 12, 30)
     assert row.annualized_revenue == pytest.approx(36500.0)
     assert row.annualized_costs == pytest.approx(7300.0)
     assert row.gross_yield == pytest.approx(36.5)
-    assert row.net_yield == pytest.approx(29.2)
+    assert row.debt == pytest.approx(40000.0)
+    assert row.equity == pytest.approx(60000.0)
+    assert row.equity_yield == pytest.approx(29_200 / 60_000 * 100)
     assert row.status == "stale_valuation"
 
 
@@ -167,8 +175,129 @@ def test_missing_valuation_returns_explicit_status_without_fabricated_yield(
     assert row.status == "missing_valuation"
     assert row.valuation_date is None
     assert row.property_value is None
+    assert row.debt is None
+    assert row.equity is None
     assert row.gross_yield is None
-    assert row.net_yield is None
+    assert row.equity_yield is None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("value", "debt", "expected_equity"),
+    [
+        ("100000.00", "100000.00", 0.0),
+        ("100000.00", "150000.00", -50000.0),
+    ],
+)
+def test_equity_yield_requires_positive_equity(
+    landlord_user, sample_property, value, debt, expected_equity
+):
+    """Zero or negative equity cannot be used as a yield denominator."""
+    from rentals.analytics.portfolio import property_yields
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal(value),
+        capital_structure_debt=Decimal(debt),
+    )
+
+    row = property_yields(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    ).rows[0]
+
+    assert row.property_value == 100000.0
+    assert row.gross_yield == 0.0
+    assert row.equity == expected_equity
+    assert row.equity_yield is None
+
+
+@pytest.mark.django_db
+def test_yields_keep_missing_value_and_debt_denominators_null(
+    landlord_user, sample_property
+):
+    """A missing capital input must not be coerced to zero in either yield."""
+    from rentals.analytics.portfolio import property_yields
+
+    missing_debt = PropertyFactory(owned_by=landlord_user.landlord)
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=None,
+        capital_structure_debt=Decimal("40000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=missing_debt,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+
+    rows = {
+        row.property_id: row
+        for row in property_yields(
+            landlord_user, filters_for("2026-01-01", "2026-01-31")
+        ).rows
+    }
+
+    assert rows[sample_property.id].debt == 40000.0
+    assert rows[sample_property.id].property_value is None
+    assert rows[sample_property.id].gross_yield is None
+    assert rows[sample_property.id].equity is None
+    assert rows[sample_property.id].equity_yield is None
+    assert rows[sample_property.id].status == "missing_valuation"
+    assert rows[missing_debt.id].property_value == 100000.0
+    assert rows[missing_debt.id].debt is None
+    assert rows[missing_debt.id].gross_yield == 0.0
+    assert rows[missing_debt.id].equity is None
+    assert rows[missing_debt.id].equity_yield is None
+    assert rows[missing_debt.id].status == "missing_valuation"
+
+
+@pytest.mark.django_db
+def test_yields_mark_either_stale_capital_snapshot_without_dropping_it(
+    landlord_user, sample_property
+):
+    """Staleness must follow value and debt independently while retaining the values."""
+    from rentals.analytics.portfolio import property_yields
+
+    stale_debt = PropertyFactory(owned_by=landlord_user.landlord)
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2025, 12, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=None,
+        capital_structure_debt=Decimal("40000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=stale_debt,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+    PropertyCapitalStructureFactory(
+        property=stale_debt,
+        capital_structure_date=date(2025, 12, 1),
+        capital_structure_value=None,
+        capital_structure_debt=Decimal("40000.00"),
+    )
+
+    rows = {
+        row.property_id: row
+        for row in property_yields(
+            landlord_user, filters_for("2026-01-01", "2026-01-31")
+        ).rows
+    }
+
+    for property_id in (sample_property.id, stale_debt.id):
+        assert rows[property_id].status == "stale_valuation"
+        assert rows[property_id].equity == 60000.0
+        assert rows[property_id].equity_yield == 0.0
 
 
 @pytest.mark.django_db
@@ -380,6 +509,70 @@ def test_summary_reports_value_and_debt_coverage_independently(
     assert summary.debt is None
     assert summary.debt_status == "missing_valuation"
     assert summary.equity is None
+    assert summary.valuation_status == "missing_valuation"
+
+
+@pytest.mark.django_db
+def test_summary_converts_latest_value_and_debt_at_independent_snapshot_dates(
+    landlord_user, sample_property
+):
+    """Converting every capital amount at report end would misstate debt and equity."""
+    from rentals.analytics.portfolio import portfolio_summary
+
+    euro_property = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        currency="EUR",
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("2.00"),
+        date=date(2026, 1, 1),
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("3.00"),
+        date=date(2026, 1, 8),
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("4.00"),
+        date=date(2026, 1, 20),
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 4),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=None,
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 9),
+        capital_structure_value=None,
+        capital_structure_debt=Decimal("50000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=euro_property,
+        capital_structure_date=date(2026, 1, 5),
+        capital_structure_value=Decimal("400000.00"),
+        capital_structure_debt=None,
+    )
+    PropertyCapitalStructureFactory(
+        property=euro_property,
+        capital_structure_date=date(2026, 1, 10),
+        capital_structure_value=None,
+        capital_structure_debt=Decimal("100000.00"),
+    )
+
+    result = portfolio_summary(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    )
+
+    assert result.property_value == pytest.approx(900_000)
+    assert result.debt == pytest.approx(350_000)
+    assert result.equity == pytest.approx(550_000)
 
 
 @pytest.mark.django_db
@@ -606,7 +799,12 @@ def test_portfolio_endpoints_serialize_explicit_nested_contracts(
     assert contribution.status_code == 200
     assert contribution.json()["rows"][0]["property_id"] == sample_property.id
     assert yields.status_code == 200
-    assert yields.json()["rows"][0]["status"] == "ok"
+    yield_row = yields.json()["rows"][0]
+    assert yield_row["status"] == "ok"
+    assert yield_row["debt"] == 40000.0
+    assert yield_row["equity"] == 60000.0
+    assert yield_row["equity_yield"] == pytest.approx(19.623655913978492)
+    assert "net_yield" not in yield_row
     assert exposure.status_code == 200
     assert exposure.json()["measure"] == "debt"
     assert exposure.json()["points"][0]["USD"] == 40000.0

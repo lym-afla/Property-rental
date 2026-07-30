@@ -1,6 +1,7 @@
 """Strict DRF serializers for analytics response contracts."""
 
 from collections.abc import Mapping
+import math
 
 from rest_framework import serializers
 
@@ -18,6 +19,19 @@ class StrictSerializer(serializers.Serializer):
                 {key: ["Unknown field."] for key in sorted(unknown)}
             )
         return super().to_internal_value(data)
+
+
+class FiniteFloatField(serializers.FloatField):
+    default_error_messages = {
+        **serializers.FloatField.default_error_messages,
+        "not_finite": "A finite number is required.",
+    }
+
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data)
+        if value is not None and not math.isfinite(value):
+            self.fail("not_finite")
+        return value
 
 
 class SeriesDefinitionSerializer(StrictSerializer):
@@ -169,10 +183,12 @@ class YieldRowSerializer(StrictSerializer):
         format="%Y-%m-%d", input_formats=["%Y-%m-%d"], allow_null=True
     )
     property_value = serializers.FloatField(allow_null=True)
+    debt = FiniteFloatField(allow_null=True)
+    equity = FiniteFloatField(allow_null=True)
     annualized_revenue = serializers.FloatField(allow_null=True)
     annualized_costs = serializers.FloatField(allow_null=True)
-    gross_yield = serializers.FloatField(allow_null=True)
-    net_yield = serializers.FloatField(allow_null=True)
+    gross_yield = FiniteFloatField(allow_null=True)
+    equity_yield = FiniteFloatField(allow_null=True)
     status = serializers.ChoiceField(
         choices=[
             "ok",

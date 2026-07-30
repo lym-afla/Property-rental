@@ -355,10 +355,12 @@ export const propertyYieldsSchema = z
           property_name: z.string().trim().min(1),
           valuation_date: isoDateSchema.nullable(),
           property_value: z.number().nullable(),
+          debt: z.number().nullable(),
+          equity: z.number().nullable(),
           annualized_revenue: z.number().nullable(),
           annualized_costs: z.number().nullable(),
           gross_yield: z.number().nullable(),
-          net_yield: z.number().nullable(),
+          equity_yield: z.number().nullable(),
           status: yieldStatusSchema,
         })
         .strict(),
