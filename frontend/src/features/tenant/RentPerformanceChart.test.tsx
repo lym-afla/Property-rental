@@ -10,11 +10,11 @@ vi.mock('recharts', () => ({
   ComposedChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CartesianGrid: () => null,
   XAxis: () => null,
-  YAxis: () => null,
+  YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="rent-negative-axis-tick">{tickFormatter(-1000)}</span>,
   Tooltip: () => null,
   ReferenceLine: () => null,
   Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`rent-bar-${name}`} data-fill={fill}>{name} bars</span>,
-  Line: ({ name, strokeDasharray, dot }: { name: string; strokeDasharray?: string; dot?: boolean }) => <span data-testid={`rent-line-${name}`} data-dasharray={strokeDasharray} data-dot={String(dot)}>{name} line</span>,
+  Line: ({ name, strokeDasharray, dot, activeDot }: { name: string; strokeDasharray?: string; dot?: boolean; activeDot?: boolean }) => <span data-testid={`rent-line-${name}`} data-dasharray={strokeDasharray} data-dot={String(dot)} data-active-dot={String(activeDot)}>{name} line</span>,
 }))
 
 const data: TenantRentPerformanceResponse = {
@@ -55,6 +55,8 @@ describe('RentPerformanceChart', () => {
     expect(screen.getByTestId('rent-line-Cumulative arrears')).not.toHaveAttribute('data-dasharray')
     expect(screen.getByTestId('rent-line-Expected rent')).toHaveAttribute('data-dot', 'false')
     expect(screen.getByTestId('rent-line-Cumulative arrears')).toHaveAttribute('data-dot', 'false')
+    expect(screen.getByTestId('rent-line-Expected rent')).toHaveAttribute('data-active-dot', 'false')
+    expect(screen.getByTestId('rent-line-Cumulative arrears')).toHaveAttribute('data-active-dot', 'false')
     expect(screen.getByText('Native currency: GBP · Reporting period: 2026-01-01 to 2026-03-31')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
     const table = screen.getByRole('table', { name: /tenant rent performance exact values/i })
@@ -62,6 +64,12 @@ describe('RentPerformanceChart', () => {
     expect(table).toHaveTextContent('£900')
     expect(table).toHaveTextContent('(£100)')
     expect(table).toHaveTextContent('(£150)')
+  })
+
+  it('formats negative compact axis values with accounting parentheses', () => {
+    render(<RentPerformanceChart data={data} />)
+
+    expect(screen.getByTestId('rent-negative-axis-tick')).toHaveTextContent('(£1k)')
   })
 
   it('renders loading, retryable error, and empty states', () => {

@@ -1,12 +1,20 @@
 """Authenticated HTTP endpoints for portfolio analytics responses."""
 
+from dataclasses import dataclass
+from datetime import date
+
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
-from rentals.analytics.filters import AnalyticsFilters, ISODateField
+from rentals.analytics.filters import (
+    MAX_ANALYTICS_POINTS,
+    AnalyticsFilters,
+    Grain,
+    ISODateField,
+)
 from rentals.analytics.pnl import profit_and_loss
 from rentals.analytics.portfolio import (
     portfolio_occupancy,
@@ -34,6 +42,50 @@ from rentals.services.fx import MissingFXRate
 
 class _ValuationEndSerializer(serializers.Serializer):
     end = ISODateField(required=False)
+
+
+@dataclass(frozen=True)
+class _TenantRentPerformanceFilters:
+    start: date
+    end: date
+    grain: Grain
+
+
+class _TenantRentPerformanceFilterSerializer(serializers.Serializer):
+    start = ISODateField(required=False)
+    end = ISODateField(required=False)
+    grain = serializers.ChoiceField(
+        choices=[grain.value for grain in Grain], required=False
+    )
+
+    def validate(self, values):
+        end = values.get("end", self.context["effective_date"])
+        start = values.get("start", end.replace(month=1, day=1))
+        if end < start:
+            raise serializers.ValidationError(
+                {"end": "end must be on or after start"}
+            )
+
+        grain = Grain(values.get("grain", Grain.MONTH.value))
+        start_month = start.year * 12 + start.month - 1
+        end_month = end.year * 12 + end.month - 1
+        if grain is Grain.MONTH:
+            point_count = end_month - start_month + 1
+        elif grain is Grain.QUARTER:
+            point_count = end_month // 3 - start_month // 3 + 1
+        else:
+            point_count = end.year - start.year + 1
+        if point_count > MAX_ANALYTICS_POINTS:
+            raise serializers.ValidationError(
+                {
+                    "start": (
+                        "Analytics ranges may contain at most "
+                        f"{MAX_ANALYTICS_POINTS} {grain.value} buckets."
+                    )
+                }
+            )
+
+        return {"start": start, "end": end, "grain": grain}
 
 
 class _PortfolioAnalyticsView(APIView):
@@ -176,9 +228,15 @@ class TenantRentPerformanceAnalyticsView(_PortfolioAnalyticsView):
             raise serializers.ValidationError(
                 {key: "Unknown filter." for key in sorted(unknown)}
             )
+        query = _TenantRentPerformanceFilterSerializer(
+            data=request.query_params,
+            context={"effective_date": get_effective_date(request.user)},
+        )
+        query.is_valid(raise_exception=True)
+        filters = _TenantRentPerformanceFilters(**query.validated_data)
         try:
             result = tenant_rent_performance(
-                request.user, tenant_id, self.filters(request)
+                request.user, tenant_id, filters
             )
         except MissingTenantCurrency as exc:
             return Response(

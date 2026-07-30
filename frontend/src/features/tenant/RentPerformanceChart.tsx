@@ -82,7 +82,7 @@ export function RentPerformanceChart(props: Props) {
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatPerformanceValue(String(item.dataKey), typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
               <ReferenceLine y={0} stroke="currentColor" aria-label="Variance zero baseline" />
               {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
-              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
+              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} activeDot={false} />)}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

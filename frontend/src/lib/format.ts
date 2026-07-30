@@ -24,8 +24,12 @@ export function formatCurrency(
 export function formatCurrencyAxis(value: number, currency: string): string {
   const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
   const symbol = symbols[currency] ?? ''
-  if (Math.abs(value) >= 1000) return `${symbol}${(value / 1000).toFixed(0)}k`
-  return `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const magnitude = Math.abs(value)
+  const rendered = magnitude >= 1000
+    ? `${(magnitude / 1000).toFixed(0)}k`
+    : magnitude.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  const amount = `${symbol}${rendered}`
+  return value < 0 ? `(${amount})` : amount
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {

@@ -97,6 +97,40 @@ def test_tenant_rent_performance_api_rejects_missing_property_currency(
     assert response.json()["code"] == "missing_currency"
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize("default_currency", [None, ""])
+def test_tenant_rent_performance_api_does_not_require_user_reporting_currency(
+    auth_client, landlord_user, default_currency
+):
+    """Routing tenant filters through portfolio currency validation would reject valid native data."""
+    landlord_user.default_currency = default_currency
+    landlord_user.save(update_fields=["default_currency"])
+    property_ = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        currency="EUR",
+    )
+    tenant = TenantFactory(
+        property=property_,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="EUR",
+    )
+
+    response = auth_client.get(
+        f"/api/v1/analytics/tenants/{tenant.id}/rent-performance/",
+        {"start": "2026-01-01", "end": "2026-01-31", "grain": "month"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["currency"] == "EUR"
+    assert response.json()["points"][0]["expected"] == 1000.0
+
+
 @pytest.mark.parametrize("field", ["debt", "equity", "equity_yield"])
 def test_yield_serializer_rejects_omitted_denominator_contract_fields(field):
     """Optional serializer fields would erase missing-versus-omitted semantics."""
