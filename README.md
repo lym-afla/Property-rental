@@ -67,7 +67,7 @@ npm run build
 
 ### Analytics API and visual regression checks
 
-The React investment dashboard reads typed analytics responses from `/api/v1/analytics/portfolio/summary/`, `cash-flow/`, `expenses/`, `property-contribution/`, `yields/`, `currency-exposure/`, and `occupancy/`. Property valuation history is available at `/api/v1/analytics/properties/<id>/valuation/`. Time-series requests are capped at 600 buckets.
+The React investment dashboard reads typed analytics responses from `/api/v1/analytics/portfolio/summary/`, `cash-flow/`, `expenses/`, `profit-loss/`, `property-contribution/`, `yields/`, `property-breakdown/`, and `occupancy/`. Property breakdown reports each property's server-calculated value, debt, or equity history in the selected reporting currency. Gross yield is annualized gross rental income divided by the latest property value; equity yield is annualized rental income net of costs divided by equity (latest property value less latest debt). Property valuation history is available at `/api/v1/analytics/properties/<id>/valuation/`. Time-series requests are capped at 600 buckets.
 
 Run the frontend checks from `frontend/`:
 

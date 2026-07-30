@@ -21,9 +21,12 @@ const cashFlow = {
     { key: 'net_income', label: 'Net income', kind: 'net' },
     { key: 'cumulative_net_income', label: 'Cumulative net income', kind: 'cumulative' },
   ],
-  points: [{ ...period, rent: 2000, repairs: -350, total_income: 2000, total_expenses: -350, net_income: 1650, cumulative_net_income: 1650 }],
+  points: [
+    { period_start: '2024-01-01', period_end: '2024-01-31', rent: 900, repairs: -150, total_income: 900, total_expenses: -150, net_income: 750, cumulative_net_income: 750 },
+    { period_start: '2024-02-01', period_end: '2024-02-29', rent: 1100, repairs: -200, total_income: 1100, total_expenses: -200, net_income: 900, cumulative_net_income: 1650 },
+  ],
 }
-const expenseDrivers = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'repairs', label: 'Repairs', kind: 'expense_category' }], points: [{ ...period, repairs: -350 }] }
+const expenseDrivers = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'repairs', label: 'Repairs', kind: 'expense_category' }], points: [{ period_start: '2024-01-01', period_end: '2024-01-31', repairs: -150 }, { period_start: '2024-02-01', period_end: '2024-02-29', repairs: -200 }] }
 const occupancy = {
   metric: 'portfolio_occupancy', grain: 'month', currency: null, scale: 1, ...range,
   series: [
@@ -52,9 +55,57 @@ const propertyBreakdown = {
   coverage: [{ ...period, property_id: 1, status: 'ok' }, { ...period, property_id: 2, status: 'ok' }],
 }
 const valuation = {
-  metric: 'property_valuation', grain: 'record', currency: 'EUR', scale: 1, ...range, status: 'ok',
+  metric: 'property_valuation', grain: 'record', currency: 'EUR', scale: 1, start: '2004-01-01', end: range.end, status: 'ok',
   series: [{ key: 'total_value', label: 'Total value', kind: 'total' }, { key: 'debt', label: 'Debt', kind: 'debt' }, { key: 'equity', label: 'Equity', kind: 'equity' }],
-  points: [{ ...period, total_value: 250000, debt: 100000, equity: 150000, status: 'ok' }],
+  points: [
+    { period_start: '2004-01-01', period_end: '2004-01-01', total_value: 150000, debt: 90000, equity: 60000, status: 'ok' },
+    { period_start: '2023-01-01', period_end: '2023-01-01', total_value: 240000, debt: 105000, equity: 135000, status: 'ok' },
+    { period_start: '2024-01-01', period_end: '2024-01-01', total_value: 250000, debt: 100000, equity: 150000, status: 'ok' },
+  ],
+}
+const tenant = {
+  id: 1, user: null, property: 1, first_name: 'Bob', last_name: 'Jones',
+  phone: '+49 30 1234567', email: 'bob@example.test', lease_start: range.start,
+  lease_end: null, payday: 1,
+}
+const tenantWithStats = {
+  ...tenant, rent_rate: '1000.00', revenue_all_time: 24000, revenue_ytd: 2000,
+  debt: -100, stats_currency: 'EUR',
+}
+const transactions = [{
+  id: 1, property: 1, tenant: 1, date: '2024-02-15',
+  category: 'cost_reimbursement', period: '2024-02', currency: 'USD',
+  amount: '-250.00', type: 'expense', comment: 'Shared utility charge',
+}]
+const profitLossColumns = [
+  ...Array.from({ length: 21 }, (_, index) => {
+    const year = String(2004 + index)
+    return { key: year, label: year, start: `${year}-01-01`, end: year === '2024' ? range.end : `${year}-12-31` }
+  }),
+  { key: 'ytd', label: 'YTD', start: '2024-01-01', end: range.end },
+]
+const profitLossValues = Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === 'ytd' ? 1650 : 1000 + index * 50]))
+const profitLoss = {
+  metric: 'profit_and_loss', currency: 'USD', scale: 1, end: range.end,
+  columns: profitLossColumns,
+  rows: [
+    { key: 'rent', label: 'Rent income', kind: 'income', values: profitLossValues },
+    { key: 'repairs', label: 'Repairs', kind: 'expense', values: Object.fromEntries(profitLossColumns.map(({ key }) => [key, -350])) },
+    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: profitLossValues },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: Object.fromEntries(profitLossColumns.map(({ key }) => [key, -350])) },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === 'ytd' ? 1300 : 650 + index * 50])) },
+  ],
+}
+const rentPerformance = {
+  metric: 'tenant_rent_performance', grain: 'month', currency: 'EUR', scale: 1,
+  ...range, opening_arrears: 0, opening_issues: [], status: 'ok', issues: [],
+  series: [
+    { key: 'expected', label: 'Expected rent', kind: 'expected' },
+    { key: 'received', label: 'Received rent', kind: 'received' },
+    { key: 'variance', label: 'Variance', kind: 'variance' },
+    { key: 'cumulative_arrears', label: 'Cumulative arrears', kind: 'cumulative' },
+  ],
+  points: [{ ...period, expected: 1000, received: 900, variance: -100, cumulative_arrears: -100, status: 'ok', issues: [] }],
 }
 
 async function mockDashboardApi(page: Page, options: { summaryStatus?: number; cashStatus?: number } = {}) {
@@ -66,9 +117,15 @@ async function mockDashboardApi(page: Page, options: { summaryStatus?: number; c
     if (path.endsWith('/properties/')) return json(properties)
     if (path.endsWith('/properties/1/')) return json(properties[0])
     if (path.endsWith('/properties/with_stats/')) return json(properties)
-    if (path.endsWith('/transactions/')) return json([])
-    if (path.endsWith('/tenants/')) return json([])
-    if (path.endsWith('/property-valuations/')) return json([])
+    if (path.endsWith('/transactions/')) return json(transactions)
+    if (path.endsWith('/tenants/1/')) return json(tenant)
+    if (path.endsWith('/tenants/with_stats/')) return json([tenantWithStats])
+    if (path.endsWith('/tenants/')) return json([tenant])
+    if (path.endsWith('/property-valuations/')) return json([
+      { id: 1, property: 1, capital_structure_date: '2004-01-01', capital_structure_value: '150000.00', capital_structure_debt: '90000.00' },
+      { id: 2, property: 1, capital_structure_date: '2023-01-01', capital_structure_value: '240000.00', capital_structure_debt: '105000.00' },
+      { id: 3, property: 1, capital_structure_date: '2024-01-01', capital_structure_value: '250000.00', capital_structure_debt: '100000.00' },
+    ])
     if (path.includes('/analytics/portfolio/summary/')) return json(options.summaryStatus ? { detail: 'summary unavailable' } : { currency: 'USD', scale: 1, ...range, property_count: 2, rental_inventory_count: 2, occupied: 2, occupancy_rate: 100, revenue: 2000, costs: 350, net_income: 1650, property_value: 400000, debt: 100000, equity: 300000, valuation_status: 'ok', property_value_status: 'ok', debt_status: 'ok' }, options.summaryStatus)
     if (path.includes('/analytics/portfolio/cash-flow/')) return json(options.cashStatus ? { detail: 'cash unavailable' } : cashFlow, options.cashStatus)
     if (path.includes('/analytics/portfolio/expenses/')) return json(expenseDrivers)
@@ -76,9 +133,19 @@ async function mockDashboardApi(page: Page, options: { summaryStatus?: number; c
     if (path.includes('/analytics/portfolio/yields/')) return json(yields)
     if (path.includes('/analytics/portfolio/property-breakdown/')) return json(propertyBreakdown)
     if (path.includes('/analytics/portfolio/occupancy/')) return json(occupancy)
+    if (path.includes('/analytics/portfolio/profit-loss/')) {
+      const currency = new URL(route.request().url()).searchParams.get('currency') ?? 'USD'
+      return json({ ...profitLoss, currency })
+    }
     if (path.includes('/analytics/properties/1/valuation/')) return json(valuation)
+    if (path.includes('/analytics/tenants/1/rent-performance/')) return json(rentPerformance)
     return json({ detail: `Unhandled fixture path ${path}` }, 404)
   })
+}
+
+async function expectReleaseSafeDocument(page: Page) {
+  await expect(page.locator('body')).not.toContainText('NaN')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
 test.beforeEach(async ({ page }) => {
@@ -130,7 +197,7 @@ test('restores every supported dashboard filter from a copied URL', async ({ pag
   await expect(page.getByLabel('Comparison')).toHaveCount(0)
 })
 
-test('keeps charts operable with keyboard and exposes exact values for long labels and mixed currencies', async ({ page }) => {
+test('keeps charts operable with keyboard and exposes exact values plus property breakdown controls', async ({ page }) => {
   await page.goto('/')
   const legend = page.getByRole('button', { name: 'Rent income' })
   await legend.focus()
@@ -142,15 +209,15 @@ test('keeps charts operable with keyboard and exposes exact values for long labe
   await page.getByRole('button', { name: 'Table' }).first().click()
   await expect(page.getByText('Dollar House (negative contributor)')).toBeVisible()
   await expect(page.getByText('Negative contributor', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'EUR' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'USD' })).toBeVisible()
+  await expect(page.getByText('Portfolio breakdown by property', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Portfolio breakdown measure')).toHaveValue('property_value')
 })
 
 test('navigates to the filtered transaction drill-down', async ({ page }) => {
   await page.goto('/')
   await page.getByText('Drill down to transactions').click()
-  await page.getByRole('button', { name: /View Rent income transactions/ }).click()
-  await expect(page).toHaveURL(/\/transactions\?from=2024-01-01&to=2024-02-29&category=rent&currency=USD/)
+  await page.getByRole('button', { name: 'View Rent income transactions for Jan 1, 2024' }).click()
+  await expect(page).toHaveURL(/\/transactions\?from=2024-01-01&to=2024-01-31&category=rent&currency=USD/)
 })
 
 test('supports mobile filter sheet at 390px', async ({ page }, testInfo) => {
@@ -237,4 +304,68 @@ test('navigates from a property to its valuation history', async ({ page }) => {
   await expect(page.getByRole('table', { name: 'Property valuation exact values' })).toContainText('€250,000')
   await page.getByRole('tab', { name: 'Valuations' }).click()
   await expect(page.getByRole('tab', { name: 'Valuations' })).toHaveAttribute('data-state', 'active')
+})
+
+test('verifies the financial analytics release contract across dashboard, property, tenant, and transactions', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Show settings' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByLabel('Portfolio summary')).toContainText('$100,000')
+  await expect(page.getByLabel('Portfolio summary')).toContainText('$300,000')
+  await expectReleaseSafeDocument(page)
+
+  await page.getByRole('button', { name: 'Show settings' }).click()
+  await expect(page.getByRole('button', { name: 'Hide settings' })).toHaveAttribute('aria-expanded', 'true')
+  await expectReleaseSafeDocument(page)
+
+  await page.getByRole('button', { name: 'Portfolio', exact: true }).click()
+  await expect(page.getByText('Yield comparison', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Yield definitions' }).click()
+  await expect(page.getByText('Equity yield — annualized rental income net of costs divided by equity.')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expectReleaseSafeDocument(page)
+
+  await page.getByRole('button', { name: 'Income & Costs' }).click()
+  await expect(page.getByText('Profit & Loss', { exact: true })).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Profit and Loss statement' })).toBeVisible()
+  const trendCard = page.getByText('Revenue and expenses', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]')
+  const trendLines = trendCard.locator('.recharts-line-curve')
+  await expect(trendLines).toHaveCount(2)
+  await expect.poll(async () => trendLines.evaluateAll((lines) => lines.every((line) => {
+    const dasharray = getComputedStyle(line).strokeDasharray
+    if (dasharray === 'none') return true
+    const firstDashLength = Number.parseFloat(dasharray)
+    return firstDashLength >= (line as SVGGeometryElement).getTotalLength() * 0.99
+  }))).toBe(true)
+  await expectReleaseSafeDocument(page)
+
+  await page.goto('/properties/1')
+  const propertyProfitLoss = page.getByRole('table', { name: 'Profit and Loss statement' })
+  await expect(propertyProfitLoss).toBeVisible()
+  const profitLossScroller = propertyProfitLoss.locator('xpath=..')
+  expect(await profitLossScroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+  await expect(propertyProfitLoss).toContainText('2004')
+  await expect(propertyProfitLoss).toContainText('2023')
+
+  const valuationBars = page.getByText('Property valuation', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]').locator('.recharts-bar-rectangle')
+  await expect(valuationBars).toHaveCount(6)
+  const readValuationCenters = () => valuationBars.evaluateAll((bars) => [...new Set(bars.map((bar) => {
+    const box = (bar as SVGGraphicsElement).getBBox()
+    return Math.round(box.x + box.width / 2)
+  }))].sort((left, right) => left - right))
+  await expect.poll(readValuationCenters).toHaveLength(3)
+  const valuationCenters = await readValuationCenters()
+  expect((valuationCenters[1] - valuationCenters[0]) / (valuationCenters[2] - valuationCenters[1])).toBeGreaterThan(10)
+  await expectReleaseSafeDocument(page)
+
+  await page.goto('/tenants/1')
+  await expect(page.getByText('Native currency: EUR · Reporting period: 2024-01-01 to 2024-02-29')).toBeVisible()
+  await page.getByRole('button', { name: 'Table' }).click()
+  await expect(page.getByRole('table', { name: 'Tenant rent performance exact values' })).toContainText('(€100)')
+  await expectReleaseSafeDocument(page)
+
+  await page.goto('/transactions')
+  await expect(page.getByText('Cost reimbursement', { exact: true })).toBeVisible()
+  await expect(page.getByText('cost_reimbursement', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('($250)', { exact: true })).toBeVisible()
+  await expectReleaseSafeDocument(page)
 })

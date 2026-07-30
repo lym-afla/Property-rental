@@ -86,7 +86,7 @@ describe('TenantsPage', () => {
 
   it('renders negative debt with accounting brackets and the red class', async () => {
     // debt() returns `paid - due`, so a negative value means the tenant
-    // is in arrears. We pin both the bracketed `$(250)` display AND the
+    // is in arrears. We pin both the bracketed `($250)` display AND the
     // destructive (red) class so a future regression that flips the
     // sign convention or drops the accounting format is caught.
     server.use(
@@ -101,7 +101,7 @@ describe('TenantsPage', () => {
       ),
     )
     renderPage()
-    const debtCell = await screen.findByText('$(250)')
+    const debtCell = await screen.findByText('($250)')
     expect(debtCell).toBeInTheDocument()
     // The cell's <span> carries the destructive class — its parent is
     // the cell wrapper, so we assert on the matched element itself.

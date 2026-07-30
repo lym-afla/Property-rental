@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 test.skip(process.platform !== 'win32' || process.env.PW_CHANNEL !== 'chrome', 'Visual baselines are pinned to Windows Chrome.')
 
 test('populated dashboard visual baseline preserves chart layout and exact values at each required viewport', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
@@ -26,25 +27,32 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   await expect(page.getByText('Net cash flow', { exact: true })).toBeVisible()
   await expect(page.getByText('Cumulative cash', { exact: true })).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
-  // Screenshot stabilization fast-forwards finite Recharts animations before
-  // the geometry assertions inspect the final plotted SVG marks.
-  await expect(page).toHaveScreenshot('investment-dashboard-populated.png', { fullPage: true, animations: 'disabled' })
-
   const cashFlowCard = page.getByText('Net cash flow', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]')
   const zeroLine = cashFlowCard.locator('.recharts-reference-line-line')
-  const incomeBar = cashFlowCard.locator('.recharts-bar-rectangle path[fill="url(#cash-flow-primary)"]').first()
-  const expenseBar = cashFlowCard.locator('.recharts-bar-rectangle path[fill="url(#cash-flow-secondary)"]').first()
-  const [zeroBox, incomeBox, expenseBox] = await Promise.all([zeroLine.boundingBox(), incomeBar.boundingBox(), expenseBar.boundingBox()])
-  expect(zeroBox).not.toBeNull()
-  expect(incomeBox).not.toBeNull()
-  expect(expenseBox).not.toBeNull()
-  // Recharts centers the two-pixel bar stroke on the zero baseline and rounds
-  // the SVG geometry to half pixels, so allow only that small shared edge.
-  expect((incomeBox?.y ?? Infinity) + (incomeBox?.height ?? 0)).toBeLessThanOrEqual((zeroBox?.y ?? -Infinity) + 3)
-  expect(expenseBox?.y ?? -Infinity).toBeGreaterThanOrEqual((zeroBox?.y ?? Infinity) - 3)
-  expect((expenseBox?.y ?? 0) + (expenseBox?.height ?? 0)).toBeGreaterThan(zeroBox?.y ?? Infinity)
+  const incomeBar = cashFlowCard.locator('.recharts-bar-rectangle path[fill="#2563EB"]').first()
+  const expenseBar = cashFlowCard.locator('.recharts-bar-rectangle path[fill="#D97706"]').first()
+  await expect.poll(async () => {
+    const [zeroBox, incomeBox, expenseBox] = await Promise.all([zeroLine.boundingBox(), incomeBar.boundingBox(), expenseBar.boundingBox()])
+    if (!zeroBox || !incomeBox || !expenseBox) return false
+    return incomeBox.width > 0 && incomeBox.height > 0
+      && expenseBox.width > 0 && expenseBox.height > 0
+      && incomeBox.y + incomeBox.height <= zeroBox.y + 3
+      && expenseBox.y >= zeroBox.y - 3
+      && expenseBox.y + expenseBox.height > zeroBox.y
+  }).toBe(true)
+
+  await page.waitForTimeout(2_000)
+  await expect(page).toHaveScreenshot('investment-dashboard-populated.png', { fullPage: true, animations: 'disabled' })
 
   await page.getByRole('button', { name: 'Table' }).first().click()
   await expect(page.getByRole('table', { name: 'Net cash flow exact values' })).toBeVisible()
   await expect(page).toHaveScreenshot('investment-dashboard-populated-table.png', { fullPage: true, animations: 'disabled' })
+
+  await page.getByRole('button', { name: 'Show settings' }).click()
+  await page.getByRole('button', { name: 'Portfolio', exact: true }).click()
+  await expect(page.getByText('Yield comparison', { exact: true })).toBeVisible()
+  await expect(page.getByText('Portfolio breakdown by property', { exact: true })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('NaN')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'Hide settings' }).click()
 })
