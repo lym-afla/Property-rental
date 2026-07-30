@@ -41,20 +41,15 @@ import {
 import { Button } from '@/components/ui/button'
 import type { Property } from '@/types/property'
 import type { Tenant } from '@/types/tenant'
+import { TRANSACTION_CATEGORIES } from '@/lib/transactionCategories'
 import { CURRENCY_OPTIONS } from './PropertyForm'
 
-// Categories mirror `rentals/constants.py::TRANSACTION_CATEGORIES`.
-export const TRANSACTION_CATEGORY_OPTIONS = [
-  'rent',
-  'tax',
-  'capex',
-  'management',
-  'electricity',
-  'utilities',
-  'internet',
-  'cost_reimbursement',
-  'other_expenses',
-] as const
+export const TRANSACTION_CATEGORY_OPTIONS = TRANSACTION_CATEGORIES.map(
+  ({ value }) => value,
+) as [
+  (typeof TRANSACTION_CATEGORIES)[number]['value'],
+  ...(typeof TRANSACTION_CATEGORIES)[number]['value'][],
+]
 
 // Zod regex for the optional "YYYY-MM" period string. The field is
 // optional (the backend column is nullable), but when present it must
@@ -287,9 +282,9 @@ export function TransactionForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {TRANSACTION_CATEGORY_OPTIONS.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
+                    {TRANSACTION_CATEGORIES.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
