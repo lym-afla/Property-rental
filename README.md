@@ -23,22 +23,18 @@ This application tracks rental-property operations and investment performance. D
 
 ### Running the application
 
-Use `uv` for the backend environment. The project still keeps backend
-dependencies in `property_rental/requirements.txt` and
-`property_rental/requirements-dev.txt`, so `uv` is used as the virtualenv
-and installer rather than `uv sync`.
+Use `uv` for the backend environment. Backend dependencies live in
+`pyproject.toml` and are locked in `uv.lock`; the old
+`property_rental/requirements.txt` workflow is no longer used.
 
 Backend, from PowerShell:
 
 ```powershell
 cd D:\Developing\Property-rental
-uv venv .venv
-.\.venv\Scripts\Activate.ps1
-uv pip install -r property_rental\requirements-dev.txt
+uv sync --group dev
 
-cd property_rental
-python manage.py migrate
-python manage.py runserver
+uv run python property_rental\manage.py migrate
+uv run python property_rental\manage.py runserver
 ```
 
 Frontend, in a second terminal:
@@ -56,10 +52,8 @@ Backend checks:
 
 ```powershell
 cd D:\Developing\Property-rental
-.\.venv\Scripts\Activate.ps1
-cd property_rental
-python -m pytest -q
-python manage.py check
+uv run pytest -q
+uv run python property_rental\manage.py check
 ```
 
 Frontend checks:
