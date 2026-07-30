@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { parseISO } from 'date-fns'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
@@ -45,6 +46,10 @@ export function ValuationChart(props: Props) {
   const series = valuationSeries(data)
   const visibleSeries = series.filter((item) => !hiddenKeys.has(item.key))
   const currency = data?.currency ?? ''
+  const chartPoints = data?.points.map((point) => ({
+    ...point,
+    timestamp: parseISO(point.period_start).getTime(),
+  })) ?? []
   const table = data && {
     columns: [
       { key: 'period', label: 'Record date' },
@@ -73,11 +78,18 @@ export function ValuationChart(props: Props) {
       table={state.status === 'success' ? table : undefined}
     >
       {state.status === 'success' && data && <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+        <ComposedChart data={chartPoints} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
+            tickFormatter={(value) => formatDate(new Date(Number(value)))}
+            minTickGap={24}
+          />
           <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} />
-          <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
+          <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(new Date(Number(label)))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
           {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
           {visibleSeries.filter((item) => item.key === 'total_value').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
         </ComposedChart>

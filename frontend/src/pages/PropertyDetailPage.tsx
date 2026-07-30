@@ -72,7 +72,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatDate, formatNumber } from '@/lib/format'
+import { transactionCategoryLabel } from '@/lib/transactionCategories'
 import type { PropertyValuation } from '@/types/propertyValuation'
 
 // Number of recent transactions shown in the Overview tab. The full list
@@ -161,7 +162,7 @@ export function PropertyDetailPage() {
       accessorKey: 'capital_structure_value',
       header: 'Value',
       cell: ({ row }) =>
-        formatCurrency(
+        formatAccounting(
           Number(row.original.capital_structure_value),
           property?.currency ?? '',
         ),
@@ -170,7 +171,7 @@ export function PropertyDetailPage() {
       accessorKey: 'capital_structure_debt',
       header: 'Debt',
       cell: ({ row }) =>
-        formatCurrency(
+        formatAccounting(
           Number(row.original.capital_structure_debt),
           property?.currency ?? '',
         ),
@@ -184,7 +185,7 @@ export function PropertyDetailPage() {
         const equity =
           Number(row.original.capital_structure_value) -
           Number(row.original.capital_structure_debt)
-        return formatCurrency(equity, property?.currency ?? '')
+        return formatAccounting(equity, property?.currency ?? '')
       },
     },
     {
@@ -284,7 +285,7 @@ export function PropertyDetailPage() {
               label={`Value (${property.currency})`}
               value={
                 latestValue !== null && Number.isFinite(latestValue)
-                  ? formatCurrency(latestValue, property.currency)
+                  ? formatAccounting(latestValue, property.currency)
                   : '—'
               }
             />
@@ -292,7 +293,7 @@ export function PropertyDetailPage() {
             <Stat label="Bedrooms" value={String(property.num_bedrooms)} />
             <Stat
               label="Area"
-              value={property.area ? `${property.area} m²` : '—'}
+              value={property.area ? `${formatNumber(Number(property.area))} m²` : '—'}
             />
           </dl>
         </CardContent>
@@ -372,7 +373,7 @@ export function PropertyDetailPage() {
                     {recentTransactions.map((t) => (
                       <TableRow key={t.id}>
                         <TableCell>{formatDate(t.date)}</TableCell>
-                        <TableCell className="capitalize">{t.category}</TableCell>
+                        <TableCell>{transactionCategoryLabel(t.category)}</TableCell>
                         <TableCell>
                           <Badge
                             variant={t.type === 'income' ? 'secondary' : 'outline'}

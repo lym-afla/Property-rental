@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { parseISO } from 'date-fns'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ValuationChart } from './ValuationChart'
@@ -7,7 +8,9 @@ import type { PropertyValuationAnalyticsResponse } from '@/types/analytics'
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  ComposedChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ComposedChart: ({ children, data }: { children: React.ReactNode; data: Array<{ timestamp?: number }> }) => (
+    <div data-testid="valuation-chart" data-points={JSON.stringify(data)}>{children}</div>
+  ),
   CartesianGrid: () => null,
   XAxis: () => null,
   YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="valuation-axis">{tickFormatter(500000)}</span>,
@@ -50,6 +53,24 @@ describe('ValuationChart', () => {
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('1 Jan 2018')
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('£500,000')
+  })
+
+  it('positions sparse valuation records by their continuous timestamps', () => {
+    render(<ValuationChart data={{
+      ...data,
+      points: [
+        { period_start: '2004-01-01', period_end: '2004-01-01', total_value: 300000, debt: 100000, equity: 200000, status: 'ok' },
+        { period_start: '2023-01-01', period_end: '2023-01-01', total_value: 500000, debt: 200000, equity: 300000, status: 'ok' },
+        { period_start: '2024-01-01', period_end: '2024-01-01', total_value: 600000, debt: 180000, equity: 420000, status: 'ok' },
+      ],
+    }} />)
+
+    const points = JSON.parse(screen.getByTestId('valuation-chart').dataset.points ?? '[]') as Array<{ timestamp: number }>
+    const [x2004, x2023, x2024] = points.map((point) => point.timestamp)
+    expect(x2004).toBe(parseISO('2004-01-01').getTime())
+    expect(x2023).toBe(parseISO('2023-01-01').getTime())
+    expect(x2024).toBe(parseISO('2024-01-01').getTime())
+    expect((x2023 - x2004) / (x2024 - x2023)).toBeGreaterThan(18)
   })
 
   it('offers valuation history rather than transaction navigation when no records exist', () => {

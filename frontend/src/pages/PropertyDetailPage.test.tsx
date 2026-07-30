@@ -130,6 +130,37 @@ describe('PropertyDetailPage', () => {
     expect(screen.queryByText(/Server-calculated year-to-date performance/)).not.toBeInTheDocument()
   })
 
+  it('rounds the area and renders a friendly recent-transaction category', async () => {
+    server.use(
+      http.get('/api/v1/properties/:id/', () =>
+        HttpResponse.json({ ...fixtureProperty, area: '85.49' }),
+      ),
+      http.get('/api/v1/transactions/', () =>
+        HttpResponse.json([
+          {
+            id: 42,
+            property: 1,
+            tenant: null,
+            date: '2026-07-01',
+            category: 'cost_reimbursement',
+            period: '2026-07',
+            currency: 'EUR',
+            amount: '-125.00',
+            type: 'expense',
+            comment: 'Utility refund',
+          },
+        ]),
+      ),
+    )
+
+    renderPage()
+
+    expect(await screen.findByText('85 m²')).toBeVisible()
+    expect(screen.getByText('Cost reimbursement')).toBeVisible()
+    expect(screen.queryByText('cost_reimbursement')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Server-calculated year-to-date/)).not.toBeInTheDocument()
+  })
+
   it('switches to the Valuations tab on click', async () => {
     const user = userEvent.setup()
     renderPage()
