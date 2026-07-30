@@ -28,25 +28,22 @@ export function formatCurrencyAxis(value: number, currency: string): string {
   return `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
-// Accounting format: negative numbers render as `₽(1,234)` instead of
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£', RUB: '₽',
+}
+
+// Accounting format: negative numbers render as `(₽1,234)` instead of
 // `-₽1,234`. Used in the Transactions table Amount column so expenses
-// are visually distinct from the unary-minus style. The value is signed
-// (positive = income / asset, negative = expense / liability); pass a
-// string (decimal from the API) or a number. The currency symbol is
-// always prepended (outside the parentheses for negatives) so the sign
-// convention stays unambiguous regardless of the row's currency.
+// are visually distinct from the unary-minus style.
 export function formatAccounting(
   value: number | string | null | undefined,
   currency: string,
 ): string {
   if (value === null || value === undefined) return '—'
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  if (Number.isNaN(num)) return '—'
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
-  const symbol = symbols[currency] ?? ''
-  const abs = Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 0 })
-  if (num < 0) return `${symbol}(${abs})`
-  return `${symbol}${abs}`
+  const amount = typeof value === 'string' ? Number(value) : value
+  if (!Number.isFinite(amount)) return '—'
+  const rendered = `${CURRENCY_SYMBOLS[currency] ?? ''}${Math.abs(amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  return amount < 0 ? `(${rendered})` : rendered
 }
 
 export function formatDate(date: string | Date | null | undefined): string {
