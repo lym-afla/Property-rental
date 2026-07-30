@@ -161,6 +161,67 @@ describe('PropertyDetailPage', () => {
     expect(screen.queryByText(/Server-calculated year-to-date/)).not.toBeInTheDocument()
   })
 
+  it('uses the latest non-null property value for the header', async () => {
+    server.use(
+      http.get('/api/v1/property-valuations/', () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            property: 1,
+            capital_structure_date: '2026-01-01',
+            capital_structure_value: '250000.00',
+            capital_structure_debt: null,
+          },
+          {
+            id: 2,
+            property: 1,
+            capital_structure_date: '2026-02-01',
+            capital_structure_value: null,
+            capital_structure_debt: '100000.00',
+          },
+        ]),
+      ),
+    )
+
+    renderPage()
+
+    expect(await screen.findByText('€250,000')).toBeVisible()
+  })
+
+  it('renders partial capital snapshots without fabricating zero or equity', async () => {
+    server.use(
+      http.get('/api/v1/property-valuations/', () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            property: 1,
+            capital_structure_date: '2026-01-01',
+            capital_structure_value: '250000.00',
+            capital_structure_debt: null,
+          },
+          {
+            id: 2,
+            property: 1,
+            capital_structure_date: '2026-02-01',
+            capital_structure_value: null,
+            capital_structure_debt: '100000.00',
+          },
+        ]),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(fixtureProperty.name)
+
+    await user.click(screen.getByRole('tab', { name: /valuations/i }))
+
+    const valueOnlyRow = screen.getByRole('button', { name: 'Edit valuation 1' }).closest('tr')
+    const debtOnlyRow = screen.getByRole('button', { name: 'Edit valuation 2' }).closest('tr')
+    expect(valueOnlyRow).toHaveTextContent('€250,000——')
+    expect(debtOnlyRow).toHaveTextContent('—€100,000—')
+    expect(screen.queryByText('€0')).not.toBeInTheDocument()
+  })
+
   it('switches to the Valuations tab on click', async () => {
     const user = userEvent.setup()
     renderPage()

@@ -165,3 +165,54 @@ def test_profit_and_loss_ignores_unowned_requested_properties(
     )
 
     assert _row(result, "rent").values["2025"] == pytest.approx(1000)
+
+
+@pytest.mark.django_db
+def test_profit_and_loss_safely_reports_unknown_category_with_stored_type(
+    landlord_user,
+):
+    """A database category outside current choices must not crash or change sides."""
+    property_ = PropertyFactory(owned_by=landlord_user.landlord)
+    transaction = TransactionFactory(
+        property=property_,
+        category="insurance_recovery",
+        amount=Decimal("250.00"),
+        date=date(2025, 1, 1),
+    )
+    type(transaction).objects.filter(pk=transaction.pk).update(type="income")
+
+    result = profit_and_loss(
+        landlord_user,
+        end=date(2025, 1, 31),
+        currency="USD",
+    )
+
+    row = _row(result, "insurance_recovery")
+    assert row.label == "Insurance recovery"
+    assert row.kind == "income"
+    assert row.values["2025"] == pytest.approx(250)
+    assert result.total_revenue["2025"] == pytest.approx(250)
+
+
+@pytest.mark.django_db
+def test_profit_and_loss_canonicalizes_unmigrated_other_income(landlord_user):
+    """A legacy category encountered at runtime stays on the expense side."""
+    property_ = PropertyFactory(owned_by=landlord_user.landlord)
+    transaction = TransactionFactory(
+        property=property_,
+        category="other_income",
+        amount=Decimal("250.00"),
+        date=date(2025, 1, 1),
+    )
+    type(transaction).objects.filter(pk=transaction.pk).update(type="income")
+
+    result = profit_and_loss(
+        landlord_user,
+        end=date(2025, 1, 31),
+        currency="USD",
+    )
+
+    row = _row(result, "cost_reimbursement")
+    assert row.label == "Cost reimbursement"
+    assert row.kind == "expense"
+    assert row.values["2025"] == pytest.approx(-250)

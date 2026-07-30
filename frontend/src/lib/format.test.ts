@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatAccounting } from './format'
+import { formatAccounting, formatCurrency } from './format'
+
+describe('formatCurrency', () => {
+  it('uses accounting notation for negative monetary values', () => {
+    expect(formatCurrency(-1234, 'USD')).toBe('($1,234)')
+  })
+})
 
 describe('formatAccounting', () => {
   it.each([

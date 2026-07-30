@@ -122,20 +122,19 @@ export function PropertyDetailPage() {
 
   const property = propertyQuery.data
 
-  // Latest valuation = highest capital_structure_date. Surfaced at the top
-  // of the header card so users see the current property value next to the
-  // name (the rest of the card carries bedrooms / area / status). When no
-  // valuation exists yet we render an em-dash placeholder.
-  const latestValuation = useMemo(() => {
-    const list = valuationsQuery.data ?? []
-    if (list.length === 0) return null
-    return [...list].sort((a, b) =>
-      a.capital_structure_date < b.capital_structure_date ? 1 : -1,
-    )[0]
+  // Value and debt snapshots can be recorded independently. The header uses
+  // the newest row that actually contains a value rather than treating a
+  // newer debt-only row as a zero valuation.
+  const latestValue = useMemo(() => {
+    const latest = [...(valuationsQuery.data ?? [])]
+      .filter((row) => row.capital_structure_value !== null)
+      .sort((a, b) =>
+        a.capital_structure_date < b.capital_structure_date ? 1 : -1,
+      )[0]
+    if (!latest) return null
+    const value = Number(latest.capital_structure_value)
+    return Number.isFinite(value) ? value : null
   }, [valuationsQuery.data])
-  const latestValue = latestValuation
-    ? Number(latestValuation.capital_structure_value)
-    : null
 
   // Most-recent first; the API may or may not pre-sort, so we sort here to
   // make the preview deterministic regardless of backend ordering. Capped
@@ -163,7 +162,7 @@ export function PropertyDetailPage() {
       header: 'Value',
       cell: ({ row }) =>
         formatAccounting(
-          Number(row.original.capital_structure_value),
+          row.original.capital_structure_value,
           property?.currency ?? '',
         ),
     },
@@ -172,7 +171,7 @@ export function PropertyDetailPage() {
       header: 'Debt',
       cell: ({ row }) =>
         formatAccounting(
-          Number(row.original.capital_structure_debt),
+          row.original.capital_structure_debt,
           property?.currency ?? '',
         ),
     },
@@ -182,9 +181,10 @@ export function PropertyDetailPage() {
       id: 'equity',
       header: 'Equity',
       cell: ({ row }) => {
+        const { capital_structure_value: value, capital_structure_debt: debt } =
+          row.original
         const equity =
-          Number(row.original.capital_structure_value) -
-          Number(row.original.capital_structure_debt)
+          value !== null && debt !== null ? Number(value) - Number(debt) : null
         return formatAccounting(equity, property?.currency ?? '')
       },
     },
@@ -528,9 +528,9 @@ export function PropertyDetailPage() {
               capital_structure_date:
                 editValuationTarget.capital_structure_date,
               capital_structure_value:
-                editValuationTarget.capital_structure_value,
+                editValuationTarget.capital_structure_value ?? '',
               capital_structure_debt:
-                editValuationTarget.capital_structure_debt,
+                editValuationTarget.capital_structure_debt ?? '',
             }}
             onSubmit={(values) =>
               updateValuation.mutate(

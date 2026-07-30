@@ -26,7 +26,7 @@ describe('PropertyContributionChart', () => {
     expect(screen.getByTestId('property-contribution-2')).toHaveAttribute('data-net-income', '-250')
     expect(screen.getByText('Negative contributor')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
-    expect(screen.getByRole('table', { name: 'Property contribution exact values' })).toHaveTextContent('$-250')
+    expect(screen.getByRole('table', { name: 'Property contribution exact values' })).toHaveTextContent('($250)')
   })
 
   it('keeps the table control touch-sized at a 390-pixel viewport', () => {

@@ -235,7 +235,11 @@ def property_contribution(user, filters):
 
 def property_yields(user, filters):
     """Return annualized selected-period yields on value and equity."""
-    properties = _scoped_properties(user, filters)
+    properties = tuple(
+        property_
+        for property_ in _scoped_properties(user, filters)
+        if property_.sold is None or property_.sold > filters.end
+    )
     totals = _transaction_totals(properties, filters.currency)
     selected_days = (filters.end - filters.start).days + 1
     annualization = 365.0 / selected_days

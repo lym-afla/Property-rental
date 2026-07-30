@@ -11,10 +11,7 @@ export function formatCurrency(
   amount: number | null | undefined,
   currency: string,
 ): string {
-  if (amount === null || amount === undefined || Number.isNaN(amount)) return '—'
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
-  const symbol = symbols[currency] ?? ''
-  return `${symbol}${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  return formatAccounting(amount, currency)
 }
 
 // Compact axis formatter: collapses amounts >= 1000 to `k` (e.g.

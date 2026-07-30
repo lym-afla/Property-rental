@@ -155,6 +155,31 @@ def test_yields_use_raw_latest_valuation_and_annualized_selected_period(
 
 
 @pytest.mark.django_db
+def test_yields_exclude_properties_sold_on_or_before_report_end(
+    landlord_user, sample_property
+):
+    """Sold assets excluded from summary value must also be absent from yields."""
+    from rentals.analytics.portfolio import property_yields
+
+    sample_property.sold = date(2026, 1, 31)
+    sample_property.save(update_fields=["sold"])
+    active_property = PropertyFactory(owned_by=landlord_user.landlord)
+    for property_ in (sample_property, active_property):
+        PropertyCapitalStructureFactory(
+            property=property_,
+            capital_structure_date=date(2026, 1, 1),
+            capital_structure_value=Decimal("100000.00"),
+            capital_structure_debt=Decimal("40000.00"),
+        )
+
+    result = property_yields(
+        landlord_user, filters_for("2026-01-01", "2026-01-31")
+    )
+
+    assert [row.property_id for row in result.rows] == [active_property.id]
+
+
+@pytest.mark.django_db
 def test_missing_valuation_returns_explicit_status_without_fabricated_yield(
     landlord_user, sample_property
 ):

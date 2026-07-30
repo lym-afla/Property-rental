@@ -8,6 +8,14 @@ from rentals.models import Transaction
 from rentals.services.fx import preload_converter
 
 
+CATEGORY_LABELS = dict(TRANSACTION_CATEGORIES)
+LEGACY_CATEGORY_MAP = {"other_income": "cost_reimbursement"}
+
+
+def _category_label(key):
+    return CATEGORY_LABELS.get(key, key.replace("_", " ").capitalize())
+
+
 @dataclass(frozen=True)
 class ProfitLossColumn:
     key: str
@@ -81,13 +89,27 @@ def profit_and_loss(user, end, currency, property_ids=()):
     transactions = tuple(queryset.order_by("date", "id"))
     first_year = transactions[0].date.year if transactions else end.year
     columns = _columns(first_year, end)
+    category_keys = [key for key, _label in TRANSACTION_CATEGORIES]
     values = {
         key: {column.key: 0.0 for column in columns}
         for key, _label in TRANSACTION_CATEGORIES
     }
+    category_kinds = {
+        key: "income" if key in INCOME_CATEGORIES else "expense"
+        for key in category_keys
+    }
     converter = preload_converter(transactions, currency)
 
     for transaction in transactions:
+        category = LEGACY_CATEGORY_MAP.get(
+            transaction.category, transaction.category
+        )
+        if category not in values:
+            category_keys.append(category)
+            values[category] = {column.key: 0.0 for column in columns}
+            category_kinds[category] = (
+                "income" if transaction.type == "income" else "expense"
+            )
         converted = float(
             converter.convert(
                 transaction.amount,
@@ -98,21 +120,21 @@ def profit_and_loss(user, end, currency, property_ids=()):
         )
         signed = (
             converted
-            if transaction.category in INCOME_CATEGORIES
+            if category_kinds[category] == "income"
             else -abs(converted)
         )
-        values[transaction.category][str(transaction.date.year)] += signed
+        values[category][str(transaction.date.year)] += signed
         if transaction.date.year == end.year:
-            values[transaction.category]["ytd"] += signed
+            values[category]["ytd"] += signed
 
     rows = []
-    for key, label in TRANSACTION_CATEGORIES:
+    for key in category_keys:
         if any(values[key].values()):
             rows.append(
                 ProfitLossRow(
                     key=key,
-                    label=label,
-                    kind="income" if key in INCOME_CATEGORIES else "expense",
+                    label=_category_label(key),
+                    kind=category_kinds[key],
                     values=values[key],
                 )
             )
@@ -120,16 +142,16 @@ def profit_and_loss(user, end, currency, property_ids=()):
     total_revenue = {
         column.key: sum(
             values[key][column.key]
-            for key, _label in TRANSACTION_CATEGORIES
-            if key in INCOME_CATEGORIES
+            for key in category_keys
+            if category_kinds[key] == "income"
         )
         for column in columns
     }
     total_expenses = {
         column.key: sum(
             values[key][column.key]
-            for key, _label in TRANSACTION_CATEGORIES
-            if key not in INCOME_CATEGORIES
+            for key in category_keys
+            if category_kinds[key] == "expense"
         )
         for column in columns
     }
