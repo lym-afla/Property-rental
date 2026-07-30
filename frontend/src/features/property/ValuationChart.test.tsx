@@ -13,7 +13,7 @@ vi.mock('recharts', () => ({
   YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="valuation-axis">{tickFormatter(500000)}</span>,
   Tooltip: () => null,
   Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`valuation-bar-${name}`} data-fill={fill}>{name} bars</span>,
-  Line: ({ name, strokeDasharray }: { name: string; strokeDasharray?: string }) => <span data-testid={`valuation-line-${name}`} data-dash={strokeDasharray ?? 'solid'}>{name} line</span>,
+  Line: ({ name, strokeDasharray, dot }: { name: string; strokeDasharray?: string; dot?: boolean }) => <span data-testid={`valuation-line-${name}`} data-dasharray={strokeDasharray} data-dot={String(dot)}>{name} line</span>,
 }))
 
 const data: PropertyValuationAnalyticsResponse = {
@@ -42,10 +42,11 @@ describe('ValuationChart', () => {
 
     expect(screen.getByTestId('valuation-axis')).toHaveTextContent('£500k')
     expect(screen.getByText(/All time: 2018-01-01 to 2026-07-29/)).toBeInTheDocument()
-    expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toMatch(/^url\(/)
     expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toBe(
       screen.getByTestId('valuation-bar-Equity').getAttribute('data-fill'),
     )
+    expect(screen.getByTestId('valuation-line-Total value')).toHaveAttribute('data-dot', 'false')
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('1 Jan 2018')
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('£500,000')

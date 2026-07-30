@@ -10,12 +10,6 @@ type ChartLegendProps = {
   resolveStyle?: (series: AnalyticsSeriesDefinition) => ChartSeriesStyle
 }
 
-const markerClasses = {
-  circle: 'rounded-full',
-  square: 'rounded-none',
-  diamond: 'rotate-45 rounded-sm',
-} as const
-
 export function ChartLegend({ series, hiddenKeys, onToggle, resolveStyle }: ChartLegendProps) {
   return (
     <div aria-label="Chart series" className="flex flex-wrap gap-2" role="group">
@@ -35,8 +29,8 @@ export function ChartLegend({ series, hiddenKeys, onToggle, resolveStyle }: Char
             <span
               aria-hidden="true"
               data-testid={`legend-marker-${item.key}`}
-              data-marker={style.marker}
-              className={cn('size-2.5 shrink-0 border-2', markerClasses[style.marker], !visible && 'opacity-40')}
+              data-marker="swatch"
+              className={cn('size-2.5 shrink-0 rounded-none border-2', !visible && 'opacity-40')}
               style={{ backgroundColor: style.color, borderColor: style.color }}
             />
             <span className={cn(!visible && 'line-through')}>{item.label}</span>

@@ -8,15 +8,12 @@ export type AnalyticsSeriesDefinition = {
 export type ChartSeriesStyle = {
   color: string
   strokeWidth: number
-  marker: 'circle' | 'square' | 'diamond'
-  strokeDasharray?: string
 }
 
-const palette = {
-  blue: '#2563eb',
-  gold: '#b7791f',
-  slate: '#475569',
-} as const
+const colors = [
+  '#2563EB', '#D97706', '#059669', '#7C3AED', '#DC2626',
+  '#0891B2', '#C026D3', '#65A30D', '#475569',
+] as const
 
 export type SeriesVisualToken =
   | 'primary'
@@ -28,25 +25,19 @@ export type SeriesVisualToken =
   | 'septenary'
   | 'octonary'
   | 'nonary'
-  | 'default'
 
 export const chartVisualTokens: Record<SeriesVisualToken, ChartSeriesStyle> = {
-  primary: { color: palette.blue, strokeWidth: 2.5, marker: 'circle' },
-  secondary: { color: palette.gold, strokeWidth: 2.5, marker: 'square', strokeDasharray: '8 4' },
-  tertiary: { color: palette.slate, strokeWidth: 2.5, marker: 'diamond', strokeDasharray: '2 3' },
-  quaternary: { color: palette.blue, strokeWidth: 2.5, marker: 'square', strokeDasharray: '10 3 2 3' },
-  quinary: { color: palette.gold, strokeWidth: 2.5, marker: 'diamond', strokeDasharray: '4 3' },
-  senary: { color: palette.slate, strokeWidth: 2.5, marker: 'circle', strokeDasharray: '1 3' },
-  septenary: { color: palette.blue, strokeWidth: 2.5, marker: 'diamond', strokeDasharray: '12 3' },
-  octonary: { color: palette.gold, strokeWidth: 2.5, marker: 'circle', strokeDasharray: '6 2 1 2' },
-  nonary: { color: palette.slate, strokeWidth: 2.5, marker: 'square', strokeDasharray: '3 2 1 2' },
-  default: { color: palette.slate, strokeWidth: 2.5, marker: 'circle', strokeDasharray: '10 3 2 3' },
+  primary: { color: colors[0], strokeWidth: 2.5 },
+  secondary: { color: colors[1], strokeWidth: 2.5 },
+  tertiary: { color: colors[2], strokeWidth: 2.5 },
+  quaternary: { color: colors[3], strokeWidth: 2.5 },
+  quinary: { color: colors[4], strokeWidth: 2.5 },
+  senary: { color: colors[5], strokeWidth: 2.5 },
+  septenary: { color: colors[6], strokeWidth: 2.5 },
+  octonary: { color: colors[7], strokeWidth: 2.5 },
+  nonary: { color: colors[8], strokeWidth: 2.5 },
 }
 
 export function chartSeriesStyle(token?: string): ChartSeriesStyle {
-  return chartVisualTokens[token as SeriesVisualToken] ?? chartVisualTokens.default
-}
-
-export function chartPatternFill(prefix: string, token?: string): string {
-  return `url(#${prefix}-${token ?? 'default'})`
+  return chartVisualTokens[token as SeriesVisualToken] ?? chartVisualTokens.nonary
 }

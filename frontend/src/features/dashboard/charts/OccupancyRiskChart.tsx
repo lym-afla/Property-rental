@@ -49,7 +49,7 @@ export function OccupancyRiskChart(props: Props) {
               <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
               <YAxis domain={[0, 100]} allowDataOverflow unit="%" />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatRate(item.value as number) }))} /> : null} />
-              <Line type="stepAfter" dataKey="occupancy_rate" name="Occupancy rate" stroke={chartVisualTokens.primary.color} strokeWidth={2.5} dot />
+              <Line type="stepAfter" dataKey="occupancy_rate" name="Occupancy rate" stroke={chartVisualTokens.primary.color} strokeWidth={2.5} dot={false} />
             </LineChart>
           </ResponsiveContainer>
           <ul className="sr-only" aria-label="Occupancy risk values">{points.map((point) => <li key={point.period_start} data-testid={`occupancy-rate-${point.period_start}`} data-rate={point.occupancy_rate}>{formatDate(point.period_start)}: {formatRate(point.occupancy_rate as number | null)}, occupied {point.occupied}, vacant {point.vacant}, capacity {point.capacity}</li>)}</ul>

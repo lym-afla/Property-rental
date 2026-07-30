@@ -37,7 +37,7 @@ describe('NetCashFlowChart', () => {
 
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
-    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toMatch(/^url\(/)
     expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toBe(screen.getByRole('generic', { name: 'Utilities' }).getAttribute('data-fill'))
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$1,000')

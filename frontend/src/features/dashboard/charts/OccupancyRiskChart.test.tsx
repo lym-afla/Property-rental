@@ -8,6 +8,8 @@ import type { PortfolioOccupancyResponse } from '@/types/analytics'
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Line: ({ dot }: { dot?: boolean }) => <span data-testid="occupancy-line" data-dot={String(dot)} />,
 }))
 
 const data: PortfolioOccupancyResponse = {
@@ -53,5 +55,11 @@ describe('OccupancyRiskChart', () => {
     expect(screen.getByText('Vacant and capacity context is supplied by the occupancy endpoint.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Table' })).toHaveClass('min-h-11')
     vi.unstubAllGlobals()
+  })
+
+  it('renders the occupancy series without data-point dots', () => {
+    render(<OccupancyRiskChart data={data} />)
+
+    expect(screen.getByTestId('occupancy-line')).toHaveAttribute('data-dot', 'false')
   })
 })
