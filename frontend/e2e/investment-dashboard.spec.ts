@@ -115,6 +115,7 @@ test('loads a consistent route fallback before the dashboard chunk resolves', as
 test('restores every supported dashboard filter from a copied URL', async ({ page }, testInfo) => {
   await page.goto('/?section=risk&start=2024-01-01&end=2024-02-29&currency=EUR&grain=quarter&comparison=previous_period&property=1&property=2')
   await expect(page.getByRole('heading', { name: 'Risk analysis' })).toBeVisible()
+  await page.getByRole('button', { name: 'Show settings' }).click()
   await expect(page.getByLabel('Start date')).toHaveValue('2024-01-01')
   await expect(page.getByLabel('As of date')).toHaveValue('2024-02-29')
   await expect(page.getByLabel('Reporting currency')).toHaveText('EUR')
@@ -155,9 +156,51 @@ test('navigates to the filtered transaction drill-down', async ({ page }) => {
 test('supports mobile filter sheet at 390px', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'mobile-only control')
   await page.goto('/')
+  await page.getByRole('button', { name: 'Show settings' }).click()
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Dashboard filters' })).toBeVisible()
   await expect(page.getByLabel(properties[0].name)).toBeVisible()
+})
+
+test('keeps dashboard settings compact and touch-safe across viewports', async ({ page }, testInfo) => {
+  await page.goto('/')
+
+  const settingsToggle = page.getByRole('button', { name: 'Show settings' })
+  await expect(settingsToggle).toBeVisible()
+  await expect(settingsToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByLabel('Start date')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await settingsToggle.click()
+  await expect(page.getByRole('button', { name: 'Hide settings' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByLabel('Start date')).toBeVisible()
+
+  for (const control of [page.getByLabel('Start date'), page.getByLabel('As of date'), page.getByLabel('Reporting currency')]) {
+    const box = await control.boundingBox()
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
+  }
+
+  if (testInfo.project.name === 'mobile') {
+    const filters = page.getByRole('button', { name: 'Filters', exact: true })
+    expect((await filters.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await filters.click()
+    const propertiesLabel = page.getByText('Properties', { exact: true })
+    const property = page.getByLabel(properties[0].name)
+    await expect(propertiesLabel).toBeVisible()
+    await expect(property).toBeVisible()
+    expect((await propertiesLabel.boundingBox())?.y ?? 0).toBeLessThan((await property.boundingBox())?.y ?? 0)
+  } else {
+    const propertiesLabel = page.getByText('Properties', { exact: true })
+    const selector = page.getByRole('button', { name: 'Properties' })
+    await expect(propertiesLabel).toBeVisible()
+    await expect(selector).toBeVisible()
+    const labelBox = await propertiesLabel.boundingBox()
+    const selectorBox = await selector.boundingBox()
+    expect(labelBox?.y ?? 0).toBeLessThan(selectorBox?.y ?? 0)
+    expect((selectorBox?.height ?? 0)).toBeGreaterThanOrEqual(44)
+  }
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('shows recoverable loading, error, and empty analytics states', async ({ page }) => {

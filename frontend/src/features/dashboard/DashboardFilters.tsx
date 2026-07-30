@@ -51,6 +51,7 @@ const GRAINS: { value: DashboardGrain; label: string }[] = [
 
 export function DashboardFilters({ filters, properties, onChange, onReset }: Props) {
   const isDesktop = useDesktopFilterLayout()
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const update = (patch: Partial<DashboardFilterState>) =>
     onChange({ ...filters, ...patch })
 
@@ -66,8 +67,22 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
       className="sticky top-0 z-30 rounded-xl border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/85"
       aria-label="Global dashboard filters"
     >
-      <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end">
-        <label className="min-w-0 space-y-1 text-xs font-medium text-muted-foreground">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm text-muted-foreground">{filterSummary(filters)}</p>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0"
+          aria-expanded={settingsOpen}
+          aria-controls="dashboard-settings"
+          onClick={() => setSettingsOpen((open) => !open)}
+        >
+          {settingsOpen ? 'Hide settings' : 'Show settings'}
+        </Button>
+      </div>
+
+      {settingsOpen && <div id="dashboard-settings" className="mt-3 grid grid-cols-2 gap-3 md:flex md:flex-wrap md:items-end">
+        <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted-foreground">
           <span>From</span>
           <Input
             type="date"
@@ -78,7 +93,7 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
             className="min-h-11"
           />
         </label>
-        <label className="min-w-0 space-y-1 text-xs font-medium text-muted-foreground">
+        <label className="grid min-w-0 gap-1.5 text-xs font-medium text-muted-foreground">
           <span>As of</span>
           <Input
             type="date"
@@ -89,7 +104,7 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
             className="min-h-11"
           />
         </label>
-        <div className="space-y-1 text-xs font-medium text-muted-foreground">
+        <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
           <span>Currency</span>
           <Select
             value={filters.currency}
@@ -107,7 +122,7 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
         </div>
 
         {isDesktop ? (
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-3">
             <AdvancedSelects filters={filters} update={update} />
             <PropertyMenu
               filters={filters}
@@ -163,7 +178,7 @@ export function DashboardFilters({ filters, properties, onChange, onReset }: Pro
         >
           Reset
         </Button>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -199,7 +214,7 @@ function AdvancedSelects({
 }) {
   return (
     <>
-      <div className="space-y-1 text-xs font-medium text-muted-foreground">
+      <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
         <span>Frequency</span>
         <Select
           value={filters.grain}
@@ -232,11 +247,11 @@ function PropertyMenu({
     ? 'All properties'
     : `${filters.propertyIds.length} selected`
   return (
-    <div className="space-y-1 text-xs font-medium text-muted-foreground">
+    <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
       <span>Properties</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" className="min-h-11 min-w-36" aria-label="Properties">
+          <Button type="button" variant="outline" className="min-h-11 min-w-40" aria-label="Properties">
             {label}
           </Button>
         </DropdownMenuTrigger>
@@ -257,4 +272,21 @@ function PropertyMenu({
       </DropdownMenu>
     </div>
   )
+}
+
+function filterSummary(filters: DashboardFilterState) {
+  const date = (value: string) => {
+    const parsed = new Date(`${value}T00:00:00Z`)
+    if (Number.isNaN(parsed.valueOf())) return value
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(parsed)
+  }
+  const grain = GRAINS.find(({ value }) => value === filters.grain)?.label ?? filters.grain
+  const properties = filters.propertyIds.length === 0 ? 'All properties' : `${filters.propertyIds.length} selected`
+
+  return `${date(filters.start)}–${date(filters.end)} · ${filters.currency} · ${grain} · ${properties}`
 }
