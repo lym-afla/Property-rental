@@ -119,8 +119,16 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'rentals/static'),
 ]
 
-# Configure WhiteNoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Django 4.2 storage backend configuration.
+# WhiteNoise keeps serving compressed, hashed static assets in production.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

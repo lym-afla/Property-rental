@@ -22,6 +22,11 @@ DATABASES = {
     }
 }
 
+# Keep request tests and local development warning-free before collectstatic has
+# created STATIC_ROOT. Production settings intentionally keep WhiteNoise's
+# manifest/static-root behaviour.
+WHITENOISE_AUTOREFRESH = True
+
 # Task 6: in dev, django-vite serves assets from the Vite dev server
 # (:5173) and ignores the manifest. The dict is rebuilt here so
 # ``dev_mode`` overrides the prod-mode default in base.py.
