@@ -4,7 +4,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle, chartVisualTokens, type SeriesVisualToken } from '@/components/analytics/chartTheme'
+import { chartSeriesColor, chartSeriesStyle } from '@/components/analytics/chartTheme'
 import { PROPERTY_BREAKDOWN_MEASURES, type DashboardPropertyBreakdownMeasure } from '@/features/dashboard/filters'
 import { formatCurrency, formatCurrencyAxis, formatDate } from '@/lib/format'
 import type { PropertyBreakdownMeasure } from '@/types/analytics'
@@ -26,7 +26,6 @@ type Props = {
   onMeasureChange: (measure: DashboardPropertyBreakdownMeasure) => void
 }
 
-const VISUAL_TOKENS = Object.keys(chartVisualTokens) as SeriesVisualToken[]
 const MEASURE_LABELS: Record<DashboardPropertyBreakdownMeasure, string> = {
   property_value: 'Property value', equity: 'Equity', debt: 'Debt', rental_income: 'Rental income',
 }
@@ -46,10 +45,10 @@ export function PropertyPortfolioBreakdownChart(props: Props) {
   const { data, measure, onMeasureChange } = props
   const state = breakdownState(props)
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
-  const series = data?.series.map((item, index) => ({ ...item, visualToken: VISUAL_TOKENS[index % VISUAL_TOKENS.length] })) ?? []
+  const series = data?.series.map((item, index) => ({ ...item, color: chartSeriesColor(index) })) ?? []
   const visibleSeries = series.filter((item) => !hiddenKeys.has(item.key))
   const chartPoints = data?.points.map((point) => ({ ...point, period: timestamp(point.period_start) })) ?? []
-  const rows = data ? data.points.flatMap((point) => series.map((item) => ({
+  const rows = data ? data.points.flatMap((point) => series.filter((item) => Object.hasOwn(point, item.key)).map((item) => ({
     id: `${point.period_start}-${item.key}`,
     period: point.period_start,
     property: item.label,
@@ -65,7 +64,7 @@ export function PropertyPortfolioBreakdownChart(props: Props) {
       state={state}
       title="Portfolio breakdown by property"
       subtitle={data ? `${data.measure_label} by property in ${data.currency}.` : 'Reporting values grouped by property.'}
-      controls={<><label className="sr-only" htmlFor="property-breakdown-measure">Portfolio breakdown measure</label><select id="property-breakdown-measure" aria-label="Portfolio breakdown measure" className="min-h-11 rounded-md border bg-background px-3 text-sm focus-visible:ring-3" value={measure} onChange={(event) => onMeasureChange(event.target.value as DashboardPropertyBreakdownMeasure)}>{PROPERTY_BREAKDOWN_MEASURES.map((option) => <option key={option} value={option}>{MEASURE_LABELS[option]}</option>)}</select>{state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })} />}</>}
+      controls={<><label className="sr-only" htmlFor="property-breakdown-measure">Portfolio breakdown measure</label><select id="property-breakdown-measure" aria-label="Portfolio breakdown measure" className="min-h-11 rounded-md border bg-background px-3 text-sm focus-visible:ring-3" value={measure} onChange={(event) => onMeasureChange(event.target.value as DashboardPropertyBreakdownMeasure)}>{PROPERTY_BREAKDOWN_MEASURES.map((option) => <option key={option} value={option}>{MEASURE_LABELS[option]}</option>)}</select>{state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })} resolveStyle={(item) => ({ ...chartSeriesStyle(), color: series.find((candidate) => candidate.key === item.key)?.color ?? chartSeriesStyle().color })} />}</>}
       table={state.status === 'success' ? table : undefined}
     >
       {state.status === 'success' && data && (
@@ -77,7 +76,7 @@ export function PropertyPortfolioBreakdownChart(props: Props) {
                 <XAxis dataKey="period" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(value) => formatDate(new Date(Number(value)))} />
                 <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} width={72} />
                 <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(new Date(Number(label)))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
-                {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} connectNulls={false} />)}
+                {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={chartSeriesStyle().strokeWidth} dot={false} activeDot={false} connectNulls={false} />)}
               </LineChart>
             </ResponsiveContainer>
           </div>

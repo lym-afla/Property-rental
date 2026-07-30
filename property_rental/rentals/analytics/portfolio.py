@@ -465,38 +465,60 @@ def _rental_income_by_property(properties, filters):
     return values
 
 
-def _property_breakdown_capital_value(property_, period_start, as_of, measure, currency):
-    native_currency = _native_currency(property_, currency)
-    if native_currency is None:
-        return None, "missing_currency"
-
+def _property_breakdown_capital_values(properties, periods, filters, measure):
     fields = {
         "property_value": ("capital_structure_value",),
         "debt": ("capital_structure_debt",),
         "equity": ("capital_structure_value", "capital_structure_debt"),
     }[measure]
-    rows = tuple(_latest_capital(property_, field, as_of) for field in fields)
-    if any(row is None for row in rows):
-        return None, "missing_valuation"
-
-    converted = _convert_snapshots(
-        tuple(
-            (
-                getattr(row, field),
-                native_currency,
-                row.capital_structure_date,
+    snapshots = []
+    positions = []
+    values = {}
+    statuses = {}
+    for period_index, (period_start, period_end) in enumerate(periods):
+        as_of = min(period_end, filters.end)
+        for property_ in properties:
+            if property_.sold is not None and property_.sold <= as_of:
+                continue
+            position = (period_index, property_.id)
+            native_currency = _native_currency(property_, filters.currency)
+            if native_currency is None:
+                values[position] = None
+                statuses[position] = "missing_currency"
+                continue
+            rows = tuple(_latest_capital(property_, field, as_of) for field in fields)
+            if any(row is None for row in rows):
+                values[position] = None
+                statuses[position] = "missing_valuation"
+                continue
+            statuses[position] = (
+                "stale_valuation"
+                if any(row.capital_structure_date < period_start for row in rows)
+                else "ok"
             )
-            for field, row in zip(fields, rows, strict=True)
-        ),
-        currency,
+            for field, row in zip(fields, rows, strict=True):
+                snapshots.append(
+                    (
+                        getattr(row, field),
+                        native_currency,
+                        row.capital_structure_date,
+                    )
+                )
+                positions.append(position)
+
+    converted_components = defaultdict(list)
+    converted = (
+        _convert_snapshots(tuple(snapshots), filters.currency) if snapshots else ()
     )
-    value = converted[0] if measure != "equity" else converted[0] - converted[1]
-    status = (
-        "stale_valuation"
-        if any(row.capital_structure_date < period_start for row in rows)
-        else "ok"
-    )
-    return value, status
+    for position, value in zip(positions, converted, strict=True):
+        converted_components[position].append(value)
+    for position, components in converted_components.items():
+        values[position] = (
+            components[0]
+            if measure != "equity"
+            else components[0] - components[1]
+        )
+    return values, statuses
 
 
 def property_breakdown(user, filters, measure="property_value"):
@@ -518,7 +540,11 @@ def property_breakdown(user, filters, measure="property_value"):
     coverage = []
     if measure == "rental_income":
         income = _rental_income_by_property(visible_properties, filters)
-    for period_start, period_end in periods:
+    else:
+        capital_values, capital_statuses = _property_breakdown_capital_values(
+            visible_properties, periods, filters, measure
+        )
+    for period_index, (period_start, period_end) in enumerate(periods):
         as_of = min(period_end, filters.end)
         point = {"period_start": period_start, "period_end": period_end}
         for property_ in visible_properties:
@@ -528,16 +554,14 @@ def property_breakdown(user, filters, measure="property_value"):
             if measure == "rental_income":
                 point[key] = income[(period_start, property_.id)]
                 continue
-            value, status = _property_breakdown_capital_value(
-                property_, period_start, as_of, measure, filters.currency
-            )
-            point[key] = value
+            position = (period_index, property_.id)
+            point[key] = capital_values[position]
             coverage.append(
                 PropertyBreakdownCoverage(
                     period_start=period_start,
                     period_end=period_end,
                     property_id=property_.id,
-                    status=status,
+                    status=capital_statuses[position],
                 )
             )
         points.append(point)

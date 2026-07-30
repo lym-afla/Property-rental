@@ -435,6 +435,39 @@ def test_property_breakdown_keeps_missing_valuation_distinct_from_zero(
 
 
 @pytest.mark.django_db
+def test_property_breakdown_preloads_capital_fx_once_for_all_properties_and_periods(
+    landlord_user, sample_property, monkeypatch
+):
+    """Per-property/per-period converter construction would multiply FX queries."""
+    import rentals.analytics.portfolio as portfolio
+
+    second = PropertyFactory(owned_by=landlord_user.landlord)
+    for property_ in (sample_property, second):
+        PropertyCapitalStructureFactory(
+            property=property_,
+            capital_structure_date=date(2026, 1, 1),
+            capital_structure_value=Decimal("100000.00"),
+        )
+    original = portfolio.preload_converter
+    calls = []
+
+    def tracking_preload(rows, reporting_currency):
+        calls.append(tuple(rows))
+        return original(rows, reporting_currency)
+
+    monkeypatch.setattr(portfolio, "preload_converter", tracking_preload)
+
+    portfolio.property_breakdown(
+        landlord_user,
+        filters_for("2026-01-01", "2026-03-31"),
+        measure="property_value",
+    )
+
+    assert len(calls) == 1
+    assert len(calls[0]) == 6
+
+
+@pytest.mark.django_db
 def test_property_breakdown_buckets_rental_income_and_hides_sold_property(
     landlord_user, sample_property
 ):
