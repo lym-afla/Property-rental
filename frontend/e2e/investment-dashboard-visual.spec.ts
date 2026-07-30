@@ -95,6 +95,12 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   expect(await profitLossScroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
   await profitLossScroller.evaluate((element) => { element.scrollLeft = element.scrollWidth })
   await expect.poll(async () => profitLossScroller.evaluate((element) => element.scrollLeft > 0)).toBe(true)
+  const categoryHeader = profitLossCard.getByRole('columnheader', { name: 'Category' })
+  const latestYearHeader = profitLossCard.getByRole('columnheader', { name: '2024' })
+  await expect.poll(async () => {
+    const [categoryBox, latestYearBox] = await Promise.all([categoryHeader.boundingBox(), latestYearHeader.boundingBox()])
+    return categoryBox !== null && latestYearBox !== null && latestYearBox.x >= categoryBox.x + categoryBox.width
+  }).toBe(true)
   await expect(profitLossCard).toHaveScreenshot('investment-dashboard-profit-loss-latest.png', { animations: 'disabled' })
 
   await page.goto('/properties/1')

@@ -19,11 +19,11 @@ export function ProfitLossTable({ data }: ProfitLossTableProps) {
     <Table aria-label="Profit and Loss statement" className="min-w-max">
       <TableHeader>
         <TableRow>
-          <TableHead className="sticky left-0 z-20 min-w-44 bg-card">
+          <TableHead className="sticky left-0 z-20 min-w-32 bg-card sm:min-w-44">
             Category
           </TableHead>
           {data.columns.map((column) => (
-            <TableHead key={column.key} className="min-w-28 text-right">
+            <TableHead key={column.key} className="min-w-24 text-right sm:min-w-28">
               {column.label}
             </TableHead>
           ))}
