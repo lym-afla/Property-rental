@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import { server } from '@/test/handlers'
 import {
-  currencyExposureSchema,
+  propertyBreakdownSchema,
   isoDateSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
@@ -20,7 +20,7 @@ import {
   timeSeriesSchema,
 } from '@/types/analytics'
 import {
-  useCurrencyExposure,
+  usePropertyBreakdown,
   useExpenseDrivers,
   usePortfolioCashFlow,
   usePortfolioOccupancy,
@@ -170,35 +170,33 @@ const yieldsFixture = {
   ],
 }
 
-const exposureFixture = {
+const breakdownFixture = {
   ...cashFlowFixture,
-  metric: 'currency_exposure',
+  metric: 'property_breakdown',
   measure: 'property_value',
   measure_label: 'Property value',
   series: [
-    { key: 'GBP', label: 'GBP', kind: 'native_currency' },
+    { key: 'property_1', label: 'Alpha', kind: 'property' },
     {
-      key: 'missing_currency',
-      label: 'Missing native currency',
-      kind: 'native_currency',
+      key: 'property_3',
+      label: 'Gamma',
+      kind: 'property',
     },
   ],
   points: [
     {
       period_start: '2026-01-01',
       period_end: '2026-01-31',
-      GBP: 500000,
-      missing_currency: null,
+      property_1: 500000,
+      property_3: null,
     },
   ],
   coverage: [
     {
       period_start: '2026-01-01',
       period_end: '2026-01-31',
-      currency: null,
+      property_id: 3,
       status: 'missing_currency',
-      missing_count: 1,
-      stale_count: 0,
     },
   ],
 }
@@ -431,12 +429,12 @@ describe('analytics runtime schemas', () => {
 
   it('preserves null financial values and all issue arrays', () => {
     const summary = portfolioSummarySchema.parse(summaryFixture)
-    const exposure = currencyExposureSchema.parse(exposureFixture)
+    const breakdown = propertyBreakdownSchema.parse(breakdownFixture)
     const valuation = propertyValuationSchema.parse(valuationFixture)
     const tenant = tenantRentPerformanceSchema.parse(tenantFixture)
 
     expect(summary.debt).toBeNull()
-    expect(exposure.points[0].missing_currency).toBeNull()
+    expect(breakdown.points[0].property_3).toBeNull()
     expect(valuation.points[0].debt).toBeNull()
     expect(tenant.opening_issues).toEqual([
       'missing_rent_rate',
@@ -506,7 +504,7 @@ describe('analytics runtime schemas', () => {
       }),
     ).toThrow()
     expect(() =>
-      currencyExposureSchema.parse({ ...exposureFixture, measure_label: '' }),
+      propertyBreakdownSchema.parse({ ...breakdownFixture, measure_label: '' }),
     ).toThrow()
     expect(() =>
       propertyYieldsSchema.parse({
@@ -549,14 +547,14 @@ describe('analytics query keys', () => {
     }
   })
 
-  it('keys exposure measure and entity-specific filters', () => {
+  it('keys property breakdown measure and entity-specific filters', () => {
     expect(
-      queryKeys.analytics.portfolio.currencyExposure({
+      queryKeys.analytics.portfolio.propertyBreakdown({
         ...filters,
         measure: 'property_value',
       }),
     ).not.toEqual(
-      queryKeys.analytics.portfolio.currencyExposure({
+      queryKeys.analytics.portfolio.propertyBreakdown({
         ...filters,
         measure: 'debt',
       }),
@@ -588,8 +586,8 @@ describe('analytics hooks', () => {
       http.get('/api/v1/analytics/portfolio/yields/', () =>
         HttpResponse.json(yieldsFixture),
       ),
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', () =>
-        HttpResponse.json(exposureFixture),
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', () =>
+        HttpResponse.json(breakdownFixture),
       ),
       http.get('/api/v1/analytics/portfolio/occupancy/', () =>
         HttpResponse.json(occupancyFixture),
@@ -611,7 +609,7 @@ describe('analytics hooks', () => {
       () => useExpenseDrivers(filters),
       () => usePropertyContribution(filters),
       () => usePropertyYields(filters),
-      () => useCurrencyExposure({ ...filters, measure: 'property_value' }),
+      () => usePropertyBreakdown({ ...filters, measure: 'property_value' }),
       () => usePortfolioOccupancy(filters),
       () => useProfitLoss({ end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }),
       () => usePropertyValuationAnalytics(7, '2026-07-29'),
@@ -659,17 +657,17 @@ describe('analytics hooks', () => {
     expect(receivedSearch).toBe('end=2026-07-29&currency=GBP&property=1&property=3')
   })
 
-  it('sends normalized repeated property filters and exposure measure', async () => {
+  it('sends normalized repeated property filters and breakdown measure', async () => {
     let receivedSearch = ''
     server.use(
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', ({ request }) => {
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', ({ request }) => {
         receivedSearch = new URL(request.url).searchParams.toString()
-        return HttpResponse.json(exposureFixture)
+        return HttpResponse.json(breakdownFixture)
       }),
     )
 
     const { result } = renderHook(
-      () => useCurrencyExposure({ ...filters, measure: 'property_value' }),
+      () => usePropertyBreakdown({ ...filters, measure: 'property_value' }),
       { wrapper: makeWrapper() },
     )
     await waitFor(() => expect(result.current.isSuccess).toBe(true))

@@ -1,4 +1,4 @@
-"""User-scoped portfolio summary, yield, exposure, and occupancy analytics."""
+"""User-scoped portfolio summary, yield, breakdown, and occupancy analytics."""
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -13,8 +13,9 @@ from rentals.models import Property, Property_capital_structure, Tenant, Transac
 from rentals.services.fx import preload_converter
 
 
-EXPOSURE_MEASURES = {
+PROPERTY_BREAKDOWN_MEASURES = {
     "property_value": "Property value",
+    "equity": "Equity",
     "debt": "Debt",
     "rental_income": "Rental income",
 }
@@ -88,7 +89,7 @@ class YieldResponse:
 
 
 @dataclass(frozen=True)
-class CurrencyExposureResponse:
+class PropertyBreakdownResponse:
     metric: str
     measure: str
     measure_label: str
@@ -99,17 +100,15 @@ class CurrencyExposureResponse:
     end: date
     series: tuple[SeriesDefinition, ...]
     points: tuple[dict[str, object], ...]
-    coverage: tuple["ExposureCoverage", ...]
+    coverage: tuple["PropertyBreakdownCoverage", ...]
 
 
 @dataclass(frozen=True)
-class ExposureCoverage:
+class PropertyBreakdownCoverage:
     period_start: date
     period_end: date
-    currency: str | None
+    property_id: int
     status: str
-    missing_count: int
-    stale_count: int
 
 
 @dataclass(frozen=True)
@@ -152,10 +151,6 @@ def _scoped_properties(user, filters):
 
 def _native_currency(property_, reporting_currency):
     return property_.currency.upper() if property_.currency else None
-
-
-def _currency_key(currency):
-    return currency if currency is not None else "missing_currency"
 
 
 def _transaction_totals(properties, reporting_currency):
@@ -444,107 +439,7 @@ def portfolio_occupancy(user, filters):
     )
 
 
-def _valuation_exposure(properties, filters, periods, measure):
-    field = {
-        "property_value": "capital_structure_value",
-        "debt": "capital_structure_debt",
-    }[measure]
-    snapshots = []
-    positions = []
-    coverage = []
-    active_counts = {}
-    for period_index, (period_start, period_end) in enumerate(periods):
-        as_of = min(period_end, filters.end)
-        active = [
-            property_
-            for property_ in properties
-            if property_.sold is None or property_.sold > as_of
-        ]
-        currencies = sorted(
-            {_native_currency(property_, filters.currency) for property_ in properties},
-            key=lambda currency: (currency is None, currency or ""),
-        )
-        for currency in currencies:
-            currency_properties = [
-                property_
-                for property_ in active
-                if _native_currency(property_, filters.currency) == currency
-            ]
-            capital_rows = [
-                _latest_capital(property_, field, as_of)
-                for property_ in currency_properties
-            ]
-            present = [row for row in capital_rows if row is not None]
-            missing_count = len(capital_rows) - len(present)
-            stale_count = sum(
-                row.capital_structure_date < period_start for row in present
-            )
-            if not currency_properties:
-                status = "no_exposure"
-            elif currency is None:
-                status = "missing_currency"
-            elif not present:
-                status = "missing_valuation"
-            elif missing_count and stale_count:
-                status = "partial_stale_valuation"
-            elif missing_count:
-                status = "partial_valuation"
-            elif stale_count:
-                status = "stale_valuation"
-            else:
-                status = "ok"
-            coverage.append(
-                ExposureCoverage(
-                    period_start,
-                    period_end,
-                    currency,
-                    status,
-                    missing_count=(
-                        len(currency_properties)
-                        if currency is None
-                        else missing_count
-                    ),
-                    stale_count=stale_count,
-                )
-            )
-            active_counts[(period_index, currency)] = len(currency_properties)
-        for property_ in active:
-            native_currency = _native_currency(property_, filters.currency)
-            if native_currency is None:
-                continue
-            capital = _latest_capital(property_, field, as_of)
-            if capital is None:
-                continue
-            snapshots.append(
-                (
-                    getattr(capital, field),
-                    native_currency,
-                    as_of,
-                )
-            )
-            positions.append(
-                (period_index, native_currency)
-            )
-    converted = _convert_snapshots(snapshots, filters.currency)
-    values = defaultdict(float)
-    for position, value in zip(positions, converted, strict=True):
-        values[position] += value
-    for position, property_count in active_counts.items():
-        if position[1] is None and property_count:
-            values[position] = None
-        elif property_count and not any(
-            item[0] == position[0] and item[1] == position[1]
-            for item in positions
-        ):
-            values[position] = None
-    return values, tuple(coverage)
-
-
-def _rental_income_exposure(properties, filters):
-    native_currencies = {
-        property_.id: _native_currency(property_, filters.currency)
-        for property_ in properties
-    }
+def _rental_income_by_property(properties, filters):
     transactions = tuple(
         transaction
         for property_ in properties
@@ -557,7 +452,7 @@ def _rental_income_exposure(properties, filters):
         values[
             (
                 _period_start(transaction.date, filters.grain),
-                native_currencies[transaction.property_id],
+                transaction.property_id,
             )
         ] += float(
             converter.convert(
@@ -570,38 +465,86 @@ def _rental_income_exposure(properties, filters):
     return values
 
 
-def currency_exposure(user, filters, measure="property_value"):
-    """Return the selected measure grouped by native property currency."""
-    if measure not in EXPOSURE_MEASURES:
-        raise ValueError(f"Unsupported currency exposure measure: {measure}")
+def _property_breakdown_capital_value(property_, period_start, as_of, measure, currency):
+    native_currency = _native_currency(property_, currency)
+    if native_currency is None:
+        return None, "missing_currency"
+
+    fields = {
+        "property_value": ("capital_structure_value",),
+        "debt": ("capital_structure_debt",),
+        "equity": ("capital_structure_value", "capital_structure_debt"),
+    }[measure]
+    rows = tuple(_latest_capital(property_, field, as_of) for field in fields)
+    if any(row is None for row in rows):
+        return None, "missing_valuation"
+
+    converted = _convert_snapshots(
+        tuple(
+            (
+                getattr(row, field),
+                native_currency,
+                row.capital_structure_date,
+            )
+            for field, row in zip(fields, rows, strict=True)
+        ),
+        currency,
+    )
+    value = converted[0] if measure != "equity" else converted[0] - converted[1]
+    status = (
+        "stale_valuation"
+        if any(row.capital_structure_date < period_start for row in rows)
+        else "ok"
+    )
+    return value, status
+
+
+def property_breakdown(user, filters, measure="property_value"):
+    """Return the selected measure grouped by stable property identifiers."""
+    if measure not in PROPERTY_BREAKDOWN_MEASURES:
+        raise ValueError(f"Unsupported property breakdown measure: {measure}")
     properties = _scoped_properties(user, filters)
     periods = _calendar_periods(filters)
-    currencies = tuple(
-        sorted(
-            {_native_currency(property_, filters.currency) for property_ in properties},
-            key=lambda currency: (currency is None, currency or ""),
+    visible_properties = tuple(
+        property_
+        for property_ in properties
+        if any(
+            property_.sold is None
+            or property_.sold > min(period_end, filters.end)
+            for _, period_end in periods
         )
     )
     points = []
+    coverage = []
     if measure == "rental_income":
-        values = _rental_income_exposure(properties, filters)
-        coverage = ()
-    else:
-        values, coverage = _valuation_exposure(properties, filters, periods, measure)
-    for period_index, (period_start, period_end) in enumerate(periods):
+        income = _rental_income_by_property(visible_properties, filters)
+    for period_start, period_end in periods:
+        as_of = min(period_end, filters.end)
         point = {"period_start": period_start, "period_end": period_end}
-        for currency in currencies:
-            key = (
-                (period_start, currency)
-                if measure == "rental_income"
-                else (period_index, currency)
+        for property_ in visible_properties:
+            if property_.sold is not None and property_.sold <= as_of:
+                continue
+            key = f"property_{property_.id}"
+            if measure == "rental_income":
+                point[key] = income[(period_start, property_.id)]
+                continue
+            value, status = _property_breakdown_capital_value(
+                property_, period_start, as_of, measure, filters.currency
             )
-            point[_currency_key(currency)] = values[key]
+            point[key] = value
+            coverage.append(
+                PropertyBreakdownCoverage(
+                    period_start=period_start,
+                    period_end=period_end,
+                    property_id=property_.id,
+                    status=status,
+                )
+            )
         points.append(point)
-    return CurrencyExposureResponse(
-        metric="currency_exposure",
+    return PropertyBreakdownResponse(
+        metric="property_breakdown",
         measure=measure,
-        measure_label=EXPOSURE_MEASURES[measure],
+        measure_label=PROPERTY_BREAKDOWN_MEASURES[measure],
         grain=filters.grain.value,
         currency=filters.currency,
         scale=1,
@@ -609,14 +552,14 @@ def currency_exposure(user, filters, measure="property_value"):
         end=filters.end,
         series=tuple(
             SeriesDefinition(
-                _currency_key(currency),
-                currency or "Missing native currency",
-                "native_currency",
+                f"property_{property_.id}",
+                property_.name,
+                "property",
             )
-            for currency in currencies
+            for property_ in visible_properties
         ),
         points=tuple(points),
-        coverage=coverage,
+        coverage=tuple(coverage),
     )
 
 

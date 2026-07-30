@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, subYears } from 'date-fns'
 
-import { useCurrencyExposure, useExpenseDrivers, usePortfolioCashFlow, usePortfolioOccupancy, usePortfolioSummary, useProfitLoss, usePropertyContribution, usePropertyYields } from '@/api/analytics'
+import { useExpenseDrivers, usePortfolioCashFlow, usePortfolioOccupancy, usePortfolioSummary, useProfitLoss, usePropertyBreakdown, usePropertyContribution, usePropertyYields } from '@/api/analytics'
 import { useProperties } from '@/api/properties'
 import { ProfitLossTable } from '@/components/analytics/ProfitLossTable'
 import { KpiCard } from '@/components/dashboard/KpiCard'
@@ -11,10 +11,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardLayout } from '@/features/dashboard/DashboardLayout'
 import { CumulativeCashChart } from '@/features/dashboard/charts/CumulativeCashChart'
-import { CurrencyExposureChart } from '@/features/dashboard/charts/CurrencyExposureChart'
 import { ExpenseDriversChart } from '@/features/dashboard/charts/ExpenseDriversChart'
 import { NetCashFlowChart } from '@/features/dashboard/charts/NetCashFlowChart'
 import { OccupancyRiskChart } from '@/features/dashboard/charts/OccupancyRiskChart'
+import { PropertyPortfolioBreakdownChart } from '@/features/dashboard/charts/PropertyPortfolioBreakdownChart'
 import { PropertyContributionChart } from '@/features/dashboard/charts/PropertyContributionChart'
 import { RevenueExpenseTrendChart } from '@/features/dashboard/charts/RevenueExpenseTrendChart'
 import { YieldComparisonChart } from '@/features/dashboard/charts/YieldComparisonChart'
@@ -64,7 +64,7 @@ function dashboardDefaults(user: User | null): DashboardFilterState {
     currency,
     grain,
     propertyIds: [],
-    exposureMeasure: 'property_value',
+    propertyBreakdownMeasure: 'property_value',
   }
 }
 
@@ -164,13 +164,13 @@ function PortfolioSection({ filters, onFiltersChange }: { filters: DashboardFilt
   const params = analyticsParams(filters)
   const contributionQuery = usePropertyContribution(params)
   const yieldsQuery = usePropertyYields(params)
-  const exposureQuery = useCurrencyExposure({ ...params, measure: filters.exposureMeasure })
+  const breakdownQuery = usePropertyBreakdown({ ...params, measure: filters.propertyBreakdownMeasure })
   return <div className="space-y-4">
     <div className="grid gap-4 lg:grid-cols-2">
       <PropertyContributionChart data={contributionQuery.data} isLoading={contributionQuery.isLoading} isError={contributionQuery.isError} onRetry={() => { void contributionQuery.refetch() }} />
       <YieldComparisonChart data={yieldsQuery.data} isLoading={yieldsQuery.isLoading} isError={yieldsQuery.isError} onRetry={() => { void yieldsQuery.refetch() }} />
     </div>
-    <CurrencyExposureChart data={exposureQuery.data} isLoading={exposureQuery.isLoading} isError={exposureQuery.isError} onRetry={() => { void exposureQuery.refetch() }} measure={filters.exposureMeasure} onMeasureChange={(exposureMeasure) => onFiltersChange({ ...filters, exposureMeasure })} />
+    <PropertyPortfolioBreakdownChart data={breakdownQuery.data} isLoading={breakdownQuery.isLoading} isError={breakdownQuery.isError} onRetry={() => { void breakdownQuery.refetch() }} measure={filters.propertyBreakdownMeasure} onMeasureChange={(propertyBreakdownMeasure) => onFiltersChange({ ...filters, propertyBreakdownMeasure })} />
   </div>
 }
 

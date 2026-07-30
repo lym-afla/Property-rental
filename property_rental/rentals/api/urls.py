@@ -36,9 +36,9 @@ from .auth import (
 from .analytics_views import (
     PortfolioCashFlowView,
     PortfolioContributionView,
-    PortfolioCurrencyExposureView,
     PortfolioExpenseDriversView,
     PortfolioOccupancyView,
+    PortfolioPropertyBreakdownView,
     PortfolioProfitLossView,
     PortfolioSummaryView,
     PortfolioYieldsView,
@@ -92,8 +92,8 @@ urlpatterns = [
     ),
     path("analytics/portfolio/yields/", PortfolioYieldsView.as_view()),
     path(
-        "analytics/portfolio/currency-exposure/",
-        PortfolioCurrencyExposureView.as_view(),
+        "analytics/portfolio/property-breakdown/",
+        PortfolioPropertyBreakdownView.as_view(),
     ),
     path("analytics/portfolio/occupancy/", PortfolioOccupancyView.as_view()),
     path(

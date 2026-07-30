@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 
 import {
-  currencyExposureSchema,
   expenseDriversSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
   profitLossSchema,
   portfolioSummarySchema,
+  propertyBreakdownSchema,
   propertyContributionSchema,
   propertyValuationSchema,
   propertyYieldsSchema,
   tenantRentPerformanceSchema,
-  type CurrencyExposureParams,
+  type PropertyBreakdownParams,
   type PortfolioAnalyticsParams,
   type ProfitLossParams,
   type TenantRentPerformanceParams,
@@ -114,15 +114,15 @@ export function usePropertyYields(params: PortfolioAnalyticsParams) {
   })
 }
 
-export function useCurrencyExposure(params: CurrencyExposureParams) {
+export function usePropertyBreakdown(params: PropertyBreakdownParams) {
   return useQuery({
-    queryKey: queryKeys.analytics.portfolio.currencyExposure(params),
+    queryKey: queryKeys.analytics.portfolio.propertyBreakdown(params),
     queryFn: () =>
       fetchValidated(
-        analyticsUrl('/analytics/portfolio/currency-exposure/', params, {
+        analyticsUrl('/analytics/portfolio/property-breakdown/', params, {
           measure: params.measure,
         }),
-        currencyExposureSchema,
+        propertyBreakdownSchema,
       ),
   })
 }

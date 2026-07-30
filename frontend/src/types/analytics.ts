@@ -14,14 +14,15 @@ export const isoDateSchema = z.string().refine(isCalendarDate, {
 })
 export const analyticsGrainSchema = z.enum(['month', 'quarter', 'year'])
 export const analyticsCurrencySchema = z.string().regex(/^[A-Z]{3}$/)
-export const exposureMeasureSchema = z.enum([
+export const propertyBreakdownMeasureSchema = z.enum([
   'property_value',
+  'equity',
   'debt',
   'rental_income',
 ])
 
 export type AnalyticsGrain = z.infer<typeof analyticsGrainSchema>
-export type ExposureMeasure = z.infer<typeof exposureMeasureSchema>
+export type PropertyBreakdownMeasure = z.infer<typeof propertyBreakdownMeasureSchema>
 export type PortfolioAnalyticsParams = {
   start?: string
   end?: string
@@ -34,8 +35,8 @@ export type ProfitLossParams = Pick<
   PortfolioAnalyticsParams,
   'end' | 'currency' | 'propertyIds'
 > & { end: string; currency: string }
-export type CurrencyExposureParams = PortfolioAnalyticsParams & {
-  measure: ExposureMeasure
+export type PropertyBreakdownParams = PortfolioAnalyticsParams & {
+  measure: PropertyBreakdownMeasure
 }
 export type TenantRentPerformanceParams = Pick<
   PortfolioAnalyticsParams,
@@ -212,6 +213,7 @@ type TimeSeriesValidationValue = {
 function validateTimeSeries(
   value: TimeSeriesValidationValue,
   context: z.core.$RefinementCtx<unknown>,
+  requireAllSeriesKeys = true,
 ): void {
   if (value.end < value.start) {
     context.addIssue({
@@ -261,7 +263,7 @@ function validateTimeSeries(
       }
     }
     for (const key of keys) {
-      if (!Object.hasOwn(point, key)) {
+      if (requireAllSeriesKeys && !Object.hasOwn(point, key)) {
         context.addIssue({
           code: 'custom',
           path: ['points', pointIndex, key],
@@ -447,22 +449,17 @@ export const propertyYieldsSchema = z
     message: 'end must be on or after start',
   })
 
-const exposureCoverageSchema = z
+const propertyBreakdownCoverageSchema = z
   .object({
     period_start: isoDateSchema,
     period_end: isoDateSchema,
-    currency: analyticsCurrencySchema.nullable(),
+    property_id: z.number().int().positive(),
     status: z.enum([
       'ok',
       'stale_valuation',
-      'partial_valuation',
-      'partial_stale_valuation',
       'missing_valuation',
       'missing_currency',
-      'no_exposure',
     ]),
-    missing_count: z.number().int().nonnegative(),
-    stale_count: z.number().int().nonnegative(),
   })
   .strict()
   .refine((value) => value.period_end >= value.period_start, {
@@ -470,13 +467,16 @@ const exposureCoverageSchema = z
     message: 'period_end must be on or after period_start',
   })
 
-export const currencyExposureSchema = makeTimeSeriesSchema({
-  metric: z.literal('currency_exposure'),
+export const propertyBreakdownSchema = z.object({
+  ...timeSeriesBaseShape,
+  metric: z.literal('property_breakdown'),
   currency: analyticsCurrencySchema,
-  measure: exposureMeasureSchema,
+  measure: propertyBreakdownMeasureSchema,
   measure_label: z.string().trim().min(1),
-  coverage: z.array(exposureCoverageSchema),
-})
+  coverage: z.array(propertyBreakdownCoverageSchema),
+}).strict().superRefine((value, context) =>
+  validateTimeSeries(value as TimeSeriesValidationValue, context, false),
+)
 
 const propertyValuationPointSchema = z
   .object({
@@ -649,7 +649,7 @@ export type PropertyContributionResponse = z.infer<
   typeof propertyContributionSchema
 >
 export type PropertyYieldsResponse = z.infer<typeof propertyYieldsSchema>
-export type CurrencyExposureResponse = z.infer<typeof currencyExposureSchema>
+export type PropertyBreakdownResponse = z.infer<typeof propertyBreakdownSchema>
 export type PropertyValuationAnalyticsResponse = z.infer<
   typeof propertyValuationSchema
 >

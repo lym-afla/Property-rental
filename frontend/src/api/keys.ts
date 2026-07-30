@@ -29,8 +29,8 @@ type AnalyticsFilters = {
   propertyIds?: readonly number[]
 }
 
-type CurrencyExposureFilters = AnalyticsFilters & {
-  measure: 'property_value' | 'debt' | 'rental_income'
+type PropertyBreakdownFilters = AnalyticsFilters & {
+  measure: 'property_value' | 'equity' | 'debt' | 'rental_income'
 }
 
 function normalizePropertyIds(propertyIds: readonly number[] = []): number[] {
@@ -153,11 +153,11 @@ export const queryKeys = {
           'yields',
           normalizeAnalyticsFilters(filters),
         ] as const,
-      currencyExposure: (filters: CurrencyExposureFilters) =>
+      propertyBreakdown: (filters: PropertyBreakdownFilters) =>
         [
           'analytics',
           'portfolio',
-          'currency-exposure',
+          'property-breakdown',
           { ...normalizeAnalyticsFilters(filters), measure: filters.measure },
         ] as const,
       occupancy: (filters: AnalyticsFilters) =>
@@ -193,4 +193,4 @@ export const queryKeys = {
 }
 
 export { normalizePropertyIds }
-export type { AnalyticsFilters, CurrencyExposureFilters, TransactionFilters }
+export type { AnalyticsFilters, PropertyBreakdownFilters, TransactionFilters }

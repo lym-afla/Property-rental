@@ -264,32 +264,27 @@ class YieldResponseSerializer(StrictSerializer):
     rows = YieldRowSerializer(many=True)
 
 
-class ExposureCoverageSerializer(StrictSerializer):
+class PropertyBreakdownCoverageSerializer(StrictSerializer):
     period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
-    currency = serializers.RegexField(r"^[A-Z]{3}$", allow_null=True)
+    property_id = serializers.IntegerField(min_value=1)
     status = serializers.ChoiceField(
         choices=[
             "ok",
             "stale_valuation",
-            "partial_valuation",
-            "partial_stale_valuation",
             "missing_valuation",
             "missing_currency",
-            "no_exposure",
         ]
     )
-    missing_count = serializers.IntegerField(min_value=0)
-    stale_count = serializers.IntegerField(min_value=0)
 
 
-class CurrencyExposureResponseSerializer(TimeSeriesResponseSerializer):
-    metric = serializers.ChoiceField(choices=["currency_exposure"])
+class PropertyBreakdownResponseSerializer(TimeSeriesResponseSerializer):
+    metric = serializers.ChoiceField(choices=["property_breakdown"])
     measure = serializers.ChoiceField(
-        choices=["property_value", "debt", "rental_income"]
+        choices=["property_value", "equity", "debt", "rental_income"]
     )
     measure_label = serializers.CharField()
-    coverage = ExposureCoverageSerializer(many=True)
+    coverage = PropertyBreakdownCoverageSerializer(many=True)
 
 
 class PropertyValuationPointSerializer(StrictSerializer):

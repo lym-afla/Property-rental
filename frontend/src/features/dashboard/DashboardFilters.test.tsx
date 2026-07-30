@@ -13,7 +13,7 @@ const initialFilters: DashboardFilterState = {
   currency: 'USD',
   grain: 'month',
   propertyIds: [],
-  exposureMeasure: 'property_value',
+  propertyBreakdownMeasure: 'property_value',
 }
 
 const properties = [

@@ -86,12 +86,12 @@ const cashFlow = {
 
 const expenses = { ...cashFlow, metric: 'expense_drivers', series: [{ key: 'utilities', label: 'Utilities', kind: 'expense_category' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', utilities: -250 }] } as const
 
-const currencyExposure = {
-  metric: 'currency_exposure', grain: 'month', currency: 'USD', scale: 1,
+const propertyBreakdown = {
+  metric: 'property_breakdown', grain: 'month', currency: 'USD', scale: 1,
   start: '2026-01-01', end: '2026-07-29', measure: 'property_value', measure_label: 'Property value',
-  series: [{ key: 'USD', label: 'USD', kind: 'native_currency' }],
-  points: [{ period_start: '2026-01-01', period_end: '2026-01-31', USD: 1000 }],
-  coverage: [],
+  series: [{ key: 'property_1', label: 'Anokhina', kind: 'property' }],
+  points: [{ period_start: '2026-01-01', period_end: '2026-01-31', property_1: 1000 }],
+  coverage: [{ period_start: '2026-01-01', period_end: '2026-01-31', property_id: 1, status: 'ok' }],
 } as const
 
 const profitLoss = {
@@ -203,9 +203,9 @@ describe('HomePage dashboard shell', () => {
         irrelevantRequests += 1
         return HttpResponse.json({})
       }),
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', () => {
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', () => {
         irrelevantRequests += 1
-        return HttpResponse.json(currencyExposure)
+        return HttpResponse.json(propertyBreakdown)
       }),
       http.get('/api/v1/analytics/portfolio/occupancy/', () => {
         irrelevantRequests += 1
@@ -218,7 +218,7 @@ describe('HomePage dashboard shell', () => {
     expect(screen.getByRole('heading', { name: 'Investment dashboard' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByText('Net cash flow')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Currency exposure timeline')).not.toBeInTheDocument()
+    expect(screen.queryByText('Portfolio breakdown by property')).not.toBeInTheDocument()
 
     expect(await screen.findByText('£1,000,000')).toBeInTheDocument()
     expect(screen.getByText('£350,000')).toBeInTheDocument()
@@ -243,7 +243,7 @@ describe('HomePage dashboard shell', () => {
   it('updates router URL and analytics request from filter interactions, then fully serializes reset defaults', async () => {
     const user = userEvent.setup()
     const requestedUrls: string[] = []
-    const exposureUrls: string[] = []
+    const breakdownUrls: string[] = []
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', ({ request }) => {
         requestedUrls.push(request.url)
@@ -252,21 +252,21 @@ describe('HomePage dashboard shell', () => {
       http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(cashFlow)),
       http.get('/api/v1/analytics/portfolio/expenses/', () => HttpResponse.json(expenses)),
       http.get('/api/v1/analytics/portfolio/profit-loss/', () => HttpResponse.json(profitLoss)),
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', ({ request }) => {
-        exposureUrls.push(request.url)
-        return HttpResponse.json(currencyExposure)
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', ({ request }) => {
+        breakdownUrls.push(request.url)
+        return HttpResponse.json(propertyBreakdown)
       }),
     )
     renderPage('/?section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=year&property=&measure=property_value')
 
-    expect(screen.getByText('Currency exposure')).toBeInTheDocument()
+    expect(screen.getByText('Portfolio breakdown by property')).toBeInTheDocument()
     expect(screen.queryByText('Occupancy risk')).not.toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Exposure measure'), 'debt')
+    await user.selectOptions(screen.getByLabelText('Portfolio breakdown measure'), 'debt')
     await waitFor(() => {
       const currentUrl = screen.getByLabelText('Current dashboard URL').textContent ?? ''
       expect(new URLSearchParams(currentUrl).get('measure')).toBe('debt')
-      expect(new URL(exposureUrls.at(-1) ?? 'http://invalid').searchParams.get('measure')).toBe('debt')
+      expect(new URL(breakdownUrls.at(-1) ?? 'http://invalid').searchParams.get('measure')).toBe('debt')
     })
 
     await user.click(screen.getByRole('button', { name: 'Income & Costs' }))

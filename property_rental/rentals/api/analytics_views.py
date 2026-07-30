@@ -9,9 +9,9 @@ from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
 from rentals.analytics.filters import AnalyticsFilters, ISODateField
 from rentals.analytics.pnl import profit_and_loss
 from rentals.analytics.portfolio import (
-    currency_exposure,
     portfolio_occupancy,
     portfolio_summary,
+    property_breakdown,
     property_contribution,
     property_yields,
 )
@@ -20,7 +20,7 @@ from rentals.analytics.tenant import tenant_rent_performance
 from rentals.constants import CURRENCY_CHOICES
 from rentals.api.analytics_serializers import (
     ContributionResponseSerializer,
-    CurrencyExposureResponseSerializer,
+    PropertyBreakdownResponseSerializer,
     PortfolioSummarySerializer,
     ProfitLossResponseSerializer,
     PropertyValuationResponseSerializer,
@@ -133,17 +133,17 @@ class PortfolioYieldsView(_PortfolioAnalyticsView):
         return Response(YieldResponseSerializer(result).data)
 
 
-class PortfolioCurrencyExposureView(_PortfolioAnalyticsView):
+class PortfolioPropertyBreakdownView(_PortfolioAnalyticsView):
     def get(self, request):
         measure = request.query_params.get("measure", "property_value")
-        if measure not in {"property_value", "debt", "rental_income"}:
+        if measure not in {"property_value", "equity", "debt", "rental_income"}:
             raise serializers.ValidationError({"measure": "Unsupported measure."})
-        result = currency_exposure(
+        result = property_breakdown(
             request.user,
             self.filters(request, extra_query_params=("measure",)),
             measure=measure,
         )
-        return Response(CurrencyExposureResponseSerializer(result).data)
+        return Response(PropertyBreakdownResponseSerializer(result).data)
 
 
 class PortfolioOccupancyView(_PortfolioAnalyticsView):

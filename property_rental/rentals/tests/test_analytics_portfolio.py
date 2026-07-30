@@ -335,11 +335,169 @@ def test_contribution_preserves_negative_rows_and_portfolio_share_context(
 
 
 @pytest.mark.django_db
-def test_currency_exposure_retains_native_categories_for_every_period(
+def test_property_breakdown_groups_equity_by_property_across_calendar_periods(
     landlord_user, sample_property
 ):
-    """Collapsing later periods to a portfolio total would erase currency exposure."""
-    from rentals.analytics.portfolio import currency_exposure
+    """Currency aggregation or report-date FX would misstate property equity."""
+    from rentals.analytics.portfolio import property_breakdown
+
+    sample_property.name = "Anokhina"
+    sample_property.sold = date(2026, 3, 15)
+    sample_property.save(update_fields=["name", "sold"])
+    wandsworth = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        name="Wandsworth",
+        currency="EUR",
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("2.00"),
+        date=date(2026, 1, 1),
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("3.00"),
+        date=date(2026, 2, 1),
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 5),
+        capital_structure_value=Decimal("500000.00"),
+        capital_structure_debt=Decimal("200000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=wandsworth,
+        capital_structure_date=date(2026, 1, 10),
+        capital_structure_value=Decimal("200000.00"),
+        capital_structure_debt=Decimal("50000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=wandsworth,
+        capital_structure_date=date(2026, 2, 10),
+        capital_structure_value=Decimal("250000.00"),
+        capital_structure_debt=None,
+    )
+
+    result = property_breakdown(
+        landlord_user,
+        filters_for("2026-01-01", "2026-03-31"),
+        measure="equity",
+    )
+
+    assert result.measure == "equity"
+    assert result.measure_label == "Equity"
+    assert [series.label for series in result.series] == ["Anokhina", "Wandsworth"]
+    assert [series.key for series in result.series] == [
+        f"property_{sample_property.id}",
+        f"property_{wandsworth.id}",
+    ]
+    assert [point["period_start"] for point in result.points] == [
+        date(2026, 1, 1),
+        date(2026, 2, 1),
+        date(2026, 3, 1),
+    ]
+    anokhina_key = f"property_{sample_property.id}"
+    wandsworth_key = f"property_{wandsworth.id}"
+    assert result.points[0][anokhina_key] == pytest.approx(300_000)
+    assert result.points[0][wandsworth_key] == pytest.approx(300_000)
+    assert result.points[1][wandsworth_key] == pytest.approx(650_000)
+    assert anokhina_key not in result.points[2]
+    assert result.points[2][wandsworth_key] == pytest.approx(650_000)
+
+
+@pytest.mark.django_db
+def test_property_breakdown_keeps_missing_valuation_distinct_from_zero(
+    landlord_user, sample_property
+):
+    """A missing snapshot must not become a genuine zero-valued property."""
+    from rentals.analytics.portfolio import property_breakdown
+
+    missing = PropertyFactory(owned_by=landlord_user.landlord, name="Missing")
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("0.00"),
+    )
+
+    result = property_breakdown(
+        landlord_user,
+        filters_for("2026-01-01", "2026-01-31"),
+        measure="property_value",
+    )
+
+    assert result.points[0][f"property_{sample_property.id}"] == 0.0
+    assert result.points[0][f"property_{missing.id}"] is None
+    coverage = {row.property_id: row for row in result.coverage}
+    assert coverage[sample_property.id].status == "ok"
+    assert coverage[missing.id].status == "missing_valuation"
+
+
+@pytest.mark.django_db
+def test_property_breakdown_buckets_rental_income_and_hides_sold_property(
+    landlord_user, sample_property
+):
+    """Income must remain in its transaction month and respect sale visibility."""
+    from rentals.analytics.portfolio import property_breakdown
+
+    sample_property.sold = date(2026, 3, 1)
+    sample_property.save(update_fields=["sold"])
+    euro_property = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        name="Wandsworth",
+        currency="EUR",
+    )
+    FXFactory(
+        from_currency="EUR",
+        to_currency="USD",
+        rate=Decimal("2.00"),
+        date=date(2026, 1, 1),
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("1000.00"),
+        date=date(2026, 1, 15),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("9000.00"),
+        date=date(2026, 3, 15),
+        currency="USD",
+    )
+    TransactionFactory(
+        property=euro_property,
+        category="rent",
+        amount=Decimal("500.00"),
+        date=date(2026, 2, 15),
+        currency="EUR",
+    )
+
+    result = property_breakdown(
+        landlord_user,
+        filters_for("2026-01-01", "2026-03-31"),
+        measure="rental_income",
+    )
+
+    sold_key = f"property_{sample_property.id}"
+    euro_key = f"property_{euro_property.id}"
+    assert [(point[sold_key], point[euro_key]) for point in result.points[:2]] == [
+        (1000.0, 0.0),
+        (0.0, 1000.0),
+    ]
+    assert sold_key not in result.points[2]
+    assert result.points[2][euro_key] == 0.0
+
+
+@pytest.mark.django_db
+def test_property_breakdown_retains_property_series_for_every_active_period(
+    landlord_user, sample_property
+):
+    """Collapsing later periods to a portfolio total would erase property identity."""
+    from rentals.analytics.portfolio import property_breakdown
 
     euro_property = PropertyFactory(
         owned_by=landlord_user.landlord, currency="EUR"
@@ -363,7 +521,7 @@ def test_currency_exposure_retains_native_categories_for_every_period(
         capital_structure_debt=Decimal("10000.00"),
     )
 
-    result = currency_exposure(
+    result = property_breakdown(
         landlord_user,
         filters_for("2026-01-01", "2026-02-28"),
         measure="property_value",
@@ -372,19 +530,25 @@ def test_currency_exposure_retains_native_categories_for_every_period(
     assert result.measure == "property_value"
     assert result.measure_label == "Property value"
     assert result.scale == 1
-    assert [series.key for series in result.series] == ["EUR", "USD"]
-    assert [(point["EUR"], point["USD"]) for point in result.points] == [
+    assert [series.key for series in result.series] == [
+        f"property_{sample_property.id}",
+        f"property_{euro_property.id}",
+    ]
+    assert [
+        (point[f"property_{sample_property.id}"], point[f"property_{euro_property.id}"])
+        for point in result.points
+    ] == [
         (100000.0, 100000.0),
         (100000.0, 100000.0),
     ]
 
 
 @pytest.mark.django_db
-def test_currency_exposure_marks_missing_and_stale_valuation_coverage(
+def test_property_breakdown_marks_missing_and_stale_valuation_coverage(
     landlord_user, sample_property
 ):
     """Unavailable valuation data must not be serialized as genuine zero exposure."""
-    from rentals.analytics.portfolio import currency_exposure
+    from rentals.analytics.portfolio import property_breakdown
 
     missing = PropertyFactory(owned_by=landlord_user.landlord, currency="EUR")
     PropertyCapitalStructureFactory(
@@ -393,17 +557,17 @@ def test_currency_exposure_marks_missing_and_stale_valuation_coverage(
         capital_structure_value=Decimal("100000.00"),
     )
 
-    result = currency_exposure(
+    result = property_breakdown(
         landlord_user,
         filters_for("2026-01-01", "2026-01-31"),
         measure="property_value",
     )
 
     assert missing.currency == "EUR"
-    assert result.points[0]["EUR"] is None
-    coverage = {row.currency: row for row in result.coverage}
-    assert coverage["EUR"].status == "missing_valuation"
-    assert coverage["USD"].status == "stale_valuation"
+    assert result.points[0][f"property_{missing.id}"] is None
+    coverage = {row.property_id: row for row in result.coverage}
+    assert coverage[missing.id].status == "missing_valuation"
+    assert coverage[sample_property.id].status == "stale_valuation"
 
 
 @pytest.mark.django_db
@@ -439,11 +603,11 @@ def test_partial_period_occupancy_clips_leases_and_sales_to_filter_bounds(
 
 
 @pytest.mark.django_db
-def test_valuation_exposure_excludes_property_sold_on_or_before_period_as_of(
+def test_property_breakdown_excludes_property_sold_on_or_before_period_as_of(
     landlord_user, sample_property
 ):
     """An end-of-period exposure snapshot must not retain already-sold assets."""
-    from rentals.analytics.portfolio import currency_exposure
+    from rentals.analytics.portfolio import property_breakdown
 
     sample_property.sold = date(2026, 1, 31)
     sample_property.save(update_fields=["sold"])
@@ -453,14 +617,15 @@ def test_valuation_exposure_excludes_property_sold_on_or_before_period_as_of(
         capital_structure_value=Decimal("100000.00"),
     )
 
-    result = currency_exposure(
+    result = property_breakdown(
         landlord_user,
         filters_for("2026-01-01", "2026-01-31"),
         measure="property_value",
     )
 
-    assert result.points[0]["USD"] == 0.0
-    assert result.coverage[0].status == "no_exposure"
+    assert f"property_{sample_property.id}" not in result.points[0]
+    assert result.series == ()
+    assert result.coverage == ()
 
 
 @pytest.mark.django_db
@@ -609,7 +774,7 @@ def test_null_native_currency_is_explicit_and_independent_of_reporting_currency(
     landlord_user, auth_client
 ):
     """Missing native currency must not inherit a request-dependent FX identity."""
-    from rentals.analytics.portfolio import currency_exposure
+    from rentals.analytics.portfolio import property_breakdown
 
     property_ = PropertyFactory(owned_by=landlord_user.landlord, currency=None)
     PropertyCapitalStructureFactory(
@@ -627,17 +792,18 @@ def test_null_native_currency_is_explicit_and_independent_of_reporting_currency(
         property_ids=(),
     )
 
-    usd = currency_exposure(landlord_user, usd_filters, "property_value")
-    eur = currency_exposure(landlord_user, eur_filters, "property_value")
+    usd = property_breakdown(landlord_user, usd_filters, "property_value")
+    eur = property_breakdown(landlord_user, eur_filters, "property_value")
 
-    assert [series.key for series in usd.series] == ["missing_currency"]
-    assert [series.key for series in eur.series] == ["missing_currency"]
-    assert usd.points[0]["missing_currency"] is None
-    assert eur.points[0]["missing_currency"] is None
-    assert usd.coverage[0].currency is None
+    key = f"property_{property_.id}"
+    assert [series.key for series in usd.series] == [key]
+    assert [series.key for series in eur.series] == [key]
+    assert usd.points[0][key] is None
+    assert eur.points[0][key] is None
+    assert usd.coverage[0].property_id == property_.id
     assert usd.coverage[0].status == "missing_currency"
     response = auth_client.get(
-        "/api/v1/analytics/portfolio/currency-exposure/",
+        "/api/v1/analytics/portfolio/property-breakdown/",
         {
             "start": "2026-01-01",
             "end": "2026-01-31",
@@ -645,32 +811,32 @@ def test_null_native_currency_is_explicit_and_independent_of_reporting_currency(
         },
     )
     assert response.status_code == 200
-    assert response.json()["coverage"][0]["currency"] is None
+    assert response.json()["coverage"][0]["property_id"] == property_.id
 
 
 @pytest.mark.django_db
-def test_exposure_coverage_preserves_partial_and_stale_conditions_together(
+def test_property_breakdown_coverage_preserves_missing_and_stale_properties(
     landlord_user, sample_property
 ):
-    """A missing peer must not hide that the available valuation is stale."""
-    from rentals.analytics.portfolio import currency_exposure
+    """A missing peer must not hide that another property's valuation is stale."""
+    from rentals.analytics.portfolio import property_breakdown
 
-    PropertyFactory(owned_by=landlord_user.landlord, currency="USD")
+    missing = PropertyFactory(owned_by=landlord_user.landlord, currency="USD")
     PropertyCapitalStructureFactory(
         property=sample_property,
         capital_structure_date=date(2025, 12, 1),
         capital_structure_value=Decimal("100000.00"),
     )
 
-    coverage = currency_exposure(
+    coverage = property_breakdown(
         landlord_user,
         filters_for("2026-01-01", "2026-01-31"),
         "property_value",
-    ).coverage[0]
+    ).coverage
 
-    assert coverage.status == "partial_stale_valuation"
-    assert coverage.missing_count == 1
-    assert coverage.stale_count == 1
+    statuses = {row.property_id: row.status for row in coverage}
+    assert statuses[sample_property.id] == "stale_valuation"
+    assert statuses[missing.id] == "missing_valuation"
 
 
 @pytest.mark.django_db
@@ -746,7 +912,7 @@ def test_portfolio_services_scope_selected_properties_to_owner(
         "/api/v1/analytics/portfolio/summary/",
         "/api/v1/analytics/portfolio/property-contribution/",
         "/api/v1/analytics/portfolio/yields/",
-        "/api/v1/analytics/portfolio/currency-exposure/",
+        "/api/v1/analytics/portfolio/property-breakdown/",
         "/api/v1/analytics/portfolio/occupancy/",
     ],
 )
@@ -786,8 +952,8 @@ def test_portfolio_endpoints_serialize_explicit_nested_contracts(
         "/api/v1/analytics/portfolio/property-contribution/", params
     )
     yields = auth_client.get("/api/v1/analytics/portfolio/yields/", params)
-    exposure = auth_client.get(
-        "/api/v1/analytics/portfolio/currency-exposure/",
+    breakdown = auth_client.get(
+        "/api/v1/analytics/portfolio/property-breakdown/",
         {**params, "measure": "debt"},
     )
     occupancy = auth_client.get(
@@ -806,9 +972,9 @@ def test_portfolio_endpoints_serialize_explicit_nested_contracts(
     assert yield_row["equity"] == 60000.0
     assert yield_row["equity_yield"] == pytest.approx(19.623655913978492)
     assert "net_yield" not in yield_row
-    assert exposure.status_code == 200
-    assert exposure.json()["measure"] == "debt"
-    assert exposure.json()["points"][0]["USD"] == 40000.0
+    assert breakdown.status_code == 200
+    assert breakdown.json()["measure"] == "debt"
+    assert breakdown.json()["points"][0][f"property_{sample_property.id}"] == 40000.0
     assert occupancy.status_code == 200
     assert occupancy.json()["points"][0]["occupancy_rate"] == 100.0
 
@@ -818,7 +984,7 @@ def test_portfolio_endpoints_serialize_explicit_nested_contracts(
     ("path", "params", "field"),
     [
         (
-            "/api/v1/analytics/portfolio/currency-exposure/",
+            "/api/v1/analytics/portfolio/property-breakdown/",
             {"measure": "value_at_risk"},
             "measure",
         ),

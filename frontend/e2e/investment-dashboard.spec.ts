@@ -45,11 +45,11 @@ const yields = {
   metric: 'property_yields', currency: 'USD', scale: 1, ...range,
   rows: [{ property_id: 1, property_name: properties[0].name, valuation_date: range.end, property_value: 250000, debt: 100000, equity: 150000, annualized_revenue: 12000, annualized_costs: 4800, gross_yield: 4.8, equity_yield: 4.8, status: 'ok' }],
 }
-const exposure = {
-  metric: 'currency_exposure', grain: 'month', currency: 'USD', scale: 1, ...range, measure: 'property_value', measure_label: 'Property value',
-  series: [{ key: 'eur', label: 'EUR', kind: 'native_currency' }, { key: 'usd', label: 'USD', kind: 'native_currency' }],
-  points: [{ ...period, eur: 250000, usd: 150000 }],
-  coverage: [{ ...period, currency: 'USD', status: 'ok', missing_count: 0, stale_count: 0 }],
+const propertyBreakdown = {
+  metric: 'property_breakdown', grain: 'month', currency: 'USD', scale: 1, ...range, measure: 'property_value', measure_label: 'Property value',
+  series: [{ key: 'property_1', label: properties[0].name, kind: 'property' }, { key: 'property_2', label: properties[1].name, kind: 'property' }],
+  points: [{ ...period, property_1: 250000, property_2: 150000 }],
+  coverage: [{ ...period, property_id: 1, status: 'ok' }, { ...period, property_id: 2, status: 'ok' }],
 }
 const valuation = {
   metric: 'property_valuation', grain: 'record', currency: 'EUR', scale: 1, ...range, status: 'ok',
@@ -74,7 +74,7 @@ async function mockDashboardApi(page: Page, options: { summaryStatus?: number; c
     if (path.includes('/analytics/portfolio/expenses/')) return json(expenseDrivers)
     if (path.includes('/analytics/portfolio/property-contribution/')) return json(contribution)
     if (path.includes('/analytics/portfolio/yields/')) return json(yields)
-    if (path.includes('/analytics/portfolio/currency-exposure/')) return json(exposure)
+    if (path.includes('/analytics/portfolio/property-breakdown/')) return json(propertyBreakdown)
     if (path.includes('/analytics/portfolio/occupancy/')) return json(occupancy)
     if (path.includes('/analytics/properties/1/valuation/')) return json(valuation)
     return json({ detail: `Unhandled fixture path ${path}` }, 404)

@@ -187,6 +187,51 @@ def test_expense_drivers_emits_only_expense_series(auth_client, sample_property)
 
 
 @pytest.mark.django_db
+def test_property_breakdown_api_exposes_equity_by_property(auth_client, sample_property):
+    """Keeping the currency route or omitting equity would break the dashboard contract."""
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/property-breakdown/",
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "grain": "month",
+            "measure": "equity",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["metric"] == "property_breakdown"
+    assert response.json()["measure"] == "equity"
+    assert response.json()["series"] == [
+        {
+            "key": f"property_{sample_property.id}",
+            "label": sample_property.name,
+            "kind": "property",
+        }
+    ]
+    assert response.json()["points"][0][f"property_{sample_property.id}"] == 60000.0
+    assert response.json()["coverage"][0]["property_id"] == sample_property.id
+
+
+@pytest.mark.django_db
+def test_property_breakdown_api_removes_currency_exposure_route(auth_client):
+    """The retired route must not preserve two competing analytics contracts."""
+    response = auth_client.get(
+        "/api/v1/analytics/portfolio/currency-exposure/",
+        {"start": "2026-01-01", "end": "2026-01-31"},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("path", "extra_params"),
     [
@@ -196,7 +241,7 @@ def test_expense_drivers_emits_only_expense_series(auth_client, sample_property)
         ("/api/v1/analytics/portfolio/property-contribution/", {}),
         ("/api/v1/analytics/portfolio/yields/", {}),
         (
-            "/api/v1/analytics/portfolio/currency-exposure/",
+            "/api/v1/analytics/portfolio/property-breakdown/",
             {"measure": "rental_income"},
         ),
     ],
