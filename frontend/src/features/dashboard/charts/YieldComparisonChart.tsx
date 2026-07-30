@@ -40,6 +40,15 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
+function unavailableYieldMessage(row: PropertyYieldsResponse['rows'][number]) {
+  const grossAvailable = isFiniteNumber(row.gross_yield)
+  const equityAvailable = isFiniteNumber(row.equity_yield)
+  if (!grossAvailable && !equityAvailable) return 'no yield plotted'
+  if (!grossAvailable) return 'gross yield not plotted'
+  if (!equityAvailable) return 'equity yield not plotted'
+  return null
+}
+
 export function YieldComparisonChart(props: Props) {
   const { data } = props
   const state = yieldState(props)
@@ -87,7 +96,7 @@ export function YieldComparisonChart(props: Props) {
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
-            {missingValuations.length > 0 && <div data-testid="missing-valuation-callout" className="rounded-md border border-dashed px-3 py-2 text-sm"><p className="font-medium">Missing valuation</p><ul className="list-disc pl-5">{missingValuations.map((row) => <li key={row.property_id}>{row.property_name}: no yield plotted</li>)}</ul></div>}
+            {missingValuations.length > 0 && <div data-testid="missing-valuation-callout" className="rounded-md border border-dashed px-3 py-2 text-sm"><p className="font-medium">Missing valuation</p><ul className="list-disc pl-5">{missingValuations.map((row) => <li key={row.property_id}>{row.property_name}: {unavailableYieldMessage(row)}</li>)}</ul></div>}
           </div>
           <ul className="sr-only" aria-label="Yield values">
             {data.rows.map((row) => <li key={row.property_id} data-testid={`yield-status-${row.property_id}`}>{row.property_name}: {statusLabel(row.status)}{isFiniteNumber(row.gross_yield) && <span data-testid={`yield-point-${row.property_id}-gross`}> Gross {formatYield(row.gross_yield)}</span>}{isFiniteNumber(row.equity_yield) && <span data-testid={`yield-point-${row.property_id}-equity`}> Equity {formatYield(row.equity_yield)}</span>}</li>)}

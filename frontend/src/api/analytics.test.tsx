@@ -354,6 +354,26 @@ describe('analytics runtime schemas', () => {
     ).toThrow()
   })
 
+  it.each([
+    [0, 100000, 'zero_equity'],
+    [-50000, 150000, 'negative_equity'],
+  ])('accepts the explicit %s equity denominator status', (equity, debt, status) => {
+    const parsed = propertyYieldsSchema.parse({
+      ...yieldsFixture,
+      rows: [{
+        ...yieldsFixture.rows[0],
+        property_value: 100000,
+        debt,
+        equity,
+        gross_yield: 0,
+        equity_yield: null,
+        status,
+      }],
+    })
+
+    expect(parsed.rows[0].status).toBe(status)
+  })
+
   it('preserves null financial values and all issue arrays', () => {
     const summary = portfolioSummarySchema.parse(summaryFixture)
     const exposure = currencyExposureSchema.parse(exposureFixture)

@@ -21,6 +21,7 @@ const data = {
     { property_id: 1, property_name: 'Birch House', valuation_date: '2026-03-01', property_value: 100000, debt: 40000, equity: 60000, annualized_revenue: 7000, annualized_costs: 2000, gross_yield: 7, equity_yield: 8.33, status: 'ok' as const },
     { property_id: 2, property_name: 'Canal Court', valuation_date: null, property_value: null, debt: null, equity: null, annualized_revenue: 3000, annualized_costs: 1000, gross_yield: null, equity_yield: null, status: 'missing_valuation' as const },
     { property_id: 3, property_name: 'Invalid Heights', valuation_date: '2026-03-01', property_value: 100000, debt: 40000, equity: 60000, annualized_revenue: 0, annualized_costs: 0, gross_yield: Number.NaN, equity_yield: undefined, status: 'ok' as const },
+    { property_id: 4, property_name: 'Debt Gap', valuation_date: '2026-03-01', property_value: 100000, debt: null, equity: null, annualized_revenue: 6000, annualized_costs: 1000, gross_yield: 6, equity_yield: null, status: 'missing_valuation' as const },
   ],
 } as unknown as PropertyYieldsResponse
 
@@ -33,6 +34,11 @@ describe('YieldComparisonChart', () => {
     expect(screen.getByTestId('yield-status-2')).toHaveTextContent('Missing valuation')
     expect(screen.getByTestId('missing-valuation-callout')).toBeVisible()
     expect(screen.getByTestId('missing-valuation-callout')).toHaveTextContent('Canal Court')
+    expect(screen.getByTestId('missing-valuation-callout')).toHaveTextContent('Canal Court: no yield plotted')
+    expect(screen.getByTestId('missing-valuation-callout')).toHaveTextContent('Debt Gap: equity yield not plotted')
+    expect(screen.getByTestId('missing-valuation-callout')).not.toHaveTextContent('Debt Gap: no yield plotted')
+    expect(screen.getByTestId('yield-point-4-gross')).toHaveTextContent('Gross 6%')
+    expect(screen.queryByTestId('yield-point-4-equity')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Yield comparison exact values' })).toHaveTextContent('Missing valuation')
   })

@@ -197,6 +197,8 @@ class YieldRowSerializer(StrictSerializer):
             "missing_currency",
             "zero_valuation",
             "negative_valuation",
+            "zero_equity",
+            "negative_equity",
         ]
     )
 

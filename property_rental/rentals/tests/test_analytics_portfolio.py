@@ -183,14 +183,14 @@ def test_missing_valuation_returns_explicit_status_without_fabricated_yield(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("value", "debt", "expected_equity"),
+    ("value", "debt", "expected_equity", "expected_status"),
     [
-        ("100000.00", "100000.00", 0.0),
-        ("100000.00", "150000.00", -50000.0),
+        ("100000.00", "100000.00", 0.0, "zero_equity"),
+        ("100000.00", "150000.00", -50000.0, "negative_equity"),
     ],
 )
 def test_equity_yield_requires_positive_equity(
-    landlord_user, sample_property, value, debt, expected_equity
+    landlord_user, sample_property, value, debt, expected_equity, expected_status
 ):
     """Zero or negative equity cannot be used as a yield denominator."""
     from rentals.analytics.portfolio import property_yields
@@ -210,6 +210,7 @@ def test_equity_yield_requires_positive_equity(
     assert row.gross_yield == 0.0
     assert row.equity == expected_equity
     assert row.equity_yield is None
+    assert row.status == expected_status
 
 
 @pytest.mark.django_db

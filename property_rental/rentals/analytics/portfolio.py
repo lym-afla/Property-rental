@@ -329,6 +329,10 @@ def property_yields(user, filters):
             status = "zero_valuation"
         elif valuation is None or debt_row is None:
             status = "missing_valuation"
+        elif equity < 0:
+            status = "negative_equity"
+        elif equity == 0:
+            status = "zero_equity"
         elif (
             valuation.capital_structure_date < filters.start
             or debt_row.capital_structure_date < filters.start

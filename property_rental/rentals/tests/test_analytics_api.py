@@ -59,6 +59,22 @@ def test_yield_serializer_rejects_non_finite_and_legacy_yield_fields():
     assert "net_yield" in legacy_serializer.errors
 
 
+@pytest.mark.parametrize(
+    ("equity", "status"),
+    [(0.0, "zero_equity"), (-50000.0, "negative_equity")],
+)
+def test_yield_serializer_accepts_explicit_equity_denominator_statuses(
+    equity, status
+):
+    """The wire status must explain why a non-positive equity yield is null."""
+    payload = valid_yield_row()
+    payload.update(equity=equity, equity_yield=None, status=status)
+
+    serializer = YieldRowSerializer(data=payload)
+
+    assert serializer.is_valid(), serializer.errors
+
+
 @pytest.mark.django_db
 def test_cash_flow_requires_authentication(sample_property):
     """Removing the auth gate would expose portfolio financial data anonymously."""
