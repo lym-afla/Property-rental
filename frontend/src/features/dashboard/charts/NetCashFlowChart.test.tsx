@@ -42,7 +42,7 @@ describe('NetCashFlowChart', () => {
     expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toBe(screen.getByRole('generic', { name: 'Utilities' }).getAttribute('data-fill'))
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$1,000')
-    expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$-250')
+    expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('($250)')
   })
 
   it('gives every supported cash-flow category a distinct visible mark identity', () => {

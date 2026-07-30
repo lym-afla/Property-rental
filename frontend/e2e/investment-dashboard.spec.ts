@@ -204,7 +204,9 @@ test('keeps charts operable with keyboard and exposes exact values plus property
   await page.keyboard.press('Enter')
   await expect(legend).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('button', { name: 'Table' }).first().click()
-  await expect(page.getByRole('table', { name: 'Net cash flow exact values' })).toBeVisible()
+  const cashFlowTable = page.getByRole('table', { name: 'Net cash flow exact values' })
+  await expect(cashFlowTable).toBeVisible()
+  await expect(cashFlowTable).toContainText('($150)')
   await page.getByRole('button', { name: 'Portfolio' }).click()
   await page.getByRole('button', { name: 'Table' }).first().click()
   await expect(page.getByText('Dollar House (negative contributor)')).toBeVisible()
@@ -255,7 +257,11 @@ test('keeps dashboard settings compact and touch-safe across viewports', async (
     const property = page.getByLabel(properties[0].name)
     await expect(propertiesLabel).toBeVisible()
     await expect(property).toBeVisible()
-    expect((await propertiesLabel.boundingBox())?.y ?? 0).toBeLessThan((await property.boundingBox())?.y ?? 0)
+    const labelBox = await propertiesLabel.boundingBox()
+    const propertyBox = await property.boundingBox()
+    expect(labelBox).not.toBeNull()
+    expect(propertyBox).not.toBeNull()
+    expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(propertyBox!.y)
   } else {
     const filterCard = page.getByLabel('Global dashboard filters')
     const propertiesLabel = filterCard.getByText('Properties', { exact: true })
@@ -264,8 +270,10 @@ test('keeps dashboard settings compact and touch-safe across viewports', async (
     await expect(selector).toBeVisible()
     const labelBox = await propertiesLabel.boundingBox()
     const selectorBox = await selector.boundingBox()
-    expect(labelBox?.y ?? 0).toBeLessThan(selectorBox?.y ?? 0)
-    expect((selectorBox?.height ?? 0)).toBeGreaterThanOrEqual(44)
+    expect(labelBox).not.toBeNull()
+    expect(selectorBox).not.toBeNull()
+    expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(selectorBox!.y)
+    expect(selectorBox!.height).toBeGreaterThanOrEqual(44)
   }
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -320,6 +328,7 @@ test('verifies the financial analytics release contract across dashboard, proper
   await page.getByRole('button', { name: 'Portfolio', exact: true }).click()
   await expect(page.getByText('Yield comparison', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Yield definitions' }).click()
+  await expect(page.getByText('Gross yield — annualized gross rental income divided by the latest property value.')).toBeVisible()
   await expect(page.getByText('Equity yield — annualized rental income net of costs divided by equity.')).toBeVisible()
   await page.keyboard.press('Escape')
   await expectReleaseSafeDocument(page)
@@ -352,9 +361,12 @@ test('verifies the financial analytics release contract across dashboard, proper
     const box = (bar as SVGGraphicsElement).getBBox()
     return Math.round(box.x + box.width / 2)
   }))].sort((left, right) => left - right))
-  await expect.poll(readValuationCenters).toHaveLength(3)
-  const valuationCenters = await readValuationCenters()
-  expect((valuationCenters[1] - valuationCenters[0]) / (valuationCenters[2] - valuationCenters[1])).toBeGreaterThan(10)
+  await expect.poll(async () => {
+    const valuationCenters = await readValuationCenters()
+    if (valuationCenters.length !== 3) return false
+    const recentGap = valuationCenters[2] - valuationCenters[1]
+    return recentGap > 0 && (valuationCenters[1] - valuationCenters[0]) / recentGap > 10
+  }).toBe(true)
   await expectReleaseSafeDocument(page)
 
   await page.goto('/tenants/1')
