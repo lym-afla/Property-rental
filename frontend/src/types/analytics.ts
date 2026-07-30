@@ -40,7 +40,7 @@ export type PropertyBreakdownParams = PortfolioAnalyticsParams & {
 }
 export type TenantRentPerformanceParams = Pick<
   PortfolioAnalyticsParams,
-  'start' | 'end' | 'currency' | 'grain' | 'comparison'
+  'start' | 'end' | 'grain' | 'comparison'
 >
 
 export const seriesDefinitionSchema = z

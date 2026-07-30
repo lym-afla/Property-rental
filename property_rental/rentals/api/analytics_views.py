@@ -16,7 +16,7 @@ from rentals.analytics.portfolio import (
     property_yields,
 )
 from rentals.analytics.property import property_valuation_history
-from rentals.analytics.tenant import tenant_rent_performance
+from rentals.analytics.tenant import MissingTenantCurrency, tenant_rent_performance
 from rentals.constants import CURRENCY_CHOICES
 from rentals.api.analytics_serializers import (
     ContributionResponseSerializer,
@@ -170,13 +170,19 @@ class PropertyValuationAnalyticsView(APIView):
 
 class TenantRentPerformanceAnalyticsView(_PortfolioAnalyticsView):
     def get(self, request, tenant_id):
-        allowed = {"start", "end", "grain", "currency"}
+        allowed = {"start", "end", "grain"}
         unknown = set(request.query_params) - allowed
         if unknown:
             raise serializers.ValidationError(
                 {key: "Unknown filter." for key in sorted(unknown)}
             )
-        result = tenant_rent_performance(
-            request.user, tenant_id, self.filters(request)
-        )
+        try:
+            result = tenant_rent_performance(
+                request.user, tenant_id, self.filters(request)
+            )
+        except MissingTenantCurrency as exc:
+            return Response(
+                {"code": "missing_currency", "detail": str(exc)},
+                status=422,
+            )
         return Response(TenantRentPerformanceResponseSerializer(result).data)

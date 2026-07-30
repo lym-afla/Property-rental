@@ -35,9 +35,11 @@ describe('TenantDetailPage (smoke)', () => {
 
   it('uses the typed rent-performance endpoint for the detail chart', async () => {
     let requestedEnd: string | null = null
+    let requestedCurrency: string | null = null
     server.use(
       http.get('/api/v1/analytics/tenants/1/rent-performance/', ({ request }) => {
         requestedEnd = new URL(request.url).searchParams.get('end')
+        requestedCurrency = new URL(request.url).searchParams.get('currency')
         return HttpResponse.json({
           metric: 'tenant_rent_performance', grain: 'month', currency: 'EUR', scale: 1,
           start: '2024-01-01', end: '2024-01-31', opening_arrears: 0,
@@ -56,8 +58,10 @@ describe('TenantDetailPage (smoke)', () => {
       }),
     )
     renderPage()
-    expect(await screen.findByText('Reporting period: 2024-01-01 to 2024-01-31')).toBeInTheDocument()
+    expect(await screen.findByText('Native currency: EUR · Reporting period: 2024-01-01 to 2024-01-31')).toBeInTheDocument()
     expect(requestedEnd).toBe('2024-01-31')
+    expect(requestedCurrency).toBeNull()
+    expect(screen.queryByText(/Server-calculated rent, revenue, and debt/)).not.toBeInTheDocument()
     expect(screen.queryByText('Net income (all-time)')).not.toBeInTheDocument()
   })
 })

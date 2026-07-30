@@ -155,14 +155,14 @@ export function useTenantRentPerformance(
   tenantId: number,
   params: TenantRentPerformanceParams,
 ) {
-  const { start, end, currency, grain } = params
+  const { start, end, grain } = params
   return useQuery({
     queryKey: queryKeys.analytics.tenantRentPerformance(tenantId, params),
     queryFn: () =>
       fetchValidated(
         analyticsUrl(
           `/analytics/tenants/${tenantId}/rent-performance/`,
-          { start, end, currency, grain },
+          { start, end, grain },
         ),
         tenantRentPerformanceSchema,
       ),

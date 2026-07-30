@@ -35,7 +35,7 @@ const data: TenantRentPerformanceResponse = {
     { key: 'cumulative_arrears', label: 'Cumulative arrears', kind: 'cumulative' },
   ],
   points: [
-    { period_start: '2026-01-01', period_end: '2026-01-31', expected: 1000, received: 900, variance: -100, cumulative_arrears: 150, status: 'ok', issues: [] },
+    { period_start: '2026-01-01', period_end: '2026-01-31', expected: 1000, received: 900, variance: -100, cumulative_arrears: -150, status: 'ok', issues: [] },
   ],
 }
 
@@ -55,13 +55,13 @@ describe('RentPerformanceChart', () => {
     expect(screen.getByTestId('rent-line-Cumulative arrears')).not.toHaveAttribute('data-dasharray')
     expect(screen.getByTestId('rent-line-Expected rent')).toHaveAttribute('data-dot', 'false')
     expect(screen.getByTestId('rent-line-Cumulative arrears')).toHaveAttribute('data-dot', 'false')
-    expect(screen.getByText('Reporting period: 2026-01-01 to 2026-03-31')).toBeInTheDocument()
+    expect(screen.getByText('Native currency: GBP · Reporting period: 2026-01-01 to 2026-03-31')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Table' }))
     const table = screen.getByRole('table', { name: /tenant rent performance exact values/i })
     expect(table).toHaveTextContent('£1,000')
     expect(table).toHaveTextContent('£900')
-    expect(table).toHaveTextContent('-£100')
-    expect(table).toHaveTextContent('£150')
+    expect(table).toHaveTextContent('(£100)')
+    expect(table).toHaveTextContent('(£150)')
   })
 
   it('renders loading, retryable error, and empty states', () => {

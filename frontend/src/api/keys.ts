@@ -174,7 +174,7 @@ export const queryKeys = {
       tenantId: number,
       filters: Pick<
         AnalyticsFilters,
-        'start' | 'end' | 'currency' | 'grain' | 'comparison'
+        'start' | 'end' | 'grain' | 'comparison'
       >,
     ) =>
       [
@@ -184,7 +184,6 @@ export const queryKeys = {
           tenantId,
           start: filters.start,
           end: filters.end,
-          currency: filters.currency,
           grain: filters.grain,
           comparison: filters.comparison,
         },

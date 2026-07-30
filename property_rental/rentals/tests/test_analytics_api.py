@@ -8,8 +8,10 @@ from django.test import Client
 
 from rentals.api.analytics_serializers import YieldRowSerializer
 from rentals.tests.factories import (
+    LeaseRentFactory,
     PropertyCapitalStructureFactory,
     PropertyFactory,
+    TenantFactory,
     TransactionFactory,
 )
 
@@ -28,6 +30,71 @@ def valid_yield_row():
         "equity_yield": 13.333333,
         "status": "ok",
     }
+
+
+@pytest.mark.django_db
+def test_tenant_rent_performance_api_owns_native_currency_and_rejects_override(
+    auth_client, landlord_user
+):
+    """Accepting a reporting-currency override would make one tenant chart cache multiple currencies."""
+    property_ = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        currency="EUR",
+    )
+    tenant = TenantFactory(
+        property=property_,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="EUR",
+    )
+
+    response = auth_client.get(
+        f"/api/v1/analytics/tenants/{tenant.id}/rent-performance/",
+        {"start": "2026-01-01", "end": "2026-01-31"},
+    )
+    override = auth_client.get(
+        f"/api/v1/analytics/tenants/{tenant.id}/rent-performance/",
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "currency": "USD",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["currency"] == "EUR"
+    assert response.json()["points"][0]["expected"] == 1000.0
+    assert override.status_code == 400
+    assert "currency" in override.json()
+
+
+@pytest.mark.django_db
+def test_tenant_rent_performance_api_rejects_missing_property_currency(
+    auth_client, landlord_user
+):
+    """Falling back to a user currency would conceal an unavailable native denomination."""
+    property_ = PropertyFactory(
+        owned_by=landlord_user.landlord,
+        currency=None,
+    )
+    tenant = TenantFactory(
+        property=property_,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+
+    response = auth_client.get(
+        f"/api/v1/analytics/tenants/{tenant.id}/rent-performance/",
+        {"start": "2026-01-01", "end": "2026-01-31"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "missing_currency"
 
 
 @pytest.mark.parametrize("field", ["debt", "equity", "equity_yield"])

@@ -278,9 +278,6 @@ export function TenantDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
-              <CardDescription>
-                Server-calculated rent, revenue, and debt. Currency shown in {currency || '—'}.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">

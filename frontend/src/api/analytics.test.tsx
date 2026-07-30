@@ -565,6 +565,19 @@ describe('analytics query keys', () => {
     expect(
       queryKeys.analytics.tenantRentPerformance(7, filters),
     ).not.toEqual(queryKeys.analytics.tenantRentPerformance(8, filters))
+    expect(
+      queryKeys.analytics.tenantRentPerformance(7, filters),
+    ).toEqual([
+      'analytics',
+      'tenant-rent-performance',
+      {
+        tenantId: 7,
+        start: filters.start,
+        end: filters.end,
+        grain: filters.grain,
+        comparison: filters.comparison,
+      },
+    ])
   })
 })
 
@@ -697,7 +710,7 @@ describe('analytics hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(receivedSearch).toBe(
-      'start=2026-01-01&end=2026-07-29&currency=GBP&grain=month',
+      'start=2026-01-01&end=2026-07-29&grain=month',
     )
   })
 })
