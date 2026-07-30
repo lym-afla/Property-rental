@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesColor, chartSeriesStyle } from '@/components/analytics/chartTheme'
@@ -70,7 +71,7 @@ export function PropertyPortfolioBreakdownChart(props: Props) {
       {state.status === 'success' && data && (
         <div className="h-full overflow-x-auto">
           <div data-testid="property-breakdown-plot" className="h-full min-w-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChartContainer width="100%" height="100%">
               <LineChart data={chartPoints} margin={{ top: 8, right: 12, left: 12, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="period" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(value) => formatDate(new Date(Number(value)))} />
@@ -78,7 +79,7 @@ export function PropertyPortfolioBreakdownChart(props: Props) {
                 <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(new Date(Number(label)))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
                 {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={chartSeriesStyle().strokeWidth} dot={false} activeDot={false} connectNulls={false} />)}
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveChartContainer>
           </div>
         </div>
       )}

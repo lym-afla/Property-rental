@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { parseISO } from 'date-fns'
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
@@ -72,12 +73,16 @@ export function ValuationChart(props: Props) {
         : 'Server-provided valuation records; no client-side time cutoff.'}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
-        next.has(key) ? next.delete(key) : next.add(key)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
         return next
       })} />}
       table={state.status === 'success' ? table : undefined}
     >
-      {state.status === 'success' && data && <ResponsiveContainer width="100%" height="100%">
+      {state.status === 'success' && data && <ResponsiveChartContainer width="100%" height="100%">
         <ComposedChart data={chartPoints} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
@@ -93,7 +98,7 @@ export function ValuationChart(props: Props) {
           {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
           {visibleSeries.filter((item) => item.key === 'total_value').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
         </ComposedChart>
-      </ResponsiveContainer>}
+      </ResponsiveChartContainer>}
     </AnalyticsChartCard>
   )
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
@@ -66,7 +67,11 @@ export function RentPerformanceChart(props: Props) {
       subtitle={data ? `Native currency: ${data.currency} · Reporting period: ${data.start} to ${data.end}` : 'Expected, received, variance, and cumulative arrears supplied by the server.'}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
-        next.has(key) ? next.delete(key) : next.add(key)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
         return next
       })} />}
       table={state.status === 'success' ? table : undefined}
@@ -74,7 +79,7 @@ export function RentPerformanceChart(props: Props) {
       {state.status === 'success' && data && <div className="flex h-full min-h-0 flex-col">
         <span className="sr-only">Expected rent is a line, received rent is bars, and variance is signed against the zero baseline.</span>
         <div className="min-h-0 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartContainer width="100%" height="100%">
             <ComposedChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
@@ -84,7 +89,7 @@ export function RentPerformanceChart(props: Props) {
               {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
               {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} activeDot={false} />)}
             </ComposedChart>
-          </ResponsiveContainer>
+          </ResponsiveChartContainer>
         </div>
       </div>}
     </AnalyticsChartCard>

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesStyle } from '@/components/analytics/chartTheme'
@@ -34,14 +35,20 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
       title="Net cash flow"
       subtitle="Signed income and expense categories by reporting period."
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
-        const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next
+        const next = new Set(current)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        return next
       })} />}
       table={state.status === 'success' && data ? cashTable(data, series) : undefined}
     >
       {state.status === 'success' && data && <div className="flex h-full min-h-0 flex-col">
         <span className="sr-only" aria-label="Net cash flow zero baseline">Zero baseline shown on the chart.</span>
         <div className="min-h-0 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartContainer width="100%" height="100%">
             <BarChart data={data.points} stackOffset="sign" margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
@@ -50,7 +57,7 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
             {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveChartContainer>
         </div>
         <details className="mt-2 rounded-md border px-2 py-1">
           <summary className="min-h-11 cursor-pointer content-center font-medium">Drill down to transactions</summary>

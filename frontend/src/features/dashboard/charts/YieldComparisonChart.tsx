@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { FinancialDefinitions } from '@/components/analytics/FinancialDefinitions'
@@ -72,14 +73,22 @@ export function YieldComparisonChart(props: Props) {
       state={state}
       title="Yield comparison"
       subtitle="Gross and equity yields are supplied by the yield analytics endpoint."
-      controls={<><FinancialDefinitions />{state.status === 'success' && <ChartLegend series={yieldSeries} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next })} />}</>}
+      controls={<><FinancialDefinitions />{state.status === 'success' && <ChartLegend series={yieldSeries} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
+        const next = new Set(current)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        return next
+      })} />}</>}
       table={state.status === 'success' ? table : undefined}
     >
       {state.status === 'success' && data && (
         <>
           <div className="flex h-full min-h-0 flex-col gap-2">
             <div className="min-h-0 flex-1">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveChartContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis type="number" dataKey="yield" unit="%" name="Yield" />
@@ -94,7 +103,7 @@ export function YieldComparisonChart(props: Props) {
                     return <Scatter key={key} name={series.label} fill={chartSeriesStyle(series.visualToken).color} data={data.rows.flatMap((row) => isFiniteNumber(row[key]) ? [{ property_name: row.property_name, yield: row[key] }] : [])} />
                   })}
                 </ScatterChart>
-              </ResponsiveContainer>
+              </ResponsiveChartContainer>
             </div>
             {missingValuations.length > 0 && <div data-testid="missing-valuation-callout" className="rounded-md border border-dashed px-3 py-2 text-sm"><p className="font-medium">Missing valuation</p><ul className="list-disc pl-5">{missingValuations.map((row) => <li key={row.property_id}>{row.property_name}: {unavailableYieldMessage(row)}</li>)}</ul></div>}
           </div>
