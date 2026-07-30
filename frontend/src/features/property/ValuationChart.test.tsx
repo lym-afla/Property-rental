@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { parseISO } from 'date-fns'
 import { describe, expect, it, vi } from 'vitest'
@@ -14,7 +14,9 @@ vi.mock('recharts', () => ({
   CartesianGrid: () => null,
   XAxis: () => null,
   YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="valuation-axis">{tickFormatter(500000)}</span>,
-  Tooltip: () => null,
+  Tooltip: ({ content }: { content: (props: { active: boolean; label: number; payload: Array<{ name: string; value: number }> }) => React.ReactNode }) => (
+    <div data-testid="valuation-tooltip">{content({ active: true, label: parseISO('2018-01-01').getTime(), payload: [{ name: 'Debt', value: -100 }] })}</div>
+  ),
   Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`valuation-bar-${name}`} data-fill={fill}>{name} bars</span>,
   Line: ({ name, strokeDasharray, dot }: { name: string; strokeDasharray?: string; dot?: boolean }) => <span data-testid={`valuation-line-${name}`} data-dasharray={strokeDasharray} data-dot={String(dot)}>{name} line</span>,
 }))
@@ -71,6 +73,20 @@ describe('ValuationChart', () => {
     expect(x2023).toBe(parseISO('2023-01-01').getTime())
     expect(x2024).toBe(parseISO('2024-01-01').getTime())
     expect((x2023 - x2004) / (x2024 - x2023)).toBeGreaterThan(18)
+  })
+
+  it('uses accounting formatting for negative values in the exact table and tooltip', async () => {
+    const user = userEvent.setup()
+    render(<ValuationChart data={{
+      ...data,
+      points: [
+        { period_start: '2018-01-01', period_end: '2018-01-01', total_value: 500000, debt: -100, equity: -200, status: 'ok' },
+      ],
+    }} />)
+
+    expect(within(screen.getByTestId('valuation-tooltip')).getByText('(£100)')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Table' }))
+    expect(within(screen.getByRole('table', { name: /property valuation exact values/i })).getByText('(£100)')).toBeVisible()
   })
 
   it('offers valuation history rather than transaction navigation when no records exist', () => {
