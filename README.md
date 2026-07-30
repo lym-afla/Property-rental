@@ -22,7 +22,54 @@ This application tracks rental-property operations and investment performance. D
 + In addition, `forms.py` to do form creation and handling, `constants.py` to use constants throughout the app, mainly in models and forms, and `utils.py` with additional useful functions to do, for instance, currency format representation, preparing datasets for charting (dates, labels), updating FX spot rates from yahoo finance (using yfinance package)
 
 ### Running the application
-Can be run in `development` mode on the local server with Django approach, using `runserver` command. 
+
+Use `uv` for the backend environment. The project still keeps backend
+dependencies in `property_rental/requirements.txt` and
+`property_rental/requirements-dev.txt`, so `uv` is used as the virtualenv
+and installer rather than `uv sync`.
+
+Backend, from PowerShell:
+
+```powershell
+cd D:\Developing\Property-rental
+uv venv .venv
+.\.venv\Scripts\Activate.ps1
+uv pip install -r property_rental\requirements-dev.txt
+
+cd property_rental
+python manage.py migrate
+python manage.py runserver
+```
+
+Frontend, in a second terminal:
+
+```powershell
+cd D:\Developing\Property-rental\frontend
+npm ci
+npm run dev
+```
+
+Open the Django app at `http://127.0.0.1:8000`. In development,
+`django-vite` loads the React bundle from the Vite dev server.
+
+Backend checks:
+
+```powershell
+cd D:\Developing\Property-rental
+.\.venv\Scripts\Activate.ps1
+cd property_rental
+python -m pytest -q
+python manage.py check
+```
+
+Frontend checks:
+
+```powershell
+cd D:\Developing\Property-rental\frontend
+npm test
+npm run lint
+npm run build
+```
 
 ### Analytics API and visual regression checks
 
