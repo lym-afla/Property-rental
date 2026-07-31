@@ -15,6 +15,7 @@ import os
 # settings/base.py is two levels below the project package, so we go up
 # three levels to reach the project root (the dir containing manage.py).
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+VITE_MANIFEST_PATH = BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"
 
 # Task 6: frontend dist path (only present after `npm run build`). Used
 # in TEMPLATES.DIRS below so a fresh clone — where the SPA hasn't been
@@ -180,7 +181,7 @@ DJANGO_VITE = {
         "dev_server_protocol": "http",
         "dev_server_host": "127.0.0.1",
         "dev_server_port": 5173,
-        "manifest_path": str(BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"),
+        "manifest_path": str(VITE_MANIFEST_PATH),
         "static_url_prefix": "frontend",
     },
 }

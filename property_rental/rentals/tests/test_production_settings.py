@@ -1,0 +1,143 @@
+"""Production and build settings contracts."""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+
+
+def production_environment(**overrides: str) -> dict[str, str]:
+    """Return the complete non-secret production environment fixture."""
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "DJANGO_SETTINGS_MODULE": "property_rental.settings.prod",
+            "DATABASE_URL": "postgresql://rental:secret@db:5432/rental",
+            "DJANGO_SECRET_KEY": "test-only-runtime-value",
+            "DJANGO_ALLOWED_HOSTS": "rent.linik.ru, www.rent.linik.ru,",
+            "DJANGO_CSRF_TRUSTED_ORIGINS": "https://rent.linik.ru,https://www.rent.linik.ru,",
+            "BUSINESS_TIME_ZONE": "Europe/Moscow",
+            "OIDC_ISSUER": "https://auth.linik.ru/application/o/rent/",
+            "OIDC_CLIENT_ID": "rent-test",
+            "OIDC_CLIENT_SECRET": "test-only",
+            "OIDC_CALLBACK_URL": "https://rent.linik.ru/oidc/callback/",
+            "OIDC_LOGOUT_URL": "https://auth.linik.ru/application/o/rent/end-session/",
+        }
+    )
+    environment.update(overrides)
+    return environment
+
+
+def import_settings(environment: dict[str, str], expression: str = "settings.DATABASES") -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from django.conf import settings; import json; print(json.dumps(" + expression + "))",
+        ],
+        cwd=PROJECT_DIR,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_production_requires_database_url():
+    """Removing DATABASE_URL must prevent production settings from importing."""
+    environment = production_environment()
+    environment.pop("DATABASE_URL")
+
+    result = import_settings(environment)
+
+    assert result.returncode != 0
+    assert "DATABASE_URL" in result.stderr
+
+
+def test_production_rejects_sqlite_database_url():
+    """A SQLite URL must never be accepted by the production database boundary."""
+    result = import_settings(production_environment(DATABASE_URL="sqlite:///tmp/rental.sqlite3"))
+
+    assert result.returncode != 0
+    assert "PostgreSQL" in result.stderr
+
+
+def test_production_parses_postgresql_url_into_django_database_settings():
+    """A PostgreSQL URL must create Django's PostgreSQL connection configuration."""
+    result = import_settings(production_environment())
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "rental",
+            "USER": "rental",
+            "PASSWORD": "secret",
+            "HOST": "db",
+            "PORT": "5432",
+            "CONN_HEALTH_CHECKS": True,
+        }
+    }
+
+
+def test_production_cannot_enable_debug_and_filters_empty_host_entries():
+    """DJANGO_DEBUG cannot weaken production, and CSV settings omit empty values."""
+    result = import_settings(
+        production_environment(DJANGO_DEBUG="True"),
+        "{'debug': settings.DEBUG, 'hosts': settings.ALLOWED_HOSTS, 'origins': settings.CSRF_TRUSTED_ORIGINS}",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "debug": False,
+        "hosts": ["rent.linik.ru", "www.rent.linik.ru"],
+        "origins": ["https://rent.linik.ru", "https://www.rent.linik.ru"],
+    }
+
+
+def test_production_configures_oidc_pkce_and_security_contracts():
+    """Production must retain OIDC PKCE and HTTPS proxy/cookie/header protections."""
+    result = import_settings(
+        production_environment(),
+        "{'pkce': settings.OIDC_USE_PKCE, 'method': settings.OIDC_PKCE_CODE_CHALLENGE_METHOD, "
+        "'proxy': settings.SECURE_PROXY_SSL_HEADER, 'session_secure': settings.SESSION_COOKIE_SECURE, "
+        "'csrf_secure': settings.CSRF_COOKIE_SECURE, 'hsts': settings.SECURE_HSTS_SECONDS, "
+        "'referrer': settings.SECURE_REFERRER_POLICY, 'cors': hasattr(settings, 'CORS_ALLOWED_ORIGINS')}",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "pkce": True,
+        "method": "S256",
+        "proxy": ["HTTP_X_FORWARDED_PROTO", "https"],
+        "session_secure": True,
+        "csrf_secure": True,
+        "hsts": 31536000,
+        "referrer": "same-origin",
+        "cors": False,
+    }
+
+
+def test_build_settings_need_no_runtime_secrets_but_require_vite_manifest():
+    """Build settings avoid runtime secrets but stop collection without Vite output."""
+    environment = os.environ.copy()
+    environment["DJANGO_SETTINGS_MODULE"] = "property_rental.settings.build"
+    for name in (
+        "DATABASE_URL",
+        "DJANGO_SECRET_KEY",
+        "OIDC_ISSUER",
+        "OIDC_CLIENT_ID",
+        "OIDC_CLIENT_SECRET",
+        "OIDC_CALLBACK_URL",
+        "OIDC_LOGOUT_URL",
+    ):
+        environment.pop(name, None)
+
+    result = import_settings(environment, "settings.DJANGO_VITE")
+
+    assert result.returncode != 0
+    assert "manifest.json" in result.stderr
