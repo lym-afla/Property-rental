@@ -70,7 +70,7 @@ class AuthorizationAgeMiddleware:
     def _is_exempt(cls, path):
         callback_path, authenticate_path = cls._oidc_routes()
         return (
-            path == "/health/"
+            path in {"/health/live", "/health/ready"}
             or path == authenticate_path
             or path == callback_path
             or path.startswith(settings.STATIC_URL)
