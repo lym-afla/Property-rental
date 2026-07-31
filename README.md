@@ -9,9 +9,9 @@ This application tracks rental-property operations and investment performance. D
 + Recharts renders the typed investment dashboard, property valuation history, and tenant rent-performance analytics
 + Instances of the main models (user, property, tenant, transaction) can also be edited or deleted in case of the wrong data present
 + User settings are also included to be able to save user details (username, name, email) and data visual properties (default currency, chart frequency, chart timeline and number of digits shown in tables)
-+ The application is multi-currency. Each property has its onw _natural_ currrency. Data representation, however, can be made in any currency (set up in user settings). And home page, summarising all the statistics is shown using single default currency. After the new transaction is entered, special function is run to update FX database to be able to convert currencies
++ The application is multi-currency. Each property has its own _natural_ currency. Data representation can be shown in a user-selected reporting currency, and the home page summarizes portfolio statistics in the default currency. In production, FX acquisition is performed by the scheduled `refresh_fx` management command; ordinary web requests and financial writes do not call external FX providers.
 + For consistency of FX conversions _Bellman-Ford_ algorithm used for shortest path cross-currency conversion using `networkx` library to deal with undirected graphs
-+ The application has the ability to update the effective date, such that all the data and calculations are shown as of that effective date. This is more like a _developer_ functionality and should be removed for production
++ Local development can use a per-user effective-date override for deterministic analytics. Production disables this developer override and resolves reports using the configured business timezone.
 
 ## File structure
 `Property_rental` build with Django with the single app `rentals`. Rentals app has fairly standard structure:
@@ -19,7 +19,7 @@ This application tracks rental-property operations and investment performance. D
 + `frontend` contains the React/TypeScript SPA, component tests, and Playwright scenarios
 + `rentals/analytics` owns financial classification, FX conversion, occupancy, yields, and bounded date bucketing
 + Django templates provide only the SPA shell; behavioral endpoints live under `/api/v1/`
-+ In addition, `forms.py` to do form creation and handling, `constants.py` to use constants throughout the app, mainly in models and forms, and `utils.py` with additional useful functions to do, for instance, currency format representation, preparing datasets for charting (dates, labels), updating FX spot rates from yahoo finance (using yfinance package)
++ In addition, `forms.py` handles form creation, `constants.py` centralizes model/form constants, and `utils.py` plus `rentals/services/` provide currency formatting, analytics helpers, and scheduled FX refresh support.
 
 ### Running the application
 
@@ -64,6 +64,41 @@ npm test
 npm run lint
 npm run build
 ```
+
+### Production container and Life OS handoff
+
+The application is prepared for Life OS deployment at `https://rent.linik.ru`.
+The repository provides the production image, strict environment contract,
+PostgreSQL settings, Authentik OIDC integration boundary, health endpoints, and
+one-shot operational commands. It does not deploy to the VPS and does not create
+production PostgreSQL, Traefik, Authentik, or backup infrastructure.
+
+Key handoff documents:
+
++ `docs/deployment/life-os.md` — production runtime contract, required
+  environment variables, networks, OIDC groups, health checks, security, FX
+  scheduling, and static asset behavior.
++ `docs/deployment/sqlite-migration.md` — temporary `import_sqlite` workflow,
+  reconciliation rules, and explicit OIDC identity-linking procedure.
++ `docs/deployment/backup-restore.md` — persistent data and restore notes.
++ `docs/deployment/image-report.md` — measured image size and largest layers.
+
+Build and smoke-test the production image locally:
+
+```powershell
+docker build --tag property-rental:life-os .
+python scripts/container_smoke.py --image property-rental:life-os
+```
+
+Run migrations as an explicit one-shot job, never as implicit web-container
+startup work:
+
+```powershell
+python property_rental\manage.py migrate --noinput
+```
+
+Production settings require `DATABASE_URL` to be PostgreSQL and fail startup
+when required production configuration is missing.
 
 ### Analytics API and visual regression checks
 
