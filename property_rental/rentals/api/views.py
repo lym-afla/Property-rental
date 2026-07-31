@@ -596,8 +596,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
-class FXViewSet(viewsets.ModelViewSet):
-    """CRUD for FX rows.
+class FXViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only access to FX rows.
 
     FX rows are not scoped to a landlord (FX is a shared reference-table
     in this app — every landlord reads the same currency-pair rates). So

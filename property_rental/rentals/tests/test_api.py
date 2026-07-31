@@ -689,6 +689,24 @@ def test_fx_update_endpoint_is_removed(auth_client, sample_property):
         provider.assert_not_called()
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("method", "payload"),
+    [
+        ("post", {"date": "2024-01-01", "from_currency": "USD", "to_currency": "EUR", "rate": "0.9"}),
+        ("put", {"date": "2024-01-01", "from_currency": "USD", "to_currency": "EUR", "rate": "0.9"}),
+        ("patch", {"rate": "0.9"}),
+        ("delete", None),
+    ],
+)
+def test_fx_api_rejects_all_mutations(auth_client, method, payload):
+    """Scheduled refresh is the only writer, including reverse-pair writes."""
+    fx = FXFactory()
+    path = "/api/v1/fx/" if method == "post" else f"/api/v1/fx/{fx.pk}/"
+    response = getattr(auth_client, method)(path, data=payload, format="json")
+    assert response.status_code == 405
+
+
 # ---------------------------------------------------------------------------
 # /api/v1/lease-rents/ — write path for the tenant detail page's
 # "Update rent" dialog (POST creates a new effective-date rent entry).

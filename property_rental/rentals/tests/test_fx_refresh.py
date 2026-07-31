@@ -117,3 +117,8 @@ def test_command_uses_business_timezone_date_and_fails_for_missing_rate(monkeypa
     with pytest.raises(CommandError):
         call_command("refresh_fx", pair=["EUR/USD"])
     assert seen["as_of"] == date(2024, 1, 1)
+
+
+def test_command_reports_malformed_date_as_command_error():
+    with pytest.raises(CommandError, match="Invalid date"):
+        call_command("refresh_fx", as_of="not-a-date", pair=["EUR/USD"])

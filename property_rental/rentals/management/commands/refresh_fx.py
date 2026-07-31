@@ -16,7 +16,14 @@ class Command(BaseCommand):
         parser.add_argument("--pair", action="append", dest="pair")
 
     def handle(self, *args, **options):
-        as_of = date.fromisoformat(options["as_of"]) if options.get("as_of") else timezone.localdate(timezone.now())
+        try:
+            as_of = (
+                date.fromisoformat(options["as_of"])
+                if options.get("as_of")
+                else timezone.localdate(timezone.now())
+            )
+        except ValueError as exc:
+            raise CommandError(f"Invalid date: {options['as_of']}") from exc
         raw_pairs = options.get("pair") or [f"USD/{code}" for code, _ in CURRENCY_CHOICES if code != "USD"]
         try:
             pairs = [CurrencyPair(*value.split("/", 1)) for value in raw_pairs]
