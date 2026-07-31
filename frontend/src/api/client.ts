@@ -14,6 +14,26 @@ export class ApiError extends Error {
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>
+  startAuthorizationRefresh?: (refreshUrl: string) => void
+}
+
+type RefreshResponse = {
+  refresh_url: string
+  code?: 'authorization_refresh_required'
+  retry?: false
+}
+
+export function startAuthorizationRefresh(refreshUrl: string): void {
+  const topLevelWindow = window.top ?? window
+  topLevelWindow.location.assign(refreshUrl)
+}
+
+function isAuthorizationRefreshResponse(body: unknown): body is RefreshResponse {
+  if (!body || typeof body !== 'object') return false
+  const value = body as Record<string, unknown>
+  if (typeof value.refresh_url !== 'string') return false
+  if (value.code === undefined) return true
+  return value.code === 'authorization_refresh_required' && value.retry === false
 }
 
 function getCsrfToken(): string | null {
@@ -22,7 +42,13 @@ function getCsrfToken(): string | null {
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, query, headers, ...rest } = options
+  const {
+    body,
+    query,
+    headers,
+    startAuthorizationRefresh: navigate = startAuthorizationRefresh,
+    ...rest
+  } = options
 
   const search = query
     ? '?' + new URLSearchParams(
@@ -36,6 +62,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const isMutation = method !== 'GET' && method !== 'HEAD'
 
   const finalHeaders: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest',
     ...(headers as Record<string, string>),
   }
   if (body !== undefined) {
@@ -65,6 +92,13 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       errorBody = await response.json()
     } catch {
       errorBody = await response.text()
+    }
+    const refreshUrl = response.headers.get('refresh_url')
+      ?? response.headers.get('Refresh-Url')
+    if (response.status === 403 && refreshUrl) {
+      navigate(refreshUrl)
+    } else if (response.status === 403 && isAuthorizationRefreshResponse(errorBody)) {
+      navigate(errorBody.refresh_url)
     }
     throw new ApiError(response.status, errorBody)
   }

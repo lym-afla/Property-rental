@@ -7,6 +7,32 @@ on:
 jobs:
   backend-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: property_rental_ci
+          POSTGRES_USER: property_rental_ci
+          POSTGRES_PASSWORD: property_rental_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U property_rental_ci -d property_rental_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://property_rental_ci:property_rental_ci@127.0.0.1:5432/property_rental_ci
+      DJANGO_SETTINGS_MODULE: property_rental.settings.test_postgres
+      DJANGO_SECRET_KEY: ci-only-not-a-production-secret-1234567890abcdef
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://localhost
+      BUSINESS_TIME_ZONE: Europe/Moscow
+      OIDC_ISSUER: https://oidc.example.invalid/
+      OIDC_CLIENT_ID: ci-only-client
+      OIDC_CLIENT_SECRET: ci-only-secret
+      OIDC_CALLBACK_URL: https://localhost/oidc/callback/
+      OIDC_LOGOUT_URL: https://oidc.example.invalid/logout/
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -17,7 +43,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install uv
       - run: uv sync --group dev --python ${{ matrix.python-version }}
-      - run: uv run pytest --cov=rentals
+      - run: pwsh -File scripts/ci_postgres.ps1
 
   frontend-test:
     runs-on: ubuntu-latest
@@ -68,3 +94,17 @@ jobs:
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
+
+  container-audit:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test, frontend-lint, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pwsh -File scripts/ci_container.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-image-audit
+          path: artifacts/container

@@ -56,6 +56,7 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: false,
     // Emit into a dir that's already on STATICFILES_DIRS so the dev
     // runserver and prod `collectstatic` both serve the built assets.
     // `property_rental/` is the Django project root (the dir containing

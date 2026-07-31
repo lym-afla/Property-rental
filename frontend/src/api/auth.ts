@@ -10,6 +10,30 @@ import type { User } from '@/types/user'
 
 type MeResponse = { user: User }
 
+export type RuntimeConfig = {
+  localPasswordAuthEnabled: boolean
+  oidcLoginUrl: string
+}
+
+declare global {
+  interface Window {
+    __PROPERTY_RENTAL_CONFIG__?: RuntimeConfig
+  }
+}
+
+export function getRuntimeConfig(): RuntimeConfig {
+  return window.__PROPERTY_RENTAL_CONFIG__ ?? {
+    localPasswordAuthEnabled: true,
+    oidcLoginUrl: '/oidc/authenticate/',
+  }
+}
+
+export function getOidcLoginUrl(nextPath = '/'): string {
+  const { oidcLoginUrl } = getRuntimeConfig()
+  const separator = oidcLoginUrl.includes('?') ? '&' : '?'
+  return `${oidcLoginUrl}${separator}${new URLSearchParams({ next: nextPath })}`
+}
+
 function removeUserScopedQueryData(qc: QueryClient) {
   qc.removeQueries({
     predicate: (query) => query.queryKey[0] !== 'auth',

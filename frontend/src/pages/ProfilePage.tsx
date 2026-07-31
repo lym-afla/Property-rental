@@ -22,7 +22,7 @@ import { z } from 'zod'
 import { Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useMe, useUpdateMe, useChangePassword } from '@/api/auth'
+import { getRuntimeConfig, useMe, useUpdateMe, useChangePassword } from '@/api/auth'
 import { ProfileSettingsForm } from '@/components/forms/ProfileSettingsForm'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import {
@@ -47,6 +47,7 @@ import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export function ProfilePage() {
+  const { localPasswordAuthEnabled } = getRuntimeConfig()
   const meQuery = useMe()
   const [editOpen, setEditOpen] = useState(false)
 
@@ -73,7 +74,7 @@ export function ProfilePage() {
         <TabsList>
           <TabsTrigger value="details">User details</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="password">Change password</TabsTrigger>
+          {localPasswordAuthEnabled && <TabsTrigger value="password">Change password</TabsTrigger>}
         </TabsList>
 
         {/* User details --------------------------------------------- */}
@@ -122,13 +123,15 @@ export function ProfilePage() {
 
         {/* Settings -------------------------------------------------- */}
         <TabsContent value="settings" className="pt-4">
-          <SettingsTab user={user} />
+          <SettingsTab user={user} showEffectiveDate={localPasswordAuthEnabled} />
         </TabsContent>
 
         {/* Change password ------------------------------------------- */}
-        <TabsContent value="password" className="pt-4">
-          <ChangePasswordTab />
-        </TabsContent>
+        {localPasswordAuthEnabled && (
+          <TabsContent value="password" className="pt-4">
+            <ChangePasswordTab />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Edit profile dialog */}
@@ -154,7 +157,10 @@ export function ProfilePage() {
 
 // ---- Settings tab --------------------------------------------------------
 
-function SettingsTab({ user }: { user: NonNullable<ReturnType<typeof useMe>['data']> }) {
+function SettingsTab({ user, showEffectiveDate }: {
+  user: NonNullable<ReturnType<typeof useMe>['data']>
+  showEffectiveDate: boolean
+}) {
   const updateMe = useUpdateMe()
 
   return (
@@ -176,6 +182,7 @@ function SettingsTab({ user }: { user: NonNullable<ReturnType<typeof useMe>['dat
             digits: user.digits,
             effective_date: user.effective_date,
           }}
+          showEffectiveDate={showEffectiveDate}
           onSubmit={(values) =>
             updateMe.mutate(values as Partial<typeof user>, {
               onSuccess: () => toast.success('Settings saved'),

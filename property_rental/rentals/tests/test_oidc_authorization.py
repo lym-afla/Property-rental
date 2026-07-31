@@ -1,0 +1,205 @@
+from datetime import datetime, timedelta
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+from django.conf import settings
+from django.contrib import admin
+from django.http import Http404, JsonResponse
+from django.test import Client, RequestFactory, override_settings
+from django.urls import include, path
+from django.utils import timezone
+
+from rentals.models import User
+from rentals.oidc import ADMIN_GROUP, VIEWER_GROUP, mark_session_authorized
+from rentals.api.auth import LoginView
+from rest_framework.test import APIRequestFactory
+
+
+mutations = []
+
+
+def protected_view(request):
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        mutations.append(request.method)
+    return JsonResponse({"ok": True})
+
+
+def health_view(request):
+    return JsonResponse({"status": "ok"})
+
+
+urlpatterns = [
+    path("protected/", protected_view),
+    path("health/", health_view),
+    path("oidc/", include("mozilla_django_oidc.urls")),
+]
+
+
+AUTH_MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "rentals.middleware.AuthorizationAgeMiddleware",
+]
+
+REFRESH_MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "rentals.middleware.AuthorizationAgeMiddleware",
+    "mozilla_django_oidc.middleware.SessionRefresh",
+]
+
+
+def authorize(client, user, *, age_seconds=0, groups=(VIEWER_GROUP,)):
+    client.force_login(user, backend="rentals.oidc.RentalOIDCAuthenticationBackend")
+    session = client.session
+    session["oidc_authorized_groups"] = list(groups)
+    session["oidc_last_authorized_at"] = (
+        timezone.now() - timedelta(seconds=age_seconds)
+    ).isoformat()
+    session.save()
+
+
+@pytest.fixture(autouse=True)
+def clear_mutations(settings):
+    mutations.clear()
+    settings.LOCAL_PASSWORD_AUTH_ENABLED = False
+    settings.AUTHENTICATION_BACKENDS = [
+        "rentals.oidc.RentalOIDCAuthenticationBackend"
+    ]
+    settings.OIDC_OP_TOKEN_ENDPOINT = "https://auth.example/token/"
+    settings.OIDC_OP_AUTHORIZATION_ENDPOINT = "https://auth.example/authorize/"
+    settings.OIDC_OP_USER_ENDPOINT = "https://auth.example/userinfo/"
+    settings.OIDC_OP_JWKS_ENDPOINT = "https://auth.example/jwks/"
+    settings.OIDC_RP_CLIENT_ID = "rent"
+    settings.OIDC_RP_CLIENT_SECRET = "secret"
+
+
+@pytest.mark.django_db
+@override_settings(ROOT_URLCONF=__name__, MIDDLEWARE=AUTH_MIDDLEWARE)
+def test_fresh_authorization_reaches_protected_view():
+    user = User.objects.create_user("fresh")
+    client = Client()
+    authorize(client, user, age_seconds=299)
+
+    assert client.post("/protected/").status_code == 200
+    assert mutations == ["POST"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("method", ["post", "patch", "delete"])
+@override_settings(ROOT_URLCONF=__name__, MIDDLEWARE=AUTH_MIDDLEWARE)
+def test_expired_unsafe_request_is_denied_without_invoking_view(method):
+    user = User.objects.create_user(f"stale-{method}")
+    client = Client()
+    authorize(client, user, age_seconds=300)
+
+    response = getattr(client, method)("/protected/")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "code": "authorization_refresh_required",
+        "refresh_url": "/oidc/authenticate/?next=%2Fprotected%2F",
+        "retry": False,
+    }
+    assert mutations == []
+
+
+@pytest.mark.django_db
+@override_settings(
+    ROOT_URLCONF=__name__,
+    MIDDLEWARE=AUTH_MIDDLEWARE,
+    OIDC_CALLBACK_URL="https://rent.example/identity/callback/",
+)
+def test_unsafe_refresh_url_uses_configured_oidc_route_prefix():
+    user = User.objects.create_user("custom-callback")
+    client = Client()
+    authorize(client, user, age_seconds=300)
+
+    response = client.post("/protected/")
+
+    assert response.status_code == 403
+    assert response.json()["refresh_url"] == (
+        "/identity/authenticate/?next=%2Fprotected%2F"
+    )
+
+
+@pytest.mark.django_db
+@override_settings(
+    ROOT_URLCONF=__name__,
+    MIDDLEWARE=REFRESH_MIDDLEWARE,
+    OIDC_OP_AUTHORIZATION_ENDPOINT="https://auth.example/authorize/",
+    OIDC_RP_CLIENT_ID="rent",
+)
+def test_expired_xhr_get_uses_session_refresh_response():
+    user = User.objects.create_user("stale-get")
+    client = Client()
+    authorize(client, user, age_seconds=300)
+
+    response = client.get(
+        "/protected/?next=https://evil.example/steal",
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+
+    assert response.status_code == 403
+    assert response.json().keys() == {"refresh_url"}
+    refresh_url = response.json()["refresh_url"]
+    assert refresh_url.startswith("https://auth.example/authorize/?")
+    assert parse_qs(urlparse(refresh_url).query)["prompt"] == ["none"]
+    assert client.session["oidc_login_next"].startswith("/protected/")
+
+
+@pytest.mark.django_db
+@override_settings(ROOT_URLCONF=__name__, MIDDLEWARE=AUTH_MIDDLEWARE)
+def test_missing_viewer_group_clears_session_and_denies_access():
+    user = User.objects.create_user("revoked")
+    client = Client()
+    authorize(client, user, groups=(ADMIN_GROUP,))
+
+    response = client.get("/protected/")
+
+    assert response.status_code == 403
+    assert not client.session.items()
+
+
+@pytest.mark.django_db
+@override_settings(ROOT_URLCONF=__name__, MIDDLEWARE=AUTH_MIDDLEWARE)
+@pytest.mark.parametrize(
+    "path", ["/health/", "/oidc/authenticate/", "/oidc/callback/", "/static/app.js"]
+)
+def test_explicit_public_routes_are_exempt(path):
+    response = Client().get(path)
+    assert response.status_code != 403
+
+
+def test_successful_renewal_updates_authorization_timestamp(rf):
+    request = rf.get("/oidc/callback/")
+    from django.contrib.sessions.middleware import SessionMiddleware
+
+    SessionMiddleware(lambda req: None).process_request(request)
+    before = timezone.now()
+    mark_session_authorized(request, [VIEWER_GROUP])
+
+    assert datetime.fromisoformat(request.session["oidc_last_authorized_at"]) >= before
+
+
+@pytest.mark.django_db
+def test_admin_denies_local_staff_without_admin_authorization():
+    user = User.objects.create_user("staff", is_staff=True)
+    request = RequestFactory().get("/admin/")
+    request.user = user
+    request.session = {"oidc_authorized_groups": [VIEWER_GROUP]}
+
+    assert admin.site.has_permission(request) is False
+
+
+def test_development_keeps_local_password_auth_enabled():
+    settings.LOCAL_PASSWORD_AUTH_ENABLED = True
+    assert settings.LOCAL_PASSWORD_AUTH_ENABLED is True
+
+
+def test_password_view_cannot_be_invoked_when_local_auth_is_disabled():
+    request = APIRequestFactory().post(
+        "/api/v1/auth/login/", {"username": "local", "password": "secret"}
+    )
+    with pytest.raises(Http404):
+        LoginView.as_view()(request)

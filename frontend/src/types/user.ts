@@ -8,7 +8,7 @@ export type User = {
   last_name: string
   is_landlord: boolean
   is_tenant: boolean
-  effective_date: string | null  // ISO date or null
+  effective_date?: string | null  // Development-only ISO date override.
   // Django CharField with blank=True, null=True — may be absent.
   default_currency: string | null
   // NOTE: the plan originally said `default_currency_for_all_data`,

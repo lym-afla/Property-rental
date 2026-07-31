@@ -1,17 +1,20 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useLogin } from '@/api/auth'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { getOidcLoginUrl, getRuntimeConfig, useLogin } from '@/api/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export function LoginPage() {
+  const { localPasswordAuthEnabled } = getRuntimeConfig()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const login = useLogin()
   const navigate = useNavigate()
+  const location = useLocation()
+  const requestedPath = (location.state as { from?: string } | null)?.from ?? '/'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,6 +29,24 @@ export function LoginPage() {
           setErrorMsg(detail ?? 'Login failed')
         },
       }
+    )
+  }
+
+  if (!localPasswordAuthEnabled) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>Use your organization account to access your portfolio.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" asChild>
+              <a href={getOidcLoginUrl(requestedPath)}>Sign in with Authentik</a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 

@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from datetime import date
 from django.db.models import Q
 # ``relativedelta`` was previously imported here for the month-iteration
@@ -51,6 +52,33 @@ class User(AbstractUser):
             Landlord.objects.get_or_create(user=self)
         elif self.is_tenant:
             Tenant.objects.get_or_create(user=self)
+
+
+class OIDCIdentity(models.Model):
+    """Stable external identity; profile fields on ``User`` remain mutable."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="oidc_identity"
+    )
+    issuer = models.URLField(max_length=500, editable=False)
+    subject = models.CharField(max_length=255, editable=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("issuer", "subject"), name="unique_oidc_issuer_subject"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issuer} :: {self.subject}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).objects.only("issuer", "subject").get(pk=self.pk)
+            if (self.issuer, self.subject) != (original.issuer, original.subject):
+                raise ValidationError("OIDC issuer and subject are immutable")
+        return super().save(*args, **kwargs)
 
 class Landlord(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
@@ -372,7 +400,7 @@ class FX(models.Model):
     # Task 10: the graph-build + Bellman-Ford traversal lives in
     # ``rentals.services.fx`` so it can be cached (Django cache framework
     # as of Phase 4 Task 3, 2026-07-19). This model is now a thin
-    # delegate: ``get_rate`` / ``update_fx_rates`` forward to the service.
+    # delegate: ``get_rate`` forwards to the service.
     # Cache invalidation is handled by ``post_save`` / ``post_delete``
     # signal handlers in ``rentals.signals`` (registered in
     # ``RentalsConfig.ready``), so an FX write — including
@@ -386,13 +414,13 @@ class FX(models.Model):
 
     objects = FXManager()
 
-    @classmethod
-    def update_fx_rates(cls, property_id):
-        # Delegate to ``services.fx.update_rates`` (body moved there
-        # verbatim in Task 10). Kept as a classmethod so existing
-        # callers (views, tests) don't need to change.
-        from rentals.services.fx import update_rates
-        return update_rates(property_id)
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("date", "from_currency", "to_currency"),
+                name="unique_fx_rate_identity",
+            )
+        ]
 
     # Get FX quote for date
     @classmethod

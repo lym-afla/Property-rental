@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { http, HttpResponse, delay } from 'msw'
+import { http, HttpResponse } from 'msw'
 import { fixtureUser } from '@/__fixtures__/user'
 import {
   fixtureFXList,
@@ -13,7 +13,6 @@ import {
 import { fixtureProperty } from '@/__fixtures__/property'
 import { fixtureTenant } from '@/__fixtures__/tenant'
 import { fixtureTransactionIncome } from '@/__fixtures__/transaction'
-import { fixtureFX } from '@/__fixtures__/fx'
 import { fixturePropertyValuation } from '@/__fixtures__/propertyValuation'
 
 // Default MSW handlers for every endpoint the SPA can hit (Task 10).
@@ -191,25 +190,6 @@ const defaultHandlers = [
     if (!found) return HttpResponse.json({ detail: 'Not found.' }, { status: 404 })
     return HttpResponse.json(found)
   }),
-  http.post(`${API}/fx/`, async ({ request }) => {
-    const body = (await request.json()) as Partial<typeof fixtureFX>
-    return HttpResponse.json({ ...fixtureFX, ...body, id: 999 }, { status: 201 })
-  }),
-  http.patch(`${API}/fx/:id/`, async ({ request, params }) => {
-    const id = Number(params.id)
-    const found = fixtureFXList.find((f) => f.id === id)
-    if (!found) return HttpResponse.json({ detail: 'Not found.' }, { status: 404 })
-    const body = (await request.json()) as Partial<typeof fixtureFX>
-    return HttpResponse.json({ ...found, ...body })
-  }),
-  http.delete(`${API}/fx/:id/`, () => new HttpResponse(null, { status: 204 })),
-  // POST /fx/update/ -> 200 `{detail: "FX rates updated"}`.
-  // Tiny delay so tests can exercise pending state if they choose to.
-  http.post(`${API}/fx/update/`, async () => {
-    await delay(10)
-    return HttpResponse.json({ detail: 'FX rates updated' })
-  }),
-
   // ---- Property valuations ---------------------------------------------
   // GET supports the `?property=` filter the `byProperty` hook sends.
   http.get(`${API}/property-valuations/`, ({ request }) => {

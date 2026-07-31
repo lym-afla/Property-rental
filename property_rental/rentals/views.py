@@ -19,6 +19,8 @@ characterization tests import those services directly.
 """
 
 from django.views.generic import TemplateView
+from django.conf import settings
+from urllib.parse import urlparse
 
 
 # Task 6: SPA catch-all.
@@ -32,6 +34,17 @@ class SpaView(TemplateView):
     """Serves the built React SPA. Falls through to index.html for client-side routing."""
 
     template_name = 'spa_index.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        callback_path = urlparse(
+            getattr(settings, "OIDC_CALLBACK_URL", "/oidc/callback/")
+        ).path
+        context["spa_config"] = {
+            "localPasswordAuthEnabled": settings.LOCAL_PASSWORD_AUTH_ENABLED,
+            "oidcLoginUrl": callback_path[: -len("callback/")] + "authenticate/",
+        }
+        return context
 
     def get(self, request, *args, **kwargs):
         # Optionally check auth here for protected routes — but the SPA

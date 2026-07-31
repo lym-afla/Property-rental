@@ -6,6 +6,8 @@ DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 SECRET_KEY = "django-insecure-dev-only-key-do-not-use-in-prod"
 
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+
 # In dev, the SPA runs on Vite (:5173) which proxies to Django (:8000).
 # CSRF_TRUSTED_ORIGINS must include both ports so Django accepts the
 # X-CSRFToken header from the SPA's fetch calls through the proxy.

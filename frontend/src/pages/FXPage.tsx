@@ -16,19 +16,13 @@
 // admin / Transactions page anyway.
 //
 //   - `useFX()` for the underlying rows.
-//   - `useUpdateFX()` mutation wired to the "Update FX" button. The hook
-//     POSTs `/api/v1/fx/update/`, which refetches yfinance rates for every
-//     property owned by the requester; on success it invalidates `fx.all`,
-//     `transactions.all` (FX-derived amounts are stale).
 //
-// The page is read-only — the spec does not call for create/edit/delete on
-// FX rates (they're system-derived), so the only mutation affordance is the
-// "Update FX" refresh button in the header.
+// The page is read-only. Production FX acquisition is performed only by the
+// scheduled `refresh_fx` management command; ordinary web requests and
+// financial mutations never invoke an external FX provider.
 import { useMemo, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
 
-import { useFX, useUpdateFX } from '@/api/fx'
+import { useFX } from '@/api/fx'
 import { SkeletonTable } from '@/components/states/SkeletonTable'
 import { EmptyState } from '@/components/states/EmptyState'
 import { ErrorState } from '@/components/states/ErrorState'
@@ -94,7 +88,6 @@ function latestRatePerPair(rows: FX[], asOf?: string): LatestRate[] {
 
 export function FXPage() {
   const { data, isLoading, isError, refetch } = useFX()
-  const updateFX = useUpdateFX()
 
   // Task 11: optional "as of" date. Empty string means "latest available".
   // Controlled input lets the user pick a past date to see historical
@@ -121,14 +114,7 @@ export function FXPage() {
       <div className="space-y-4">
         <EmptyState
           title="No FX rates yet"
-          description="Refresh rates from yfinance to populate the table."
-          actionLabel="Update FX"
-          onAction={() =>
-            updateFX.mutate(undefined, {
-              onSuccess: () => toast.success('FX rates updated'),
-              onError: () => toast.error('Failed to update FX rates'),
-            })
-          }
+          description="No scheduled refresh has populated FX rates yet. Run the refresh_fx management command to fetch rates."
         />
       </div>
     )
@@ -147,6 +133,10 @@ export function FXPage() {
               : `Latest rate per currency pair (${summary.length} ${
                   summary.length === 1 ? 'pair' : 'pairs'
                 }).`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            FX data is refreshed by the scheduled refresh_fx command; this
+            page does not call external providers.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -175,18 +165,6 @@ export function FXPage() {
               </Button>
             )}
           </div>
-          <Button
-            onClick={() =>
-              updateFX.mutate(undefined, {
-                onSuccess: () => toast.success('FX rates updated'),
-                onError: () => toast.error('Failed to update FX rates'),
-              })
-            }
-            disabled={updateFX.isPending}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            {updateFX.isPending ? 'Updating…' : 'Update FX'}
-          </Button>
         </div>
       </div>
 

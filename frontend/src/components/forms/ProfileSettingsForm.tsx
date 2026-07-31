@@ -84,12 +84,14 @@ type Props = {
   defaultValues?: Partial<Input>
   onSubmit: (values: Output) => void
   isSubmitting?: boolean
+  showEffectiveDate?: boolean
 }
 
 export function ProfileSettingsForm({
   defaultValues,
   onSubmit,
   isSubmitting,
+  showEffectiveDate = true,
 }: Props) {
   const form = useForm<Input, unknown, Output>({
     resolver: zodResolver(schema),
@@ -236,7 +238,7 @@ export function ProfileSettingsForm({
           />
         </div>
 
-        <FormField
+        {showEffectiveDate && <FormField
           control={form.control}
           name="effective_date"
           render={({ field }) => (
@@ -258,7 +260,7 @@ export function ProfileSettingsForm({
               <FormMessage />
             </FormItem>
           )}
-        />
+        />}
 
         <Button type="submit" disabled={isSubmitting}>
           Save

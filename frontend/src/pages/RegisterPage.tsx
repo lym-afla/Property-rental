@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useRegister } from '@/api/auth'
+import { useNavigate, Link, Navigate } from 'react-router-dom'
+import { getRuntimeConfig, useRegister } from '@/api/auth'
 import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export function RegisterPage() {
+  const { localPasswordAuthEnabled } = getRuntimeConfig()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -15,6 +16,8 @@ export function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const register = useRegister()
   const navigate = useNavigate()
+
+  if (!localPasswordAuthEnabled) return <Navigate to="/login" replace />
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

@@ -13,7 +13,10 @@ property_rental/rentals/tests/__pycache__/
 property_rental/rentals/management/__pycache__/
 property_rental/rentals/management/commands/__pycache__/
 property_rental/scripts/__pycache__/
+scripts/__pycache__/
+__pycache__/
 property_rental/.pytest_cache/
+.coverage
 
 property_rental/db.sqlite3
 
@@ -27,4 +30,5 @@ property_rental/AW-rentals/
 frontend/dist/
 frontend/test-results/
 property_rental/rentals/static/frontend/
+artifacts/
 

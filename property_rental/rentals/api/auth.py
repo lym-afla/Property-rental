@@ -16,10 +16,12 @@ settings drive the same attributes the SPA fetch needs (``SameSite``,
 ``HttpOnly``, etc.).
 """
 
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
@@ -32,7 +34,16 @@ from rentals.models import User
 from .serializers import UserSerializer
 
 
-class LoginView(APIView):
+class LocalPasswordAuthView:
+    """Fail closed if a password endpoint is invoked outside development."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.LOCAL_PASSWORD_AUTH_ENABLED:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
+
+class LoginView(LocalPasswordAuthView, APIView):
     """Log a user in via Django session auth.
 
     ``authentication_classes = []`` so an unauthenticated client can hit
@@ -96,7 +107,7 @@ class MeView(APIView):
         return Response({"user": serializer.data}, status=status.HTTP_200_OK)
 
 
-class ChangePasswordView(APIView):
+class ChangePasswordView(LocalPasswordAuthView, APIView):
     """Change the current user's password (Task 8).
 
     Wraps Django's :class:`~django.contrib.auth.forms.PasswordChangeForm`
@@ -132,7 +143,7 @@ class ChangePasswordView(APIView):
         return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class RegisterView(APIView):
+class RegisterView(LocalPasswordAuthView, APIView):
     """Register a new user (Task 5).
 
     Accepts ``{username, password, email}`` and creates a new ``User``
