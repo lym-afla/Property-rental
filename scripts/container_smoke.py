@@ -24,8 +24,9 @@ set -eu
 for command in node npm uv gcc cc; do ! command -v "$command"; done
 test ! -d /root/.cache
 test ! -d /home/app/.cache
-! find /app -type f \( -name '*.sqlite3' -o -name '*.map' -o -name '.env*' \) | grep .
+! find /app /opt/venv -type f \( -name '*.sqlite3' -o -name '*.map' -o -name '.env*' \) | grep .
 ! find /app -type d \( -name tests -o -name test -o -name e2e -o -name playwright -o -name __fixtures__ \) | grep .
+! find /opt/venv -type d \( -name tests -o -name e2e -o -name playwright -o -name __fixtures__ \) | grep .
 python - <<'PY'
 import os
 from django.conf import settings

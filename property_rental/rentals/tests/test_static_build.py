@@ -99,5 +99,6 @@ def test_container_definition_exists_and_uses_non_root_runtime():
     assert "HEALTHCHECK" in dockerfile
     assert "${PORT:-8000}" in dockerfile
     assert "X-Forwarded-Proto" in dockerfile
+    assert "find /app /opt/venv" in dockerfile
     assert "COPY --from=frontend-build /build/property_rental/rentals/static/frontend ./rentals/static/frontend" in dockerfile
     assert "property_rental.wsgi:application" in dockerfile

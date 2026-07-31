@@ -46,7 +46,8 @@ COPY property_rental/rentals ./rentals
 COPY --from=frontend-build /build/property_rental/rentals/static/frontend ./rentals/static/frontend
 COPY --from=static-build /app/staticfiles ./staticfiles
 RUN find /app -type d \( -name tests -o -name test -o -name e2e -o -name __fixtures__ \) -prune -exec rm -rf '{}' + && \
-    find /app -type f \( -name '*.sqlite3' -o -name '*.map' -o -name '.env*' \) -delete && \
+    find /opt/venv -type d \( -name tests -o -name e2e -o -name __fixtures__ \) -prune -exec rm -rf '{}' + && \
+    find /app /opt/venv -type f \( -name '*.sqlite3' -o -name '*.map' -o -name '.env*' \) -delete && \
     chown -R app:app /app
 USER app
 EXPOSE 8000
