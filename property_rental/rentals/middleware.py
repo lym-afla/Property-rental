@@ -1,0 +1,83 @@
+from datetime import datetime
+from urllib.parse import urlencode, urlparse
+
+from django.conf import settings
+from django.contrib.auth import BACKEND_SESSION_KEY
+from django.http import JsonResponse
+from django.utils import timezone
+
+from .oidc import VIEWER_GROUP
+
+
+AUTHORIZED_GROUPS_SESSION_KEY = "oidc_authorized_groups"
+LAST_AUTHORIZED_AT_SESSION_KEY = "oidc_last_authorized_at"
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+class AuthorizationAgeMiddleware:
+    """Fail closed when an OIDC authorization grant is missing or stale."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if self._is_exempt(request.path) or not request.user.is_authenticated:
+            return self.get_response(request)
+
+        backend = request.session.get(BACKEND_SESSION_KEY, "")
+        is_oidc_session = (
+            backend == "rentals.oidc.RentalOIDCAuthenticationBackend"
+            or LAST_AUTHORIZED_AT_SESSION_KEY in request.session
+            or AUTHORIZED_GROUPS_SESSION_KEY in request.session
+        )
+        if settings.LOCAL_PASSWORD_AUTH_ENABLED and not is_oidc_session:
+            return self.get_response(request)
+
+        groups = request.session.get(AUTHORIZED_GROUPS_SESSION_KEY, ())
+        if VIEWER_GROUP not in groups:
+            request.session.flush()
+            return JsonResponse({"code": "authorization_required"}, status=403)
+
+        if not self._authorization_is_fresh(request):
+            if request.method in SAFE_METHODS:
+                # SessionRefresh remains responsible for its established GET/XHR
+                # redirect and 403 refresh_url contract.
+                request.session["oidc_id_token_expiration"] = 0
+                return self.get_response(request)
+            next_path = request.get_full_path()
+            refresh_url = "/oidc/authenticate/?" + urlencode({"next": next_path})
+            return JsonResponse(
+                {
+                    "code": "authorization_refresh_required",
+                    "refresh_url": refresh_url,
+                    "retry": False,
+                },
+                status=403,
+            )
+
+        return self.get_response(request)
+
+    @staticmethod
+    def _is_exempt(path):
+        callback_path = urlparse(
+            getattr(settings, "OIDC_CALLBACK_URL", "/oidc/callback/")
+        ).path
+        authenticate_path = callback_path[: -len("callback/")] + "authenticate/"
+        return (
+            path == "/health/"
+            or path == authenticate_path
+            or path == callback_path
+            or path.startswith(settings.STATIC_URL)
+        )
+
+    @staticmethod
+    def _authorization_is_fresh(request):
+        value = request.session.get(LAST_AUTHORIZED_AT_SESSION_KEY)
+        try:
+            authorized_at = datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return False
+        if timezone.is_naive(authorized_at):
+            return False
+        age = (timezone.now() - authorized_at).total_seconds()
+        return 0 <= age < settings.OIDC_AUTHORIZATION_MAX_AGE

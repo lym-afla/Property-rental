@@ -32,6 +32,20 @@ OIDC_OP_LOGOUT_URL_METHOD = "property_rental.oidc.provider_logout_url"
 OIDC_ALLOWED_REDIRECT_HOSTS = ALLOWED_HOSTS
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
+OIDC_AUTHORIZATION_MAX_AGE = int(os.environ.get("OIDC_AUTHORIZATION_MAX_AGE", "300"))
+LOCAL_PASSWORD_AUTH_ENABLED = os.environ.get(
+    "LOCAL_PASSWORD_AUTH_ENABLED", "false"
+).lower() in {"1", "true", "yes", "on"}
+if LOCAL_PASSWORD_AUTH_ENABLED:
+    raise RuntimeError("LOCAL_PASSWORD_AUTH_ENABLED must be false in production")
+
+_authorization_middleware_index = MIDDLEWARE.index(
+    "rentals.middleware.AuthorizationAgeMiddleware"
+)
+MIDDLEWARE.insert(
+    _authorization_middleware_index + 1,
+    "mozilla_django_oidc.middleware.SessionRefresh",
+)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
