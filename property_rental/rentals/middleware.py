@@ -45,7 +45,8 @@ class AuthorizationAgeMiddleware:
                 request.session["oidc_id_token_expiration"] = 0
                 return self.get_response(request)
             next_path = request.get_full_path()
-            refresh_url = "/oidc/authenticate/?" + urlencode({"next": next_path})
+            _, authenticate_path = self._oidc_routes()
+            refresh_url = authenticate_path + "?" + urlencode({"next": next_path})
             return JsonResponse(
                 {
                     "code": "authorization_refresh_required",
@@ -58,11 +59,16 @@ class AuthorizationAgeMiddleware:
         return self.get_response(request)
 
     @staticmethod
-    def _is_exempt(path):
+    def _oidc_routes():
         callback_path = urlparse(
             getattr(settings, "OIDC_CALLBACK_URL", "/oidc/callback/")
         ).path
         authenticate_path = callback_path[: -len("callback/")] + "authenticate/"
+        return callback_path, authenticate_path
+
+    @classmethod
+    def _is_exempt(cls, path):
+        callback_path, authenticate_path = cls._oidc_routes()
         return (
             path == "/health/"
             or path == authenticate_path

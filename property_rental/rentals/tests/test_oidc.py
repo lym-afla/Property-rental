@@ -4,6 +4,7 @@ import pytest
 from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, override_settings
+from django.contrib.sessions.middleware import SessionMiddleware
 
 from rentals.models import OIDCIdentity, User
 from rentals.oidc import RentalOIDCAuthenticationBackend, mark_session_authorized
@@ -96,10 +97,10 @@ def test_matching_email_does_not_merge_a_local_account(backend):
 
 def test_session_authorization_changes_only_for_viewer_claims():
     request = RequestFactory().get("/")
-    request.session = {}
+    SessionMiddleware(lambda req: None).process_request(request)
 
     mark_session_authorized(request, ["unrelated"])
-    assert request.session == {}
+    assert not request.session.items()
 
     mark_session_authorized(request, [VIEWER, "another"])
     assert request.session["oidc_authorized_groups"] == ["another", VIEWER]
@@ -131,10 +132,10 @@ def test_successful_oidc_login_records_authorized_groups_and_timestamp(backend):
 
 def test_oidc_login_without_viewer_clears_stale_session_authorization(backend):
     request = RequestFactory().get("/oidc/callback/")
-    request.session = {
-        "oidc_authorized_groups": [VIEWER],
-        "oidc_last_authorized_at": "2026-01-01T00:00:00+00:00",
-    }
+    SessionMiddleware(lambda req: None).process_request(request)
+    request.session["_auth_user_id"] = "42"
+    request.session["oidc_authorized_groups"] = [VIEWER]
+    request.session["oidc_last_authorized_at"] = "2026-01-01T00:00:00+00:00"
     claims = {"iss": ISSUER, "sub": "abc", "email": "a@example.com", "groups": []}
 
     def protocol_authentication(request, **kwargs):
@@ -150,5 +151,4 @@ def test_oidc_login_without_viewer_clears_stale_session_authorization(backend):
     ):
         assert backend.authenticate(request, code="validated-by-parent") is None
 
-    assert "oidc_authorized_groups" not in request.session
-    assert "oidc_last_authorized_at" not in request.session
+    assert not request.session.items()

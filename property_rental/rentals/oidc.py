@@ -66,8 +66,7 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 def mark_session_authorized(request, groups: Collection[str]) -> None:
     """Record renewed authorization without retaining provider tokens."""
     if VIEWER_GROUP not in groups:
-        request.session.pop("oidc_authorized_groups", None)
-        request.session.pop("oidc_last_authorized_at", None)
+        request.session.flush()
         return
     request.session["oidc_authorized_groups"] = sorted(set(groups))
     request.session["oidc_last_authorized_at"] = timezone.now().isoformat()

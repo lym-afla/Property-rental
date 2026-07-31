@@ -107,6 +107,25 @@ def test_expired_unsafe_request_is_denied_without_invoking_view(method):
 @pytest.mark.django_db
 @override_settings(
     ROOT_URLCONF=__name__,
+    MIDDLEWARE=AUTH_MIDDLEWARE,
+    OIDC_CALLBACK_URL="https://rent.example/identity/callback/",
+)
+def test_unsafe_refresh_url_uses_configured_oidc_route_prefix():
+    user = User.objects.create_user("custom-callback")
+    client = Client()
+    authorize(client, user, age_seconds=300)
+
+    response = client.post("/protected/")
+
+    assert response.status_code == 403
+    assert response.json()["refresh_url"] == (
+        "/identity/authenticate/?next=%2Fprotected%2F"
+    )
+
+
+@pytest.mark.django_db
+@override_settings(
+    ROOT_URLCONF=__name__,
     MIDDLEWARE=REFRESH_MIDDLEWARE,
     OIDC_OP_AUTHORIZATION_ENDPOINT="https://auth.example/authorize/",
     OIDC_RP_CLIENT_ID="rent",
