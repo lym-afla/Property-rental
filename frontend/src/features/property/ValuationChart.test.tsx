@@ -68,7 +68,7 @@ describe('ValuationChart', () => {
     )
     expect(screen.getByTestId('valuation-line-Total value')).toHaveAttribute('data-dot', 'false')
     await user.click(screen.getByRole('button', { name: 'Table' }))
-    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('1 Jan 2018')
+    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('Jan 1, 2018')
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('£500,000')
   })
 

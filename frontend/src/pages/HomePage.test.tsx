@@ -234,7 +234,7 @@ describe('HomePage dashboard shell', () => {
     expect(irrelevantRequests).toBe(0)
 
     await user.click(screen.getByText('Drill down to transactions'))
-    await user.click(screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' }))
+    await user.click(screen.getByRole('button', { name: 'View Rent transactions for Jan 1, 2026' }))
     expect(screen.getByLabelText('Current dashboard URL')).toHaveTextContent(
       'from=2026-01-01&to=2026-01-31&category=rent&currency=USD&property=1&property=3',
     )

@@ -328,7 +328,7 @@ test('verifies the financial analytics release contract across dashboard, proper
   await page.getByRole('button', { name: 'Portfolio', exact: true }).click()
   await expect(page.getByText('Yield comparison', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Yield definitions' }).click()
-  await expect(page.getByText('Gross yield — annualized gross rental income divided by the latest property value.')).toBeVisible()
+  await expect(page.getByText('Gross yield — annualized rental income net of costs divided by the latest property value.')).toBeVisible()
   await expect(page.getByText('Equity yield — annualized rental income net of costs divided by equity.')).toBeVisible()
   await page.keyboard.press('Escape')
   await expectReleaseSafeDocument(page)

@@ -18,7 +18,7 @@ def reverse_normalize_cost_reimbursements(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("rentals", "0022_migrate_legacy_other_income"),
+        ("rentals", "0024_fx_rate_identity"),
     ]
 
     operations = [
