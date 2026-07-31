@@ -5,8 +5,8 @@ Measured locally on 2026-07-31 for `property-rental:life-os`.
 | Metric | Value |
 | --- | ---: |
 | Docker-reported local image size | 580 MB |
-| OCI image size from CI helper | 128,136,227 bytes |
-| Gzipped OCI archive from CI helper | 127,456,923 bytes |
+| OCI image size from CI helper | 128,130,338 bytes |
+| Gzipped OCI archive from CI helper | 127,451,196 bytes |
 
 The byte measurements are produced by:
 
