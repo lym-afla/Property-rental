@@ -15,5 +15,7 @@ from .env import postgres_database, required_env
 
 SECRET_KEY = "test-postgres-only-key"
 DEBUG = False
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"
 if os.environ.get("DJANGO_SETTINGS_MODULE") == "property_rental.settings.test_postgres":
     DATABASES = {"default": postgres_database(required_env("DATABASE_URL"))}

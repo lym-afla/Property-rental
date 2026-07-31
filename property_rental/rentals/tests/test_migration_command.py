@@ -101,9 +101,12 @@ def test_import_ignores_system_rows_preserves_keys_relationships_and_disables_pa
     assert Property.objects.get(pk=ids["property"]).owned_by_id == ids["landlord"]
     report = json.loads(report_path.read_text())
     assert report["status"] == "imported"
+    expected_sequence_status = (
+        "reset" if connection.vendor == "postgresql" else "not-required"
+    )
     assert report["models"]["Property"] == {
         "source_count": 1, "destination_count": 1,
-        "relationship_errors": [], "sequence_status": "not-required",
+        "relationship_errors": [], "sequence_status": expected_sequence_status,
     }
 
 
