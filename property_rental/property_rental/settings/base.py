@@ -133,13 +133,15 @@ STATICFILES_DIRS = [
 ]
 
 # Django 4.2 storage backend configuration.
-# WhiteNoise keeps serving compressed, hashed static assets in production.
+# WhiteNoise keeps serving compressed static assets in production. Vite already
+# fingerprints frontend assets and writes ESM chunk imports using those emitted
+# filenames, so Django must not rename them again during collectstatic.
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
     },
 }
 

@@ -41,7 +41,7 @@ assert (
     staticfiles_storage.__class__.__name__,
 ) == (
     "whitenoise.storage",
-    "CompressedManifestStaticFilesStorage",
+    "CompressedStaticFilesStorage",
 )
 """
     )
