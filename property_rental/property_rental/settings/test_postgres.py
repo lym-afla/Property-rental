@@ -17,5 +17,15 @@ SECRET_KEY = "test-postgres-only-key"
 DEBUG = False
 AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
 STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": True,
+        "dev_server_protocol": "http",
+        "dev_server_host": "127.0.0.1",
+        "dev_server_port": 5173,
+        "manifest_path": str(BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"),
+        "static_url_prefix": "frontend",
+    },
+}
 if os.environ.get("DJANGO_SETTINGS_MODULE") == "property_rental.settings.test_postgres":
     DATABASES = {"default": postgres_database(required_env("DATABASE_URL"))}
