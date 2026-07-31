@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { TRANSACTION_CATEGORIES, transactionCategoryLabel } from '@/lib/transactionCategories'
 import type { Transaction } from '@/types/transaction'
 import type { Property } from '@/types/property'
 import type { Tenant } from '@/types/tenant'
@@ -171,7 +172,8 @@ export function TransactionsPage() {
     return rows.filter((t) => {
       const comment = (t.comment ?? '').toLowerCase()
       const category = (t.category ?? '').toLowerCase()
-      return comment.includes(q) || category.includes(q)
+      const categoryLabel = transactionCategoryLabel(t.category).toLowerCase()
+      return comment.includes(q) || category.includes(q) || categoryLabel.includes(q)
     })
   }, [transactionsQuery.data, filters.search])
 
@@ -208,7 +210,11 @@ export function TransactionsPage() {
         return `${t.first_name} ${last}`
       },
     },
-    { accessorKey: 'category', header: 'Category' },
+    {
+      accessorKey: 'category',
+      header: 'Category',
+      cell: ({ row }) => transactionCategoryLabel(row.original.category),
+    },
     {
       accessorKey: 'amount',
       header: 'Amount',
@@ -450,7 +456,7 @@ export function TransactionsPage() {
             if (!open) setDeleteTarget(null)
           }}
           title="Delete transaction?"
-          description={`${formatDate(deleteTarget.date)} · ${deleteTarget.category} · ${formatCurrency(Number(deleteTarget.amount), deleteTarget.currency)}`}
+          description={`${formatDate(deleteTarget.date)} · ${transactionCategoryLabel(deleteTarget.category)} · ${formatCurrency(Number(deleteTarget.amount), deleteTarget.currency)}`}
           confirmText="Delete"
           confirmVariant="destructive"
           isLoading={deleteTransaction.isPending}
@@ -549,9 +555,9 @@ function FilterBar({ filters, onChange, properties, tenants }: FilterBarProps) {
         }
       >
         <SelectItem value={ALL_FILTER}>All categories</SelectItem>
-        {TRANSACTION_CATEGORY_OPTIONS.map((c) => (
-          <SelectItem key={c} value={c}>
-            {c}
+        {TRANSACTION_CATEGORIES.map(({ value, label }) => (
+          <SelectItem key={value} value={value}>
+            {label}
           </SelectItem>
         ))}
       </FilterSelect>

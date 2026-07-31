@@ -1,8 +1,9 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useSession } from '@/context/SessionProvider'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export function ProtectedRoute() {
+  const location = useLocation()
   const { user, isLoading } = useSession()
   if (isLoading) {
     return (
@@ -11,6 +12,9 @@ export function ProtectedRoute() {
       </div>
     )
   }
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) {
+    const from = `${location.pathname}${location.search}${location.hash}`
+    return <Navigate to="/login" replace state={{ from }} />
+  }
   return <Outlet />
 }

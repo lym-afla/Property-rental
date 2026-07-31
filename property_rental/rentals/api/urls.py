@@ -22,6 +22,7 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
   rent entry on the tenant's ``Lease_rent`` history).
 """
 
+from django.conf import settings
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
@@ -36,9 +37,10 @@ from .auth import (
 from .analytics_views import (
     PortfolioCashFlowView,
     PortfolioContributionView,
-    PortfolioCurrencyExposureView,
     PortfolioExpenseDriversView,
     PortfolioOccupancyView,
+    PortfolioPropertyBreakdownView,
+    PortfolioProfitLossView,
     PortfolioSummaryView,
     PortfolioYieldsView,
     PropertyValuationAnalyticsView,
@@ -69,20 +71,18 @@ urlpatterns = [
     # Auth (Task 4 / Task 5) — session-cookie endpoints consumed by the
     # SPA's ``useAuth`` hook. Mounted flat (no router) because each is a
     # single-verb APIView, not a ViewSet.
-    path("auth/login/", LoginView.as_view()),
     path("auth/logout/", LogoutView.as_view()),
     path("auth/me/", MeView.as_view()),
     # Task 8: change the current user's password. Wraps Django's
     # PasswordChangeForm; body ``{old_password, new_password1,
     # new_password2}`` → 200 on success or 400 with form errors.
-    path("auth/change-password/", ChangePasswordView.as_view()),
-    path("auth/register/", RegisterView.as_view()),
     # Task 13: stamps the ``csrftoken`` cookie on a GET so the SPA can
     # issue authenticated mutations (logout, etc.). The SPA's
     # SessionProvider hits this once on app boot.
     path("auth/csrf/", CsrfView.as_view()),
     path("analytics/portfolio/cash-flow/", PortfolioCashFlowView.as_view()),
     path("analytics/portfolio/expenses/", PortfolioExpenseDriversView.as_view()),
+    path("analytics/portfolio/profit-loss/", PortfolioProfitLossView.as_view()),
     path("analytics/portfolio/summary/", PortfolioSummaryView.as_view()),
     path(
         "analytics/portfolio/property-contribution/",
@@ -90,8 +90,8 @@ urlpatterns = [
     ),
     path("analytics/portfolio/yields/", PortfolioYieldsView.as_view()),
     path(
-        "analytics/portfolio/currency-exposure/",
-        PortfolioCurrencyExposureView.as_view(),
+        "analytics/portfolio/property-breakdown/",
+        PortfolioPropertyBreakdownView.as_view(),
     ),
     path("analytics/portfolio/occupancy/", PortfolioOccupancyView.as_view()),
     path(
@@ -103,4 +103,10 @@ urlpatterns = [
         TenantRentPerformanceAnalyticsView.as_view(),
     ),
 ]
+if settings.LOCAL_PASSWORD_AUTH_ENABLED:
+    urlpatterns += [
+        path("auth/login/", LoginView.as_view()),
+        path("auth/change-password/", ChangePasswordView.as_view()),
+        path("auth/register/", RegisterView.as_view()),
+    ]
 urlpatterns += router.urls

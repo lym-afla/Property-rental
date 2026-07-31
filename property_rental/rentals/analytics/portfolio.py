@@ -1,4 +1,4 @@
-"""User-scoped portfolio summary, yield, exposure, and occupancy analytics."""
+"""User-scoped portfolio summary, yield, breakdown, and occupancy analytics."""
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -13,8 +13,9 @@ from rentals.models import Property, Property_capital_structure, Tenant, Transac
 from rentals.services.fx import preload_converter
 
 
-EXPOSURE_MEASURES = {
+PROPERTY_BREAKDOWN_MEASURES = {
     "property_value": "Property value",
+    "equity": "Equity",
     "debt": "Debt",
     "rental_income": "Rental income",
 }
@@ -68,10 +69,12 @@ class YieldRow:
     property_name: str
     valuation_date: date | None
     property_value: float | None
+    debt: float | None
+    equity: float | None
     annualized_revenue: float | None
     annualized_costs: float | None
     gross_yield: float | None
-    net_yield: float | None
+    equity_yield: float | None
     status: str
 
 
@@ -86,7 +89,7 @@ class YieldResponse:
 
 
 @dataclass(frozen=True)
-class CurrencyExposureResponse:
+class PropertyBreakdownResponse:
     metric: str
     measure: str
     measure_label: str
@@ -97,17 +100,15 @@ class CurrencyExposureResponse:
     end: date
     series: tuple[SeriesDefinition, ...]
     points: tuple[dict[str, object], ...]
-    coverage: tuple["ExposureCoverage", ...]
+    coverage: tuple["PropertyBreakdownCoverage", ...]
 
 
 @dataclass(frozen=True)
-class ExposureCoverage:
+class PropertyBreakdownCoverage:
     period_start: date
     period_end: date
-    currency: str | None
+    property_id: int
     status: str
-    missing_count: int
-    stale_count: int
 
 
 @dataclass(frozen=True)
@@ -150,10 +151,6 @@ def _scoped_properties(user, filters):
 
 def _native_currency(property_, reporting_currency):
     return property_.currency.upper() if property_.currency else None
-
-
-def _currency_key(currency):
-    return currency if currency is not None else "missing_currency"
 
 
 def _transaction_totals(properties, reporting_currency):
@@ -237,27 +234,43 @@ def property_contribution(user, filters):
 
 
 def property_yields(user, filters):
-    """Return annualized selected-period yields on the latest known valuation."""
-    properties = _scoped_properties(user, filters)
+    """Return annualized selected-period yields on value and equity."""
+    properties = tuple(
+        property_
+        for property_ in _scoped_properties(user, filters)
+        if property_.sold is None or property_.sold > filters.end
+    )
     totals = _transaction_totals(properties, filters.currency)
     selected_days = (filters.end - filters.start).days + 1
     annualization = 365.0 / selected_days
-    value_rows = []
+    capital_rows = []
     value_snapshots = []
     value_property_ids = []
+    debt_snapshots = []
+    debt_property_ids = []
     for property_ in properties:
         valuation = _latest_capital(property_, "capital_structure_value", filters.end)
-        value_rows.append(valuation)
+        debt_row = _latest_capital(property_, "capital_structure_debt", filters.end)
+        capital_rows.append((valuation, debt_row))
         native_currency = _native_currency(property_, filters.currency)
         if valuation is not None and native_currency is not None:
             value_snapshots.append(
                 (
                     valuation.capital_structure_value,
-                    _native_currency(property_, filters.currency),
-                    filters.end,
+                    native_currency,
+                    valuation.capital_structure_date,
                 )
             )
             value_property_ids.append(property_.id)
+        if debt_row is not None and native_currency is not None:
+            debt_snapshots.append(
+                (
+                    debt_row.capital_structure_debt,
+                    native_currency,
+                    debt_row.capital_structure_date,
+                )
+            )
+            debt_property_ids.append(property_.id)
     converted_values = dict(
         zip(
             value_property_ids,
@@ -265,77 +278,91 @@ def property_yields(user, filters):
             strict=True,
         )
     )
+    converted_debts = dict(
+        zip(
+            debt_property_ids,
+            _convert_snapshots(debt_snapshots, filters.currency),
+            strict=True,
+        )
+    )
 
     rows = []
-    for property_, valuation in zip(properties, value_rows, strict=True):
+    for property_, (valuation, debt_row) in zip(
+        properties, capital_rows, strict=True
+    ):
         revenue, costs = totals[property_.id]
         annualized_revenue = revenue * annualization
         annualized_costs = costs * annualization
-        if valuation is None:
-            rows.append(
-                YieldRow(
-                    property_id=property_.id,
-                    property_name=property_.name,
-                    valuation_date=None,
-                    property_value=None,
-                    annualized_revenue=annualized_revenue,
-                    annualized_costs=annualized_costs,
-                    gross_yield=None,
-                    net_yield=None,
-                    status="missing_valuation",
-                )
-            )
-            continue
-
         if _native_currency(property_, filters.currency) is None:
             rows.append(
                 YieldRow(
                     property_id=property_.id,
                     property_name=property_.name,
-                    valuation_date=valuation.capital_structure_date,
+                    valuation_date=(
+                        valuation.capital_structure_date
+                        if valuation is not None
+                        else None
+                    ),
                     property_value=None,
+                    debt=None,
+                    equity=None,
                     annualized_revenue=annualized_revenue,
                     annualized_costs=annualized_costs,
                     gross_yield=None,
-                    net_yield=None,
+                    equity_yield=None,
                     status="missing_currency",
                 )
             )
             continue
 
-        property_value = converted_values[property_.id]
-        status = (
-            "negative_valuation"
-            if property_value < 0
-            else (
-                "zero_valuation"
-                if property_value == 0
-                else (
-                    "stale_valuation"
-                    if valuation.capital_structure_date < filters.start
-                    else "ok"
-                )
-            )
+        property_value = converted_values.get(property_.id)
+        debt = converted_debts.get(property_.id)
+        equity = (
+            property_value - debt
+            if property_value is not None and debt is not None
+            else None
         )
-        has_denominator = property_value > 0
+        if property_value is not None and property_value < 0:
+            status = "negative_valuation"
+        elif property_value == 0:
+            status = "zero_valuation"
+        elif valuation is None or debt_row is None:
+            status = "missing_valuation"
+        elif equity < 0:
+            status = "negative_equity"
+        elif equity == 0:
+            status = "zero_equity"
+        elif (
+            valuation.capital_structure_date < filters.start
+            or debt_row.capital_structure_date < filters.start
+        ):
+            status = "stale_valuation"
+        else:
+            status = "ok"
+        has_value_denominator = property_value is not None and property_value > 0
+        has_equity_denominator = equity is not None and equity > 0
         rows.append(
             YieldRow(
                 property_id=property_.id,
                 property_name=property_.name,
-                valuation_date=valuation.capital_structure_date,
+                valuation_date=(
+                    valuation.capital_structure_date
+                    if valuation is not None
+                    else None
+                ),
                 property_value=property_value,
+                debt=debt,
+                equity=equity,
                 annualized_revenue=annualized_revenue,
                 annualized_costs=annualized_costs,
                 gross_yield=(
                     annualized_revenue / property_value * 100.0
-                    if has_denominator
+                    if has_value_denominator
                     else None
                 ),
-                net_yield=(
-                    (annualized_revenue - annualized_costs)
-                    / property_value
-                    * 100.0
-                    if has_denominator
+                equity_yield=(
+                    (annualized_revenue - annualized_costs) / equity * 100.0
+                    if has_equity_denominator
                     else None
                 ),
                 status=status,
@@ -416,107 +443,7 @@ def portfolio_occupancy(user, filters):
     )
 
 
-def _valuation_exposure(properties, filters, periods, measure):
-    field = {
-        "property_value": "capital_structure_value",
-        "debt": "capital_structure_debt",
-    }[measure]
-    snapshots = []
-    positions = []
-    coverage = []
-    active_counts = {}
-    for period_index, (period_start, period_end) in enumerate(periods):
-        as_of = min(period_end, filters.end)
-        active = [
-            property_
-            for property_ in properties
-            if property_.sold is None or property_.sold > as_of
-        ]
-        currencies = sorted(
-            {_native_currency(property_, filters.currency) for property_ in properties},
-            key=lambda currency: (currency is None, currency or ""),
-        )
-        for currency in currencies:
-            currency_properties = [
-                property_
-                for property_ in active
-                if _native_currency(property_, filters.currency) == currency
-            ]
-            capital_rows = [
-                _latest_capital(property_, field, as_of)
-                for property_ in currency_properties
-            ]
-            present = [row for row in capital_rows if row is not None]
-            missing_count = len(capital_rows) - len(present)
-            stale_count = sum(
-                row.capital_structure_date < period_start for row in present
-            )
-            if not currency_properties:
-                status = "no_exposure"
-            elif currency is None:
-                status = "missing_currency"
-            elif not present:
-                status = "missing_valuation"
-            elif missing_count and stale_count:
-                status = "partial_stale_valuation"
-            elif missing_count:
-                status = "partial_valuation"
-            elif stale_count:
-                status = "stale_valuation"
-            else:
-                status = "ok"
-            coverage.append(
-                ExposureCoverage(
-                    period_start,
-                    period_end,
-                    currency,
-                    status,
-                    missing_count=(
-                        len(currency_properties)
-                        if currency is None
-                        else missing_count
-                    ),
-                    stale_count=stale_count,
-                )
-            )
-            active_counts[(period_index, currency)] = len(currency_properties)
-        for property_ in active:
-            native_currency = _native_currency(property_, filters.currency)
-            if native_currency is None:
-                continue
-            capital = _latest_capital(property_, field, as_of)
-            if capital is None:
-                continue
-            snapshots.append(
-                (
-                    getattr(capital, field),
-                    native_currency,
-                    as_of,
-                )
-            )
-            positions.append(
-                (period_index, native_currency)
-            )
-    converted = _convert_snapshots(snapshots, filters.currency)
-    values = defaultdict(float)
-    for position, value in zip(positions, converted, strict=True):
-        values[position] += value
-    for position, property_count in active_counts.items():
-        if position[1] is None and property_count:
-            values[position] = None
-        elif property_count and not any(
-            item[0] == position[0] and item[1] == position[1]
-            for item in positions
-        ):
-            values[position] = None
-    return values, tuple(coverage)
-
-
-def _rental_income_exposure(properties, filters):
-    native_currencies = {
-        property_.id: _native_currency(property_, filters.currency)
-        for property_ in properties
-    }
+def _rental_income_by_property(properties, filters):
     transactions = tuple(
         transaction
         for property_ in properties
@@ -529,7 +456,7 @@ def _rental_income_exposure(properties, filters):
         values[
             (
                 _period_start(transaction.date, filters.grain),
-                native_currencies[transaction.property_id],
+                transaction.property_id,
             )
         ] += float(
             converter.convert(
@@ -542,38 +469,110 @@ def _rental_income_exposure(properties, filters):
     return values
 
 
-def currency_exposure(user, filters, measure="property_value"):
-    """Return the selected measure grouped by native property currency."""
-    if measure not in EXPOSURE_MEASURES:
-        raise ValueError(f"Unsupported currency exposure measure: {measure}")
+def _property_breakdown_capital_values(properties, periods, filters, measure):
+    fields = {
+        "property_value": ("capital_structure_value",),
+        "debt": ("capital_structure_debt",),
+        "equity": ("capital_structure_value", "capital_structure_debt"),
+    }[measure]
+    snapshots = []
+    positions = []
+    values = {}
+    statuses = {}
+    for period_index, (period_start, period_end) in enumerate(periods):
+        as_of = min(period_end, filters.end)
+        for property_ in properties:
+            if property_.sold is not None and property_.sold <= as_of:
+                continue
+            position = (period_index, property_.id)
+            native_currency = _native_currency(property_, filters.currency)
+            if native_currency is None:
+                values[position] = None
+                statuses[position] = "missing_currency"
+                continue
+            rows = tuple(_latest_capital(property_, field, as_of) for field in fields)
+            if any(row is None for row in rows):
+                values[position] = None
+                statuses[position] = "missing_valuation"
+                continue
+            statuses[position] = (
+                "stale_valuation"
+                if any(row.capital_structure_date < period_start for row in rows)
+                else "ok"
+            )
+            for field, row in zip(fields, rows, strict=True):
+                snapshots.append(
+                    (
+                        getattr(row, field),
+                        native_currency,
+                        row.capital_structure_date,
+                    )
+                )
+                positions.append(position)
+
+    converted_components = defaultdict(list)
+    converted = (
+        _convert_snapshots(tuple(snapshots), filters.currency) if snapshots else ()
+    )
+    for position, value in zip(positions, converted, strict=True):
+        converted_components[position].append(value)
+    for position, components in converted_components.items():
+        values[position] = (
+            components[0]
+            if measure != "equity"
+            else components[0] - components[1]
+        )
+    return values, statuses
+
+
+def property_breakdown(user, filters, measure="property_value"):
+    """Return the selected measure grouped by stable property identifiers."""
+    if measure not in PROPERTY_BREAKDOWN_MEASURES:
+        raise ValueError(f"Unsupported property breakdown measure: {measure}")
     properties = _scoped_properties(user, filters)
     periods = _calendar_periods(filters)
-    currencies = tuple(
-        sorted(
-            {_native_currency(property_, filters.currency) for property_ in properties},
-            key=lambda currency: (currency is None, currency or ""),
+    visible_properties = tuple(
+        property_
+        for property_ in properties
+        if any(
+            property_.sold is None
+            or property_.sold > min(period_end, filters.end)
+            for _, period_end in periods
         )
     )
     points = []
+    coverage = []
     if measure == "rental_income":
-        values = _rental_income_exposure(properties, filters)
-        coverage = ()
+        income = _rental_income_by_property(visible_properties, filters)
     else:
-        values, coverage = _valuation_exposure(properties, filters, periods, measure)
+        capital_values, capital_statuses = _property_breakdown_capital_values(
+            visible_properties, periods, filters, measure
+        )
     for period_index, (period_start, period_end) in enumerate(periods):
+        as_of = min(period_end, filters.end)
         point = {"period_start": period_start, "period_end": period_end}
-        for currency in currencies:
-            key = (
-                (period_start, currency)
-                if measure == "rental_income"
-                else (period_index, currency)
+        for property_ in visible_properties:
+            if property_.sold is not None and property_.sold <= as_of:
+                continue
+            key = f"property_{property_.id}"
+            if measure == "rental_income":
+                point[key] = income[(period_start, property_.id)]
+                continue
+            position = (period_index, property_.id)
+            point[key] = capital_values[position]
+            coverage.append(
+                PropertyBreakdownCoverage(
+                    period_start=period_start,
+                    period_end=period_end,
+                    property_id=property_.id,
+                    status=capital_statuses[position],
+                )
             )
-            point[_currency_key(currency)] = values[key]
         points.append(point)
-    return CurrencyExposureResponse(
-        metric="currency_exposure",
+    return PropertyBreakdownResponse(
+        metric="property_breakdown",
         measure=measure,
-        measure_label=EXPOSURE_MEASURES[measure],
+        measure_label=PROPERTY_BREAKDOWN_MEASURES[measure],
         grain=filters.grain.value,
         currency=filters.currency,
         scale=1,
@@ -581,14 +580,14 @@ def currency_exposure(user, filters, measure="property_value"):
         end=filters.end,
         series=tuple(
             SeriesDefinition(
-                _currency_key(currency),
-                currency or "Missing native currency",
-                "native_currency",
+                f"property_{property_.id}",
+                property_.name,
+                "property",
             )
-            for currency in currencies
+            for property_ in visible_properties
         ),
         points=tuple(points),
-        coverage=coverage,
+        coverage=tuple(coverage),
     )
 
 
@@ -625,7 +624,7 @@ def portfolio_summary(user, filters):
         (
             row.capital_structure_value,
             _native_currency(property_, filters.currency),
-            filters.end,
+            row.capital_structure_date,
         )
         for property_, row in zip(active_properties, value_rows, strict=True)
         if row is not None
@@ -635,7 +634,7 @@ def portfolio_summary(user, filters):
         (
             row.capital_structure_debt,
             _native_currency(property_, filters.currency),
-            filters.end,
+            row.capital_structure_date,
         )
         for property_, row in zip(active_properties, debt_rows, strict=True)
         if row is not None

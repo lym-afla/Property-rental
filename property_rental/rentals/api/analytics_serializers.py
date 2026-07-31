@@ -1,6 +1,7 @@
 """Strict DRF serializers for analytics response contracts."""
 
 from collections.abc import Mapping
+import math
 
 from rest_framework import serializers
 
@@ -18,6 +19,19 @@ class StrictSerializer(serializers.Serializer):
                 {key: ["Unknown field."] for key in sorted(unknown)}
             )
         return super().to_internal_value(data)
+
+
+class FiniteFloatField(serializers.FloatField):
+    default_error_messages = {
+        **serializers.FloatField.default_error_messages,
+        "not_finite": "A finite number is required.",
+    }
+
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data)
+        if value is not None and not math.isfinite(value):
+            self.fail("not_finite")
+        return value
 
 
 class SeriesDefinitionSerializer(StrictSerializer):
@@ -55,6 +69,58 @@ class CategoryValueSerializer(StrictSerializer):
     key = serializers.CharField()
     label = serializers.CharField()
     value = serializers.JSONField()
+
+
+class ProfitLossColumnSerializer(StrictSerializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+
+
+class ProfitLossRowSerializer(StrictSerializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    kind = serializers.ChoiceField(
+        choices=[
+            "income",
+            "expense",
+            "total_revenue",
+            "total_expenses",
+            "net_income",
+        ]
+    )
+    values = serializers.DictField(child=FiniteFloatField())
+
+
+class ProfitLossResponseSerializer(StrictSerializer):
+    metric = serializers.ChoiceField(choices=["profit_and_loss"])
+    currency = serializers.RegexField(r"^[A-Z]{3}$")
+    scale = serializers.IntegerField(min_value=1, max_value=1)
+    end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
+    columns = ProfitLossColumnSerializer(many=True)
+    rows = ProfitLossRowSerializer(many=True)
+
+    def validate(self, attrs):
+        column_keys = [column["key"] for column in attrs["columns"]]
+        if len(column_keys) != len(set(column_keys)):
+            raise serializers.ValidationError({"columns": "Keys must be unique."})
+        declared = set(column_keys)
+        for index, row in enumerate(attrs["rows"]):
+            actual = set(row["values"])
+            if actual != declared:
+                raise serializers.ValidationError(
+                    {
+                        "rows": {
+                            index: {
+                                "values": (
+                                    "Must contain exactly every declared column key."
+                                )
+                            }
+                        }
+                    }
+                )
+        return attrs
 
 
 class TimeSeriesResponseSerializer(StrictSerializer):
@@ -169,10 +235,12 @@ class YieldRowSerializer(StrictSerializer):
         format="%Y-%m-%d", input_formats=["%Y-%m-%d"], allow_null=True
     )
     property_value = serializers.FloatField(allow_null=True)
+    debt = FiniteFloatField(allow_null=True)
+    equity = FiniteFloatField(allow_null=True)
     annualized_revenue = serializers.FloatField(allow_null=True)
     annualized_costs = serializers.FloatField(allow_null=True)
-    gross_yield = serializers.FloatField(allow_null=True)
-    net_yield = serializers.FloatField(allow_null=True)
+    gross_yield = FiniteFloatField(allow_null=True)
+    equity_yield = FiniteFloatField(allow_null=True)
     status = serializers.ChoiceField(
         choices=[
             "ok",
@@ -181,6 +249,8 @@ class YieldRowSerializer(StrictSerializer):
             "missing_currency",
             "zero_valuation",
             "negative_valuation",
+            "zero_equity",
+            "negative_equity",
         ]
     )
 
@@ -194,32 +264,27 @@ class YieldResponseSerializer(StrictSerializer):
     rows = YieldRowSerializer(many=True)
 
 
-class ExposureCoverageSerializer(StrictSerializer):
+class PropertyBreakdownCoverageSerializer(StrictSerializer):
     period_start = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
     period_end = ISODateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"])
-    currency = serializers.RegexField(r"^[A-Z]{3}$", allow_null=True)
+    property_id = serializers.IntegerField(min_value=1)
     status = serializers.ChoiceField(
         choices=[
             "ok",
             "stale_valuation",
-            "partial_valuation",
-            "partial_stale_valuation",
             "missing_valuation",
             "missing_currency",
-            "no_exposure",
         ]
     )
-    missing_count = serializers.IntegerField(min_value=0)
-    stale_count = serializers.IntegerField(min_value=0)
 
 
-class CurrencyExposureResponseSerializer(TimeSeriesResponseSerializer):
-    metric = serializers.ChoiceField(choices=["currency_exposure"])
+class PropertyBreakdownResponseSerializer(TimeSeriesResponseSerializer):
+    metric = serializers.ChoiceField(choices=["property_breakdown"])
     measure = serializers.ChoiceField(
-        choices=["property_value", "debt", "rental_income"]
+        choices=["property_value", "equity", "debt", "rental_income"]
     )
     measure_label = serializers.CharField()
-    coverage = ExposureCoverageSerializer(many=True)
+    coverage = PropertyBreakdownCoverageSerializer(many=True)
 
 
 class PropertyValuationPointSerializer(StrictSerializer):

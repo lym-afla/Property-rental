@@ -18,6 +18,8 @@ from django.contrib import admin
 from django.http import HttpResponseNotFound
 from django.urls import path, include
 
+from rentals import health
+
 
 def api_not_found(request, exception):
     """Return a plain 404 response when an API route is not registered."""
@@ -27,6 +29,9 @@ def api_not_found(request, exception):
 handler404 = api_not_found
 
 urlpatterns = [
+    path("health/live", health.liveness, name="health-live"),
+    path("health/ready", health.readiness, name="health-ready"),
     path('admin/', admin.site.urls),
+    path('oidc/', include('mozilla_django_oidc.urls')),
     path('', include('rentals.urls')),
 ]

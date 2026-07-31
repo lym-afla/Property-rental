@@ -9,6 +9,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children, stackOffset }: { children: React.ReactNode; stackOffset?: string }) => <div data-testid="cash-flow-plot" data-stack-offset={stackOffset}>{children}</div>,
   Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid="cash-bar" aria-label={name} data-fill={fill} />,
+  Tooltip: ({ content }: { content: (props: { active: boolean; label: string; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, label: '2026-01-01', payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
 const data = {
@@ -37,11 +38,11 @@ describe('NetCashFlowChart', () => {
 
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
-    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).toMatch(/^url\(#/)
+    expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toMatch(/^url\(/)
     expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toBe(screen.getByRole('generic', { name: 'Utilities' }).getAttribute('data-fill'))
     await user.click(screen.getByRole('button', { name: 'Table' }))
     expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$1,000')
-    expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('$-250')
+    expect(screen.getByRole('table', { name: 'Net cash flow exact values' })).toHaveTextContent('($250)')
   })
 
   it('gives every supported cash-flow category a distinct visible mark identity', () => {
@@ -90,5 +91,11 @@ describe('NetCashFlowChart', () => {
   it('shows an empty state when a response has periods but no income or expense series', () => {
     render(<NetCashFlowChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', net_income: 750 }] }} />)
     expect(screen.getByText('No net cash flow data for this selection.')).toBeInTheDocument()
+  })
+
+  it('renders missing and invalid tooltip values as em dashes', () => {
+    render(<NetCashFlowChart data={data} />)
+
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 })

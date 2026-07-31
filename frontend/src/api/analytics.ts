@@ -1,17 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 
 import {
-  currencyExposureSchema,
   expenseDriversSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
+  profitLossSchema,
   portfolioSummarySchema,
+  propertyBreakdownSchema,
   propertyContributionSchema,
   propertyValuationSchema,
   propertyYieldsSchema,
   tenantRentPerformanceSchema,
-  type CurrencyExposureParams,
+  type PropertyBreakdownParams,
   type PortfolioAnalyticsParams,
+  type ProfitLossParams,
   type TenantRentPerformanceParams,
 } from '@/types/analytics'
 import { apiFetch } from './client'
@@ -78,6 +80,18 @@ export function useExpenseDrivers(params: PortfolioAnalyticsParams) {
   })
 }
 
+export function useProfitLoss(params: ProfitLossParams) {
+  return useQuery({
+    queryKey: queryKeys.analytics.portfolio.profitLoss(params),
+    queryFn: () =>
+      fetchValidated(
+        analyticsUrl('/analytics/portfolio/profit-loss/', params),
+        profitLossSchema,
+      ),
+    enabled: Boolean(params.end && params.currency),
+  })
+}
+
 export function usePropertyContribution(params: PortfolioAnalyticsParams) {
   return useQuery({
     queryKey: queryKeys.analytics.portfolio.propertyContribution(params),
@@ -100,15 +114,15 @@ export function usePropertyYields(params: PortfolioAnalyticsParams) {
   })
 }
 
-export function useCurrencyExposure(params: CurrencyExposureParams) {
+export function usePropertyBreakdown(params: PropertyBreakdownParams) {
   return useQuery({
-    queryKey: queryKeys.analytics.portfolio.currencyExposure(params),
+    queryKey: queryKeys.analytics.portfolio.propertyBreakdown(params),
     queryFn: () =>
       fetchValidated(
-        analyticsUrl('/analytics/portfolio/currency-exposure/', params, {
+        analyticsUrl('/analytics/portfolio/property-breakdown/', params, {
           measure: params.measure,
         }),
-        currencyExposureSchema,
+        propertyBreakdownSchema,
       ),
   })
 }
@@ -141,14 +155,14 @@ export function useTenantRentPerformance(
   tenantId: number,
   params: TenantRentPerformanceParams,
 ) {
-  const { start, end, currency, grain } = params
+  const { start, end, grain } = params
   return useQuery({
     queryKey: queryKeys.analytics.tenantRentPerformance(tenantId, params),
     queryFn: () =>
       fetchValidated(
         analyticsUrl(
           `/analytics/tenants/${tenantId}/rent-performance/`,
-          { start, end, currency, grain },
+          { start, end, grain },
         ),
         tenantRentPerformanceSchema,
       ),

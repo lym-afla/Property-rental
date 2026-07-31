@@ -6,8 +6,9 @@ export const DASHBOARD_SECTIONS = [
 ] as const
 export const DASHBOARD_GRAINS = ['month', 'quarter', 'year'] as const
 export const DASHBOARD_CURRENCIES = ['USD', 'EUR', 'GBP', 'RUB'] as const
-export const EXPOSURE_MEASURES = [
+export const PROPERTY_BREAKDOWN_MEASURES = [
   'property_value',
+  'equity',
   'debt',
   'rental_income',
 ] as const
@@ -15,7 +16,7 @@ export const EXPOSURE_MEASURES = [
 export type DashboardSection = (typeof DASHBOARD_SECTIONS)[number]
 export type DashboardGrain = (typeof DASHBOARD_GRAINS)[number]
 export type DashboardCurrency = (typeof DASHBOARD_CURRENCIES)[number]
-export type DashboardExposureMeasure = (typeof EXPOSURE_MEASURES)[number]
+export type DashboardPropertyBreakdownMeasure = (typeof PROPERTY_BREAKDOWN_MEASURES)[number]
 
 export type DashboardFilterState = {
   section: DashboardSection
@@ -24,7 +25,7 @@ export type DashboardFilterState = {
   currency: DashboardCurrency
   grain: DashboardGrain
   propertyIds: number[]
-  exposureMeasure: DashboardExposureMeasure
+  propertyBreakdownMeasure: DashboardPropertyBreakdownMeasure
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -90,9 +91,9 @@ export function parseDashboardFilters(
       ? grainValue
       : defaults.grain,
     propertyIds: normalizedPropertyIds(rawPropertyIds),
-    exposureMeasure: isOneOf(measureValue, EXPOSURE_MEASURES)
+    propertyBreakdownMeasure: isOneOf(measureValue, PROPERTY_BREAKDOWN_MEASURES)
       ? measureValue
-      : defaults.exposureMeasure,
+      : defaults.propertyBreakdownMeasure,
   }
 }
 
@@ -110,6 +111,6 @@ export function serializeDashboardFilters(
     searchParams.append('property', String(propertyId))
   }
   if (propertyIds.length === 0) searchParams.append('property', '')
-  searchParams.set('measure', filters.exposureMeasure)
+  searchParams.set('measure', filters.propertyBreakdownMeasure)
   return searchParams
 }

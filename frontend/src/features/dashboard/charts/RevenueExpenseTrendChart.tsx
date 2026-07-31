@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartSeriesStyle } from '@/components/analytics/chartTheme'
@@ -17,14 +18,22 @@ export function RevenueExpenseTrendChart({ data, isLoading, isError, onRetry }: 
   const state = chartState('Revenue and expenses', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
   const visibleSeries = series.filter((item) => !hiddenKeys.has(item.key))
   return (
-    <AnalyticsChartCard state={state} title="Revenue and expenses" subtitle="Server-provided income and expense series by period." controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next })} />} table={state.status === 'success' && data ? cashTable(data, series) : undefined}>
-      {state.status === 'success' && data && <ResponsiveContainer width="100%" height="100%"><LineChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
+    <AnalyticsChartCard state={state} title="Revenue and expenses" subtitle="Server-provided income and expense series by period." controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })} />} table={state.status === 'success' && data ? cashTable(data, series) : undefined}>
+      {state.status === 'success' && data && <ResponsiveChartContainer width="100%" height="100%"><LineChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
         <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
-        <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(Number(item.value), data.currency ?? '') }))} /> : null} />
-        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeDasharray={chartSeriesStyle(item.visualToken).strokeDasharray} strokeWidth={2.5} dot={false} />)}
-      </LineChart></ResponsiveContainer>}
+        <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
+        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
+      </LineChart></ResponsiveChartContainer>}
     </AnalyticsChartCard>
   )
 }

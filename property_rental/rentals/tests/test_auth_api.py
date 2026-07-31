@@ -16,6 +16,7 @@ Endpoints under test:
 """
 
 import pytest
+from django.test import override_settings
 from django.test import Client
 
 from rentals.tests.factories import UserFactory
@@ -252,3 +253,22 @@ def test_change_password_wrong_old_returns_400(db):
         "new_password2": "NewPass456!",
     }, content_type="application/json")
     assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+@override_settings(LOCAL_PASSWORD_AUTH_ENABLED=False)
+def test_production_profile_omits_and_ignores_effective_date(db):
+    user = UserFactory(is_landlord=True, effective_date="2025-01-02")
+    from rentals.api.serializers import UserSerializer
+
+    serializer = UserSerializer(
+        user,
+        data={"effective_date": "2040-12-31"},
+        partial=True,
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+
+    assert "effective_date" not in serializer.data
+    user.refresh_from_db()
+    assert user.effective_date.isoformat() == "2025-01-02"

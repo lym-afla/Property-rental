@@ -8,7 +8,8 @@ vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   LineChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Line: ({ name, strokeDasharray }: { name: string; strokeDasharray?: string }) => <span data-testid={`trend-${name}`} data-dash={strokeDasharray ?? 'solid'} />,
+  Line: ({ name, stroke, strokeDasharray }: { name: string; stroke?: string; strokeDasharray?: string }) => <span data-testid={`trend-${name}`} data-color={stroke} data-dasharray={strokeDasharray} />,
+  Tooltip: ({ content }: { content: (props: { active: boolean; label: string; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, label: '2026-01-01', payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
 const data = { metric: 'portfolio_cash_flow' as const, grain: 'month' as const, currency: 'USD', scale: 1 as const, start: '2026-01-01', end: '2026-03-31', series: [{ key: 'total_income', label: 'Total income', kind: 'income_total' }, { key: 'total_expenses', label: 'Total expenses', kind: 'expense_total' }], points: [
@@ -27,15 +28,23 @@ describe('RevenueExpenseTrendChart', () => {
     expect(expenses).toHaveTextContent('Total expenses')
   })
 
-  it('applies distinct dash identities to the plotted income and expense traces', () => {
+  it('uses distinct solid colors for revenue and expense traces', () => {
     render(<RevenueExpenseTrendChart data={data} />)
-    expect(screen.getByTestId('trend-Total income').getAttribute('data-dash')).not.toBe(
-      screen.getByTestId('trend-Total expenses').getAttribute('data-dash'),
+    expect(screen.getByTestId('trend-Total income')).not.toHaveAttribute('data-dasharray')
+    expect(screen.getByTestId('trend-Total expenses')).not.toHaveAttribute('data-dasharray')
+    expect(screen.getByTestId('trend-Total income').getAttribute('data-color')).not.toBe(
+      screen.getByTestId('trend-Total expenses').getAttribute('data-color'),
     )
   })
 
   it('shows an empty state when periods have no income or expense series', () => {
     render(<RevenueExpenseTrendChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }] }} />)
     expect(screen.getByText('No revenue and expenses data for this selection.')).toBeInTheDocument()
+  })
+
+  it('renders missing and invalid tooltip values as em dashes', () => {
+    render(<RevenueExpenseTrendChart data={data} />)
+
+    expect(screen.getAllByText('—')).toHaveLength(2)
   })
 })

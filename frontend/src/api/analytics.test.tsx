@@ -6,10 +6,11 @@ import { describe, expect, it } from 'vitest'
 
 import { server } from '@/test/handlers'
 import {
-  currencyExposureSchema,
+  propertyBreakdownSchema,
   isoDateSchema,
   portfolioCashFlowSchema,
   portfolioOccupancySchema,
+  profitLossSchema,
   portfolioSummarySchema,
   propertyContributionSchema,
   propertyValuationSchema,
@@ -19,10 +20,11 @@ import {
   timeSeriesSchema,
 } from '@/types/analytics'
 import {
-  useCurrencyExposure,
+  usePropertyBreakdown,
   useExpenseDrivers,
   usePortfolioCashFlow,
   usePortfolioOccupancy,
+  useProfitLoss,
   usePortfolioSummary,
   usePropertyContribution,
   usePropertyValuationAnalytics,
@@ -159,42 +161,42 @@ const yieldsFixture = {
       property_value: null,
       annualized_revenue: 2737.5,
       annualized_costs: 456.25,
+      debt: null,
+      equity: null,
       gross_yield: null,
-      net_yield: null,
+      equity_yield: null,
       status: 'missing_valuation',
     },
   ],
 }
 
-const exposureFixture = {
+const breakdownFixture = {
   ...cashFlowFixture,
-  metric: 'currency_exposure',
+  metric: 'property_breakdown',
   measure: 'property_value',
   measure_label: 'Property value',
   series: [
-    { key: 'GBP', label: 'GBP', kind: 'native_currency' },
+    { key: 'property_1', label: 'Alpha', kind: 'property' },
     {
-      key: 'missing_currency',
-      label: 'Missing native currency',
-      kind: 'native_currency',
+      key: 'property_3',
+      label: 'Gamma',
+      kind: 'property',
     },
   ],
   points: [
     {
       period_start: '2026-01-01',
       period_end: '2026-01-31',
-      GBP: 500000,
-      missing_currency: null,
+      property_1: 500000,
+      property_3: null,
     },
   ],
   coverage: [
     {
       period_start: '2026-01-01',
       period_end: '2026-01-31',
-      currency: null,
+      property_id: 3,
       status: 'missing_currency',
-      missing_count: 1,
-      stale_count: 0,
     },
   ],
 }
@@ -263,6 +265,25 @@ const tenantFixture = {
   ],
 }
 
+const profitLossFixture = {
+  metric: 'profit_and_loss',
+  currency: 'GBP',
+  scale: 1,
+  end: '2026-07-29',
+  columns: [
+    { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
+    { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
+    { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+  ],
+  rows: [
+    { key: 'rent', label: 'Rent', kind: 'income', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'tax', label: 'Tax', kind: 'expense', values: { '2025': -1200, '2026': 0, ytd: 0 } },
+    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2025': -1200, '2026': 0, ytd: 0 } },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2025': 10800, '2026': 7000, ytd: 7000 } },
+  ],
+} as const
+
 function makeWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -273,6 +294,40 @@ function makeWrapper() {
 }
 
 describe('analytics runtime schemas', () => {
+  it('accepts complete P&L rows and rejects missing or undeclared value keys', () => {
+    expect(profitLossSchema.parse(profitLossFixture).rows[0].kind).toBe('income')
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[0], values: { '2025': 12000, ytd: 7000 } }],
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[0], values: { ...profitLossFixture.rows[0].values, surprise: 1 } }],
+    })).toThrow()
+  })
+
+  it('rejects P&L totals disguised as category rows and non-final YTD columns', () => {
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [{ ...profitLossFixture.rows[2], kind: 'income' }],
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      columns: [profitLossFixture.columns[0], profitLossFixture.columns[2], profitLossFixture.columns[1]],
+    })).toThrow()
+  })
+
+  it('rejects P&L statements with missing or duplicate mandatory totals', () => {
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: profitLossFixture.rows.filter((row) => row.kind !== 'net_income'),
+    })).toThrow()
+    expect(() => profitLossSchema.parse({
+      ...profitLossFixture,
+      rows: [...profitLossFixture.rows, profitLossFixture.rows[2]],
+    })).toThrow()
+  })
+
   it('accepts raw ISO-bounded time series', () => {
     expect(timeSeriesSchema.parse(cashFlowFixture).metric).toBe(
       'portfolio_cash_flow',
@@ -330,14 +385,56 @@ describe('analytics runtime schemas', () => {
     ).toThrow()
   })
 
+  it('rejects omitted, non-finite, and legacy yield denominator contracts', () => {
+    const row = yieldsFixture.rows[0]
+    const { equity: _equity, ...withoutEquity } = row
+    const { equity_yield: _equityYield, ...withoutEquityYield } = row
+
+    expect(() =>
+      propertyYieldsSchema.parse({
+        ...yieldsFixture,
+        rows: [{ ...row, debt: Number.NaN }],
+      }),
+    ).toThrow()
+    expect(() =>
+      propertyYieldsSchema.parse({ ...yieldsFixture, rows: [withoutEquity] }),
+    ).toThrow()
+    expect(() =>
+      propertyYieldsSchema.parse({
+        ...yieldsFixture,
+        rows: [{ ...withoutEquityYield, net_yield: null }],
+      }),
+    ).toThrow()
+  })
+
+  it.each([
+    [0, 100000, 'zero_equity'],
+    [-50000, 150000, 'negative_equity'],
+  ])('accepts the explicit %s equity denominator status', (equity, debt, status) => {
+    const parsed = propertyYieldsSchema.parse({
+      ...yieldsFixture,
+      rows: [{
+        ...yieldsFixture.rows[0],
+        property_value: 100000,
+        debt,
+        equity,
+        gross_yield: 0,
+        equity_yield: null,
+        status,
+      }],
+    })
+
+    expect(parsed.rows[0].status).toBe(status)
+  })
+
   it('preserves null financial values and all issue arrays', () => {
     const summary = portfolioSummarySchema.parse(summaryFixture)
-    const exposure = currencyExposureSchema.parse(exposureFixture)
+    const breakdown = propertyBreakdownSchema.parse(breakdownFixture)
     const valuation = propertyValuationSchema.parse(valuationFixture)
     const tenant = tenantRentPerformanceSchema.parse(tenantFixture)
 
     expect(summary.debt).toBeNull()
-    expect(exposure.points[0].missing_currency).toBeNull()
+    expect(breakdown.points[0].property_3).toBeNull()
     expect(valuation.points[0].debt).toBeNull()
     expect(tenant.opening_issues).toEqual([
       'missing_rent_rate',
@@ -407,7 +504,7 @@ describe('analytics runtime schemas', () => {
       }),
     ).toThrow()
     expect(() =>
-      currencyExposureSchema.parse({ ...exposureFixture, measure_label: '' }),
+      propertyBreakdownSchema.parse({ ...breakdownFixture, measure_label: '' }),
     ).toThrow()
     expect(() =>
       propertyYieldsSchema.parse({
@@ -419,6 +516,16 @@ describe('analytics runtime schemas', () => {
 })
 
 describe('analytics query keys', () => {
+  it('normalizes P&L property IDs and keys its period and currency', () => {
+    const pnlFilters = { end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }
+    expect(queryKeys.analytics.portfolio.profitLoss(pnlFilters)).toEqual(
+      queryKeys.analytics.portfolio.profitLoss({ ...pnlFilters, propertyIds: [1, 3] }),
+    )
+    expect(queryKeys.analytics.portfolio.profitLoss(pnlFilters)).not.toEqual(
+      queryKeys.analytics.portfolio.profitLoss({ ...pnlFilters, currency: 'USD' }),
+    )
+  })
+
   it('normalizes repeated property IDs without losing data filters', () => {
     expect(queryKeys.analytics.portfolio.cashFlow(filters)).toEqual(
       queryKeys.analytics.portfolio.cashFlow({
@@ -440,14 +547,14 @@ describe('analytics query keys', () => {
     }
   })
 
-  it('keys exposure measure and entity-specific filters', () => {
+  it('keys property breakdown measure and entity-specific filters', () => {
     expect(
-      queryKeys.analytics.portfolio.currencyExposure({
+      queryKeys.analytics.portfolio.propertyBreakdown({
         ...filters,
         measure: 'property_value',
       }),
     ).not.toEqual(
-      queryKeys.analytics.portfolio.currencyExposure({
+      queryKeys.analytics.portfolio.propertyBreakdown({
         ...filters,
         measure: 'debt',
       }),
@@ -458,6 +565,19 @@ describe('analytics query keys', () => {
     expect(
       queryKeys.analytics.tenantRentPerformance(7, filters),
     ).not.toEqual(queryKeys.analytics.tenantRentPerformance(8, filters))
+    expect(
+      queryKeys.analytics.tenantRentPerformance(7, filters),
+    ).toEqual([
+      'analytics',
+      'tenant-rent-performance',
+      {
+        tenantId: 7,
+        start: filters.start,
+        end: filters.end,
+        grain: filters.grain,
+        comparison: filters.comparison,
+      },
+    ])
   })
 })
 
@@ -479,11 +599,14 @@ describe('analytics hooks', () => {
       http.get('/api/v1/analytics/portfolio/yields/', () =>
         HttpResponse.json(yieldsFixture),
       ),
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', () =>
-        HttpResponse.json(exposureFixture),
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', () =>
+        HttpResponse.json(breakdownFixture),
       ),
       http.get('/api/v1/analytics/portfolio/occupancy/', () =>
         HttpResponse.json(occupancyFixture),
+      ),
+      http.get('/api/v1/analytics/portfolio/profit-loss/', () =>
+        HttpResponse.json(profitLossFixture),
       ),
       http.get('/api/v1/analytics/properties/7/valuation/', () =>
         HttpResponse.json(valuationFixture),
@@ -499,8 +622,9 @@ describe('analytics hooks', () => {
       () => useExpenseDrivers(filters),
       () => usePropertyContribution(filters),
       () => usePropertyYields(filters),
-      () => useCurrencyExposure({ ...filters, measure: 'property_value' }),
+      () => usePropertyBreakdown({ ...filters, measure: 'property_value' }),
       () => usePortfolioOccupancy(filters),
+      () => useProfitLoss({ end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }),
       () => usePropertyValuationAnalytics(7, '2026-07-29'),
       () => useTenantRentPerformance(9, filters),
     ]
@@ -529,17 +653,34 @@ describe('analytics hooks', () => {
     expect(result.current.data).toBeUndefined()
   })
 
-  it('sends normalized repeated property filters and exposure measure', async () => {
+  it('requests P&L with only its end, currency, and normalized property scope', async () => {
     let receivedSearch = ''
     server.use(
-      http.get('/api/v1/analytics/portfolio/currency-exposure/', ({ request }) => {
+      http.get('/api/v1/analytics/portfolio/profit-loss/', ({ request }) => {
         receivedSearch = new URL(request.url).searchParams.toString()
-        return HttpResponse.json(exposureFixture)
+        return HttpResponse.json(profitLossFixture)
       }),
     )
 
     const { result } = renderHook(
-      () => useCurrencyExposure({ ...filters, measure: 'property_value' }),
+      () => useProfitLoss({ end: '2026-07-29', currency: 'GBP', propertyIds: [3, 1, 3] }),
+      { wrapper: makeWrapper() },
+    )
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(receivedSearch).toBe('end=2026-07-29&currency=GBP&property=1&property=3')
+  })
+
+  it('sends normalized repeated property filters and breakdown measure', async () => {
+    let receivedSearch = ''
+    server.use(
+      http.get('/api/v1/analytics/portfolio/property-breakdown/', ({ request }) => {
+        receivedSearch = new URL(request.url).searchParams.toString()
+        return HttpResponse.json(breakdownFixture)
+      }),
+    )
+
+    const { result } = renderHook(
+      () => usePropertyBreakdown({ ...filters, measure: 'property_value' }),
       { wrapper: makeWrapper() },
     )
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
@@ -569,7 +710,7 @@ describe('analytics hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(receivedSearch).toBe(
-      'start=2026-01-01&end=2026-07-29&currency=GBP&grain=month',
+      'start=2026-01-01&end=2026-07-29&grain=month',
     )
   })
 })

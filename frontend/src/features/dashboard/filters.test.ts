@@ -13,7 +13,7 @@ const defaults: DashboardFilterState = {
   currency: 'USD',
   grain: 'month',
   propertyIds: [],
-  exposureMeasure: 'property_value',
+  propertyBreakdownMeasure: 'property_value',
 }
 
 describe('dashboard URL filters', () => {
@@ -32,7 +32,7 @@ describe('dashboard URL filters', () => {
       currency: 'GBP',
       grain: 'quarter',
       propertyIds: [1, 3],
-      exposureMeasure: 'debt',
+      propertyBreakdownMeasure: 'debt',
     })
     expect(serializeDashboardFilters(parsed).toString()).toBe(
       'section=portfolio&start=2026-01-01&end=2026-07-29&currency=GBP&grain=quarter&property=1&property=3&measure=debt',
@@ -52,7 +52,7 @@ describe('dashboard URL filters', () => {
       end: '2026-06-30',
       currency: 'GBP',
       propertyIds: [2],
-      exposureMeasure: 'rental_income',
+      propertyBreakdownMeasure: 'rental_income',
     })
   })
 

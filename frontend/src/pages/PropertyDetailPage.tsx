@@ -20,8 +20,8 @@
 //     render-prop — we wire mutations inside each form's `onSubmit` and
 //     close the dialog on success, mirroring PropertiesPage.
 //   - `useProperty(id)` returns the plain `Property` shape (no stats), while
-//     `usePortfolioSummary()` provides the scoped P&L totals in the property's
-//     natural currency through the shared analytics contract.
+//     `useProfitLoss()` provides the scoped annual/YTD statement in the
+//     property's natural currency through the shared analytics contract.
 //   - `usePropertyValuations(propertyId)` already filters server-side via
 //     `?property=<id>`, so no client-side filter is needed.
 import { useMemo, useState } from 'react'
@@ -42,8 +42,9 @@ import {
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
 import { useTransactions } from '@/api/transactions'
-import { usePortfolioSummary, usePropertyValuationAnalytics } from '@/api/analytics'
+import { useProfitLoss, usePropertyValuationAnalytics } from '@/api/analytics'
 import { useSession } from '@/context/SessionProvider'
+import { ProfitLossTable } from '@/components/analytics/ProfitLossTable'
 import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
@@ -71,7 +72,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatDate, formatNumber } from '@/lib/format'
+import { transactionCategoryLabel } from '@/lib/transactionCategories'
 import type { PropertyValuation } from '@/types/propertyValuation'
 
 // Number of recent transactions shown in the Overview tab. The full list
@@ -97,11 +99,9 @@ export function PropertyDetailPage() {
   // not pass an end date or derive a client-side five-year cutoff.
   const valuationAnalyticsQuery = usePropertyValuationAnalytics(propertyId)
   const performanceEnd = user?.effective_date ?? new Date().toISOString().slice(0, 10)
-  const propertyPerformanceQuery = usePortfolioSummary({
-    start: `${performanceEnd.slice(0, 4)}-01-01`,
+  const propertyPerformanceQuery = useProfitLoss({
     end: performanceEnd,
-    currency: propertyQuery.data?.currency,
-    grain: 'year',
+    currency: propertyQuery.data?.currency ?? '',
     propertyIds: Number.isFinite(propertyId) && propertyId > 0 ? [propertyId] : [],
   })
 
@@ -122,20 +122,19 @@ export function PropertyDetailPage() {
 
   const property = propertyQuery.data
 
-  // Latest valuation = highest capital_structure_date. Surfaced at the top
-  // of the header card so users see the current property value next to the
-  // name (the rest of the card carries bedrooms / area / status). When no
-  // valuation exists yet we render an em-dash placeholder.
-  const latestValuation = useMemo(() => {
-    const list = valuationsQuery.data ?? []
-    if (list.length === 0) return null
-    return [...list].sort((a, b) =>
-      a.capital_structure_date < b.capital_structure_date ? 1 : -1,
-    )[0]
+  // Value and debt snapshots can be recorded independently. The header uses
+  // the newest row that actually contains a value rather than treating a
+  // newer debt-only row as a zero valuation.
+  const latestValue = useMemo(() => {
+    const latest = [...(valuationsQuery.data ?? [])]
+      .filter((row) => row.capital_structure_value !== null)
+      .sort((a, b) =>
+        a.capital_structure_date < b.capital_structure_date ? 1 : -1,
+      )[0]
+    if (!latest) return null
+    const value = Number(latest.capital_structure_value)
+    return Number.isFinite(value) ? value : null
   }, [valuationsQuery.data])
-  const latestValue = latestValuation
-    ? Number(latestValuation.capital_structure_value)
-    : null
 
   // Most-recent first; the API may or may not pre-sort, so we sort here to
   // make the preview deterministic regardless of backend ordering. Capped
@@ -162,8 +161,8 @@ export function PropertyDetailPage() {
       accessorKey: 'capital_structure_value',
       header: 'Value',
       cell: ({ row }) =>
-        formatCurrency(
-          Number(row.original.capital_structure_value),
+        formatAccounting(
+          row.original.capital_structure_value,
           property?.currency ?? '',
         ),
     },
@@ -171,8 +170,8 @@ export function PropertyDetailPage() {
       accessorKey: 'capital_structure_debt',
       header: 'Debt',
       cell: ({ row }) =>
-        formatCurrency(
-          Number(row.original.capital_structure_debt),
+        formatAccounting(
+          row.original.capital_structure_debt,
           property?.currency ?? '',
         ),
     },
@@ -182,10 +181,11 @@ export function PropertyDetailPage() {
       id: 'equity',
       header: 'Equity',
       cell: ({ row }) => {
+        const { capital_structure_value: value, capital_structure_debt: debt } =
+          row.original
         const equity =
-          Number(row.original.capital_structure_value) -
-          Number(row.original.capital_structure_debt)
-        return formatCurrency(equity, property?.currency ?? '')
+          value !== null && debt !== null ? Number(value) - Number(debt) : null
+        return formatAccounting(equity, property?.currency ?? '')
       },
     },
     {
@@ -285,7 +285,7 @@ export function PropertyDetailPage() {
               label={`Value (${property.currency})`}
               value={
                 latestValue !== null && Number.isFinite(latestValue)
-                  ? formatCurrency(latestValue, property.currency)
+                  ? formatAccounting(latestValue, property.currency)
                   : '—'
               }
             />
@@ -293,7 +293,7 @@ export function PropertyDetailPage() {
             <Stat label="Bedrooms" value={String(property.num_bedrooms)} />
             <Stat
               label="Area"
-              value={property.area ? `${property.area} m²` : '—'}
+              value={property.area ? `${formatNumber(Number(property.area))} m²` : '—'}
             />
           </dl>
         </CardContent>
@@ -312,7 +312,7 @@ export function PropertyDetailPage() {
             <CardHeader>
               <CardTitle>Profit &amp; Loss</CardTitle>
               <CardDescription>
-                Server-calculated year-to-date performance through {performanceEnd}.
+                Annual history and year to date in {property.currency}.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -323,16 +323,12 @@ export function PropertyDetailPage() {
                   message="Failed to load P&L"
                   onRetry={() => propertyPerformanceQuery.refetch()}
                 />
-              ) : !propertyPerformanceQuery.data || propertyPerformanceQuery.data.property_count === 0 ? (
+              ) : !propertyPerformanceQuery.data ? (
                 <p className="text-sm text-muted-foreground">
                   No performance data available for this property yet.
                 </p>
               ) : (
-                <dl className="grid gap-4 sm:grid-cols-3">
-                  <Stat label="Revenue (YTD)" value={formatCurrency(propertyPerformanceQuery.data.revenue, propertyPerformanceQuery.data.currency)} />
-                  <Stat label="Costs (YTD)" value={formatCurrency(propertyPerformanceQuery.data.costs, propertyPerformanceQuery.data.currency)} />
-                  <Stat label="Net income (YTD)" value={formatCurrency(propertyPerformanceQuery.data.net_income, propertyPerformanceQuery.data.currency)} />
-                </dl>
+                <ProfitLossTable data={propertyPerformanceQuery.data} />
               )}
             </CardContent>
           </Card>
@@ -377,7 +373,7 @@ export function PropertyDetailPage() {
                     {recentTransactions.map((t) => (
                       <TableRow key={t.id}>
                         <TableCell>{formatDate(t.date)}</TableCell>
-                        <TableCell className="capitalize">{t.category}</TableCell>
+                        <TableCell>{transactionCategoryLabel(t.category)}</TableCell>
                         <TableCell>
                           <Badge
                             variant={t.type === 'income' ? 'secondary' : 'outline'}
@@ -532,9 +528,9 @@ export function PropertyDetailPage() {
               capital_structure_date:
                 editValuationTarget.capital_structure_date,
               capital_structure_value:
-                editValuationTarget.capital_structure_value,
+                editValuationTarget.capital_structure_value ?? '',
               capital_structure_debt:
-                editValuationTarget.capital_structure_debt,
+                editValuationTarget.capital_structure_debt ?? '',
             }}
             onSubmit={(values) =>
               updateValuation.mutate(

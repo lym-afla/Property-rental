@@ -1,26 +1,36 @@
 """Authenticated HTTP endpoints for portfolio analytics responses."""
 
+from dataclasses import dataclass
+from datetime import date
+
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rentals.analytics.cash_flow import expense_drivers, portfolio_cash_flow
-from rentals.analytics.filters import AnalyticsFilters, ISODateField
+from rentals.analytics.filters import (
+    MAX_ANALYTICS_POINTS,
+    AnalyticsFilters,
+    Grain,
+    ISODateField,
+)
+from rentals.analytics.pnl import profit_and_loss
 from rentals.analytics.portfolio import (
-    currency_exposure,
     portfolio_occupancy,
     portfolio_summary,
+    property_breakdown,
     property_contribution,
     property_yields,
 )
 from rentals.analytics.property import property_valuation_history
-from rentals.analytics.tenant import tenant_rent_performance
+from rentals.analytics.tenant import MissingTenantCurrency, tenant_rent_performance
 from rentals.constants import CURRENCY_CHOICES
 from rentals.api.analytics_serializers import (
     ContributionResponseSerializer,
-    CurrencyExposureResponseSerializer,
+    PropertyBreakdownResponseSerializer,
     PortfolioSummarySerializer,
+    ProfitLossResponseSerializer,
     PropertyValuationResponseSerializer,
     TenantRentPerformanceResponseSerializer,
     TimeSeriesResponseSerializer,
@@ -32,6 +42,50 @@ from rentals.services.fx import MissingFXRate
 
 class _ValuationEndSerializer(serializers.Serializer):
     end = ISODateField(required=False)
+
+
+@dataclass(frozen=True)
+class _TenantRentPerformanceFilters:
+    start: date
+    end: date
+    grain: Grain
+
+
+class _TenantRentPerformanceFilterSerializer(serializers.Serializer):
+    start = ISODateField(required=False)
+    end = ISODateField(required=False)
+    grain = serializers.ChoiceField(
+        choices=[grain.value for grain in Grain], required=False
+    )
+
+    def validate(self, values):
+        end = values.get("end", self.context["effective_date"])
+        start = values.get("start", end.replace(month=1, day=1))
+        if end < start:
+            raise serializers.ValidationError(
+                {"end": "end must be on or after start"}
+            )
+
+        grain = Grain(values.get("grain", Grain.MONTH.value))
+        start_month = start.year * 12 + start.month - 1
+        end_month = end.year * 12 + end.month - 1
+        if grain is Grain.MONTH:
+            point_count = end_month - start_month + 1
+        elif grain is Grain.QUARTER:
+            point_count = end_month // 3 - start_month // 3 + 1
+        else:
+            point_count = end.year - start.year + 1
+        if point_count > MAX_ANALYTICS_POINTS:
+            raise serializers.ValidationError(
+                {
+                    "start": (
+                        "Analytics ranges may contain at most "
+                        f"{MAX_ANALYTICS_POINTS} {grain.value} buckets."
+                    )
+                }
+            )
+
+        return {"start": start, "end": end, "grain": grain}
 
 
 class _PortfolioAnalyticsView(APIView):
@@ -94,6 +148,25 @@ class PortfolioExpenseDriversView(_PortfolioAnalyticsView):
         return self.response(expense_drivers(request.user, self.filters(request)))
 
 
+class PortfolioProfitLossView(_PortfolioAnalyticsView):
+    """GET the shared annual and YTD portfolio/property P&L statement."""
+
+    def get(self, request):
+        unknown = set(request.query_params) - {"end", "currency", "property"}
+        if unknown:
+            raise serializers.ValidationError(
+                {key: "Unknown filter." for key in sorted(unknown)}
+            )
+        filters = self.filters(request)
+        result = profit_and_loss(
+            request.user,
+            end=filters.end,
+            currency=filters.currency,
+            property_ids=filters.property_ids,
+        )
+        return Response(ProfitLossResponseSerializer(result).data)
+
+
 class PortfolioSummaryView(_PortfolioAnalyticsView):
     def get(self, request):
         result = portfolio_summary(request.user, self.filters(request))
@@ -112,17 +185,17 @@ class PortfolioYieldsView(_PortfolioAnalyticsView):
         return Response(YieldResponseSerializer(result).data)
 
 
-class PortfolioCurrencyExposureView(_PortfolioAnalyticsView):
+class PortfolioPropertyBreakdownView(_PortfolioAnalyticsView):
     def get(self, request):
         measure = request.query_params.get("measure", "property_value")
-        if measure not in {"property_value", "debt", "rental_income"}:
+        if measure not in {"property_value", "equity", "debt", "rental_income"}:
             raise serializers.ValidationError({"measure": "Unsupported measure."})
-        result = currency_exposure(
+        result = property_breakdown(
             request.user,
             self.filters(request, extra_query_params=("measure",)),
             measure=measure,
         )
-        return Response(CurrencyExposureResponseSerializer(result).data)
+        return Response(PropertyBreakdownResponseSerializer(result).data)
 
 
 class PortfolioOccupancyView(_PortfolioAnalyticsView):
@@ -149,13 +222,25 @@ class PropertyValuationAnalyticsView(APIView):
 
 class TenantRentPerformanceAnalyticsView(_PortfolioAnalyticsView):
     def get(self, request, tenant_id):
-        allowed = {"start", "end", "grain", "currency"}
+        allowed = {"start", "end", "grain"}
         unknown = set(request.query_params) - allowed
         if unknown:
             raise serializers.ValidationError(
                 {key: "Unknown filter." for key in sorted(unknown)}
             )
-        result = tenant_rent_performance(
-            request.user, tenant_id, self.filters(request)
+        query = _TenantRentPerformanceFilterSerializer(
+            data=request.query_params,
+            context={"effective_date": get_effective_date(request.user)},
         )
+        query.is_valid(raise_exception=True)
+        filters = _TenantRentPerformanceFilters(**query.validated_data)
+        try:
+            result = tenant_rent_performance(
+                request.user, tenant_id, filters
+            )
+        except MissingTenantCurrency as exc:
+            return Response(
+                {"code": "missing_currency", "detail": str(exc)},
+                status=422,
+            )
         return Response(TenantRentPerformanceResponseSerializer(result).data)

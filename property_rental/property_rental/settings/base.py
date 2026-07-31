@@ -15,6 +15,7 @@ import os
 # settings/base.py is two levels below the project package, so we go up
 # three levels to reach the project root (the dir containing manage.py).
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+VITE_MANIFEST_PATH = BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"
 
 # Task 6: frontend dist path (only present after `npm run build`). Used
 # in TEMPLATES.DIRS below so a fresh clone — where the SPA hasn't been
@@ -29,6 +30,7 @@ FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 # and ``vite_asset`` tags used by ``spa_index.html``.
 INSTALLED_APPS = [
     'rentals',
+    'mozilla_django_oidc',
     'rest_framework',
     'django_vite',
 
@@ -40,6 +42,16 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
+AUTHENTICATION_BACKENDS = ["rentals.oidc.RentalOIDCAuthenticationBackend"]
+
+OIDC_GROUPS_CLAIM = "groups"
+OIDC_RP_SCOPES = "openid email profile groups"
+OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_STORE_ACCESS_TOKEN = False
+OIDC_STORE_ID_TOKEN = False
+OIDC_AUTHORIZATION_MAX_AGE = 300
+LOCAL_PASSWORD_AUTH_ENABLED = True
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise here
@@ -47,6 +59,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'rentals.middleware.AuthorizationAgeMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -180,7 +193,7 @@ DJANGO_VITE = {
         "dev_server_protocol": "http",
         "dev_server_host": "127.0.0.1",
         "dev_server_port": 5173,
-        "manifest_path": str(BASE_DIR / "rentals" / "static" / "frontend" / "manifest.json"),
+        "manifest_path": str(VITE_MANIFEST_PATH),
         "static_url_prefix": "frontend",
     },
 }

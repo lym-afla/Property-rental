@@ -25,6 +25,10 @@ ISSUE_ORDER = (
 )
 
 
+class MissingTenantCurrency(ValueError):
+    """Raised when tenant performance has no property-native denomination."""
+
+
 @dataclass(frozen=True)
 class TenantRentPerformanceResponse:
     metric: str
@@ -128,7 +132,7 @@ def _response_status(point_statuses):
 
 
 def tenant_rent_performance(user, tenant_id, filters):
-    """Return contractual rent performance in reporting currency.
+    """Return contractual rent performance in the property's native currency.
 
     ``variance``, ``opening_arrears``, and ``cumulative_arrears`` all use
     received-minus-expected signs: negative means rent remains unpaid and
@@ -141,18 +145,53 @@ def tenant_rent_performance(user, tenant_id, filters):
         ),
         pk=tenant_id,
     )
+    if not tenant.property.currency:
+        raise MissingTenantCurrency("Tenant property has no native currency.")
+    currency = tenant.property.currency.upper()
     rent_history = tuple(
         tenant.rent_history.filter(date_rent_set__lte=filters.end).order_by(
             "date_rent_set", "id"
         )
     )
-    transactions = tuple(
+    linked_transactions = tuple(
         Transaction.objects.filter(
             tenant=tenant,
             property=tenant.property,
             category="rent",
             date__range=(tenant.lease_start, filters.end),
         ).order_by("date", "id")
+    )
+    legacy_end = min(filters.end, tenant.lease_end or filters.end)
+    legacy_candidates = tuple(
+        Transaction.objects.filter(
+            tenant__isnull=True,
+            property=tenant.property,
+            category="rent",
+            date__range=(tenant.lease_start, legacy_end),
+        ).order_by("date", "id")
+    )
+    other_leases = tuple(
+        Tenant.objects.filter(
+            property=tenant.property,
+            lease_start__lte=legacy_end,
+        )
+        .exclude(pk=tenant.pk)
+        .values_list("lease_start", "lease_end")
+    )
+    legacy_transactions = tuple(
+        transaction
+        for transaction in legacy_candidates
+        if not any(
+            lease_start <= transaction.date
+            and (lease_end is None or transaction.date <= lease_end)
+            for lease_start, lease_end in other_leases
+        )
+    )
+    transactions = tuple(
+        sorted(
+            (*linked_transactions, *legacy_transactions),
+            key=lambda transaction: (transaction.date, transaction.id),
+        )
     )
     due_dates = tuple(_due_dates(tenant, tenant.lease_start, filters.end))
     rate_rows = tuple(
@@ -163,7 +202,7 @@ def tenant_rent_performance(user, tenant_id, filters):
         for due_date, rate in zip(due_dates, rate_rows, strict=True)
         if rate is not None and rate.currency
     )
-    converter = preload_converter(transactions + convertible_rates, filters.currency)
+    converter = preload_converter(transactions + convertible_rates, currency)
 
     opening_expected = 0.0
     opening_received = 0.0
@@ -182,7 +221,7 @@ def tenant_rent_performance(user, tenant_id, filters):
                 )
             continue
         value, error = _converted(
-            converter, rate.rent, rate.currency, filters.currency, due_date
+            converter, rate.rent, rate.currency, currency, due_date
         )
         if is_opening and error:
             _append_issue(opening_issues, _conversion_issue("expected", error))
@@ -207,7 +246,7 @@ def tenant_rent_performance(user, tenant_id, filters):
             converter,
             transaction.amount,
             transaction.currency,
-            filters.currency,
+            currency,
             transaction.date,
         )
         if is_opening and error:
@@ -285,7 +324,7 @@ def tenant_rent_performance(user, tenant_id, filters):
     return TenantRentPerformanceResponse(
         metric="tenant_rent_performance",
         grain=filters.grain.value,
-        currency=filters.currency,
+        currency=currency,
         scale=1,
         start=filters.start,
         end=filters.end,

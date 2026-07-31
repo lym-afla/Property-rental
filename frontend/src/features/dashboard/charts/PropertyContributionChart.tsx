@@ -1,6 +1,7 @@
-import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartVisualTokens } from '@/components/analytics/chartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
@@ -49,7 +50,7 @@ export function PropertyContributionChart(props: Props) {
     >
       {state.status === 'success' && data && (
         <>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartContainer width="100%" height="100%">
             <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 12, left: 36, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis type="number" tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency)} />
@@ -60,7 +61,7 @@ export function PropertyContributionChart(props: Props) {
                 {rows.map((row) => <Cell key={row.property_id} fill={row.net_income < 0 ? chartVisualTokens.tertiary.color : chartVisualTokens.primary.color} />)}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveChartContainer>
           <ul className="sr-only" aria-label="Property contribution values">
             {rows.map((row) => <li key={row.property_id} data-testid={`property-contribution-${row.property_id}`} data-net-income={row.net_income}>{row.property_name}: {formatCurrency(row.net_income, data.currency)} — {row.net_income < 0 ? 'Negative contributor' : 'Positive contributor'}</li>)}
           </ul>

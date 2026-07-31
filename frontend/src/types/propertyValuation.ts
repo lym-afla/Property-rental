@@ -6,6 +6,6 @@ export type PropertyValuation = {
   id: number
   property: number
   capital_structure_date: string
-  capital_structure_value: string
-  capital_structure_debt: string
+  capital_structure_value: string | null
+  capital_structure_debt: string | null
 }

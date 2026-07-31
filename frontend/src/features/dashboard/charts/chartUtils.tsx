@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import type { AnalyticsChartState, AnalyticsChartTable } from '@/components/analytics/AnalyticsChartCard'
 import type { AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatAccounting, formatDate } from '@/lib/format'
 export type PortfolioChartData = {
   currency?: string
   series: Array<{ key: string; label: string; kind: string }>
@@ -73,7 +73,7 @@ export function cashTable(
     rows: data.points.map((point) => {
       const row: Record<string, ReactNode> = { period: formatDate(point.period_start) }
       for (const item of series) {
-        row[item.key] = formatCurrency(point[item.key] as number | null, data.currency ?? '')
+        row[item.key] = formatAccounting(point[item.key] as number | null, data.currency ?? '')
       }
       return row
     }),

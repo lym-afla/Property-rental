@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { SessionProvider } from '@/context/SessionProvider'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { getRuntimeConfig } from '@/api/auth'
 
 const HomePage = lazy(() => import('@/pages/HomePage').then(({ HomePage }) => ({ default: HomePage })))
 const LoginPage = lazy(() => import('@/pages/LoginPage').then(({ LoginPage }) => ({ default: LoginPage })))
@@ -24,6 +25,7 @@ function RouteFallback() {
 }
 
 function App() {
+  const { localPasswordAuthEnabled } = getRuntimeConfig()
   return (
     <SessionProvider>
       <BrowserRouter>
@@ -32,7 +34,7 @@ function App() {
           {/* Public routes — outside ProtectedRoute so unauthenticated users
               can reach them (resolves the Task 7 redirect-loop). */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          {localPasswordAuthEnabled && <Route path="/register" element={<RegisterPage />} />}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />

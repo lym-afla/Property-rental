@@ -13,6 +13,7 @@
 // changes.
 import { describe, it, expect } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -44,9 +45,8 @@ describe('TransactionsPage', () => {
 
   it('renders rows from the default fixture', async () => {
     renderPage()
-    // The category column is a stable surface; assert the income fixture
-    // is represented in the table.
-    expect(await screen.findByText(fixtureTransactionIncome.category)).toBeInTheDocument()
+    expect(await screen.findByText('Rent')).toBeInTheDocument()
+    expect(screen.queryByText(fixtureTransactionIncome.category)).not.toBeInTheDocument()
   })
 
   it('renders the New Transaction button', async () => {
@@ -77,13 +77,58 @@ describe('TransactionsPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('seeds the filters from the URL on mount', async () => {
-    // ?property=1&category=rent should pre-populate the filter bar.
-    renderPage('/transactions?property=1&category=rent')
+  it('shows friendly category labels while preserving raw URL and API filter keys', async () => {
+    let requestedCategory: string | null = null
+    server.use(
+      http.get('/api/v1/transactions/', ({ request }) => {
+        requestedCategory = new URL(request.url).searchParams.get('category')
+        return HttpResponse.json([
+          {
+            ...fixtureTransactionIncome,
+            id: 3,
+            category: 'cost_reimbursement',
+          },
+        ])
+      }),
+    )
+
+    renderPage('/transactions?property=1&category=cost_reimbursement')
     // Wait for the page to load before querying the filter UI.
     await screen.findByRole('heading', { name: /transactions/i })
-    // The Category filter combobox shows the seeded category.
-    expect(screen.getAllByText('rent').length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Cost reimbursement')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('cost_reimbursement')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent(
+      'Cost reimbursement',
+    )
+    expect(requestedCategory).toBe('cost_reimbursement')
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('combobox', { name: 'Category' }))
+    expect(screen.getByRole('option', { name: 'Other expenses' })).toBeVisible()
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('button', { name: 'Delete transaction 3' }))
+    expect(screen.getByText('Delete transaction?')).toBeVisible()
+    expect(screen.getByRole('dialog')).toHaveTextContent('Cost reimbursement')
+    expect(screen.queryByText('cost_reimbursement')).not.toBeInTheDocument()
+  })
+
+  it('matches a friendly category label in search', async () => {
+    server.use(
+      http.get('/api/v1/transactions/', () =>
+        HttpResponse.json([
+          {
+            ...fixtureTransactionIncome,
+            id: 4,
+            category: 'cost_reimbursement',
+          },
+        ]),
+      ),
+    )
+
+    renderPage('/transactions?search=cost%20reimbursement')
+
+    expect(await screen.findByText('Cost reimbursement')).toBeVisible()
   })
 
   it('writes filter changes back to the URL', async () => {

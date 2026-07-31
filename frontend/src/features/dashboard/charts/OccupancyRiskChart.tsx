@@ -1,6 +1,7 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
+import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { chartVisualTokens } from '@/components/analytics/chartTheme'
 import { formatDate } from '@/lib/format'
@@ -43,15 +44,15 @@ export function OccupancyRiskChart(props: Props) {
     >
       {state.status === 'success' && data && (
         <>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
               <YAxis domain={[0, 100]} allowDataOverflow unit="%" />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatRate(item.value as number) }))} /> : null} />
-              <Line type="stepAfter" dataKey="occupancy_rate" name="Occupancy rate" stroke={chartVisualTokens.primary.color} strokeWidth={2.5} dot />
+              <Line type="stepAfter" dataKey="occupancy_rate" name="Occupancy rate" stroke={chartVisualTokens.primary.color} strokeWidth={2.5} dot={false} />
             </LineChart>
-          </ResponsiveContainer>
+          </ResponsiveChartContainer>
           <ul className="sr-only" aria-label="Occupancy risk values">{points.map((point) => <li key={point.period_start} data-testid={`occupancy-rate-${point.period_start}`} data-rate={point.occupancy_rate}>{formatDate(point.period_start)}: {formatRate(point.occupancy_rate as number | null)}, occupied {point.occupied}, vacant {point.vacant}, capacity {point.capacity}</li>)}</ul>
         </>
       )}

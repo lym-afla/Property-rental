@@ -14,14 +14,15 @@ export const isoDateSchema = z.string().refine(isCalendarDate, {
 })
 export const analyticsGrainSchema = z.enum(['month', 'quarter', 'year'])
 export const analyticsCurrencySchema = z.string().regex(/^[A-Z]{3}$/)
-export const exposureMeasureSchema = z.enum([
+export const propertyBreakdownMeasureSchema = z.enum([
   'property_value',
+  'equity',
   'debt',
   'rental_income',
 ])
 
 export type AnalyticsGrain = z.infer<typeof analyticsGrainSchema>
-export type ExposureMeasure = z.infer<typeof exposureMeasureSchema>
+export type PropertyBreakdownMeasure = z.infer<typeof propertyBreakdownMeasureSchema>
 export type PortfolioAnalyticsParams = {
   start?: string
   end?: string
@@ -30,12 +31,16 @@ export type PortfolioAnalyticsParams = {
   comparison?: 'previous_period' | null
   propertyIds?: readonly number[]
 }
-export type CurrencyExposureParams = PortfolioAnalyticsParams & {
-  measure: ExposureMeasure
+export type ProfitLossParams = Pick<
+  PortfolioAnalyticsParams,
+  'end' | 'currency' | 'propertyIds'
+> & { end: string; currency: string }
+export type PropertyBreakdownParams = PortfolioAnalyticsParams & {
+  measure: PropertyBreakdownMeasure
 }
 export type TenantRentPerformanceParams = Pick<
   PortfolioAnalyticsParams,
-  'start' | 'end' | 'currency' | 'grain' | 'comparison'
+  'start' | 'end' | 'grain' | 'comparison'
 >
 
 export const seriesDefinitionSchema = z
@@ -45,6 +50,75 @@ export const seriesDefinitionSchema = z
     kind: z.string().trim().min(1),
   })
   .strict()
+
+const profitLossCategoryKeySchema = z.string().trim().min(1).refine(
+  (key) => !['total_revenue', 'total_expenses', 'net_income'].includes(key),
+  { message: 'Category key collides with a total row key' },
+)
+
+const profitLossValuesSchema = z.record(z.string(), z.number())
+const profitLossCategoryRowBase = {
+  key: profitLossCategoryKeySchema,
+  label: z.string().trim().min(1),
+  values: profitLossValuesSchema,
+}
+const profitLossRowSchema = z.discriminatedUnion('kind', [
+  z.object({ ...profitLossCategoryRowBase, kind: z.literal('income') }).strict(),
+  z.object({ ...profitLossCategoryRowBase, kind: z.literal('expense') }).strict(),
+  z.object({ key: z.literal('total_revenue'), label: z.string().trim().min(1), kind: z.literal('total_revenue'), values: profitLossValuesSchema }).strict(),
+  z.object({ key: z.literal('total_expenses'), label: z.string().trim().min(1), kind: z.literal('total_expenses'), values: profitLossValuesSchema }).strict(),
+  z.object({ key: z.literal('net_income'), label: z.string().trim().min(1), kind: z.literal('net_income'), values: profitLossValuesSchema }).strict(),
+])
+
+export const profitLossSchema = z
+  .object({
+    metric: z.literal('profit_and_loss'),
+    currency: analyticsCurrencySchema,
+    scale: z.literal(1),
+    end: isoDateSchema,
+    columns: z.array(z.object({
+      key: z.string().trim().min(1),
+      label: z.string().trim().min(1),
+      start: isoDateSchema,
+      end: isoDateSchema,
+    }).strict()).min(2),
+    rows: z.array(profitLossRowSchema),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const columnKeys = value.columns.map(({ key }) => key)
+    if (new Set(columnKeys).size !== columnKeys.length) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'column keys must be unique' })
+    }
+    if (columnKeys.at(-1) !== 'ytd') {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'YTD must be the final column' })
+    }
+    const annualKeys = columnKeys.slice(0, -1)
+    if (annualKeys.some((key) => !/^\d{4}$/.test(key)) || annualKeys.some((key, index) => index > 0 && key <= annualKeys[index - 1])) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'annual columns must be chronological years' })
+    }
+    value.columns.forEach((column, index) => {
+      if (column.end < column.start) {
+        context.addIssue({ code: 'custom', path: ['columns', index, 'end'], message: 'end must be on or after start' })
+      }
+    })
+    const expectedKeys = new Set(columnKeys)
+    const rowKeys = value.rows.map(({ key }) => key)
+    if (new Set(rowKeys).size !== rowKeys.length) {
+      context.addIssue({ code: 'custom', path: ['rows'], message: 'row keys must be unique' })
+    }
+    for (const kind of ['total_revenue', 'total_expenses', 'net_income'] as const) {
+      if (value.rows.filter((row) => row.kind === kind).length !== 1) {
+        context.addIssue({ code: 'custom', path: ['rows'], message: `statement must contain exactly one ${kind} row` })
+      }
+    }
+    value.rows.forEach((row, index) => {
+      const actualKeys = Object.keys(row.values)
+      if (actualKeys.length !== expectedKeys.size || actualKeys.some((key) => !expectedKeys.has(key))) {
+        context.addIssue({ code: 'custom', path: ['rows', index, 'values'], message: 'values must contain exactly every declared column key' })
+      }
+    })
+  })
 
 const dynamicPointSchema = z
   .object({
@@ -139,6 +213,7 @@ type TimeSeriesValidationValue = {
 function validateTimeSeries(
   value: TimeSeriesValidationValue,
   context: z.core.$RefinementCtx<unknown>,
+  requireAllSeriesKeys = true,
 ): void {
   if (value.end < value.start) {
     context.addIssue({
@@ -188,7 +263,7 @@ function validateTimeSeries(
       }
     }
     for (const key of keys) {
-      if (!Object.hasOwn(point, key)) {
+      if (requireAllSeriesKeys && !Object.hasOwn(point, key)) {
         context.addIssue({
           code: 'custom',
           path: ['points', pointIndex, key],
@@ -339,6 +414,8 @@ const yieldStatusSchema = z.enum([
   'missing_currency',
   'zero_valuation',
   'negative_valuation',
+  'zero_equity',
+  'negative_equity',
 ])
 
 export const propertyYieldsSchema = z
@@ -355,10 +432,12 @@ export const propertyYieldsSchema = z
           property_name: z.string().trim().min(1),
           valuation_date: isoDateSchema.nullable(),
           property_value: z.number().nullable(),
+          debt: z.number().nullable(),
+          equity: z.number().nullable(),
           annualized_revenue: z.number().nullable(),
           annualized_costs: z.number().nullable(),
           gross_yield: z.number().nullable(),
-          net_yield: z.number().nullable(),
+          equity_yield: z.number().nullable(),
           status: yieldStatusSchema,
         })
         .strict(),
@@ -370,22 +449,17 @@ export const propertyYieldsSchema = z
     message: 'end must be on or after start',
   })
 
-const exposureCoverageSchema = z
+const propertyBreakdownCoverageSchema = z
   .object({
     period_start: isoDateSchema,
     period_end: isoDateSchema,
-    currency: analyticsCurrencySchema.nullable(),
+    property_id: z.number().int().positive(),
     status: z.enum([
       'ok',
       'stale_valuation',
-      'partial_valuation',
-      'partial_stale_valuation',
       'missing_valuation',
       'missing_currency',
-      'no_exposure',
     ]),
-    missing_count: z.number().int().nonnegative(),
-    stale_count: z.number().int().nonnegative(),
   })
   .strict()
   .refine((value) => value.period_end >= value.period_start, {
@@ -393,13 +467,16 @@ const exposureCoverageSchema = z
     message: 'period_end must be on or after period_start',
   })
 
-export const currencyExposureSchema = makeTimeSeriesSchema({
-  metric: z.literal('currency_exposure'),
+export const propertyBreakdownSchema = z.object({
+  ...timeSeriesBaseShape,
+  metric: z.literal('property_breakdown'),
   currency: analyticsCurrencySchema,
-  measure: exposureMeasureSchema,
+  measure: propertyBreakdownMeasureSchema,
   measure_label: z.string().trim().min(1),
-  coverage: z.array(exposureCoverageSchema),
-})
+  coverage: z.array(propertyBreakdownCoverageSchema),
+}).strict().superRefine((value, context) =>
+  validateTimeSeries(value as TimeSeriesValidationValue, context, false),
+)
 
 const propertyValuationPointSchema = z
   .object({
@@ -567,11 +644,12 @@ export type PortfolioOccupancyResponse = z.infer<
   typeof portfolioOccupancySchema
 >
 export type PortfolioSummaryResponse = z.infer<typeof portfolioSummarySchema>
+export type ProfitLossResponse = z.infer<typeof profitLossSchema>
 export type PropertyContributionResponse = z.infer<
   typeof propertyContributionSchema
 >
 export type PropertyYieldsResponse = z.infer<typeof propertyYieldsSchema>
-export type CurrencyExposureResponse = z.infer<typeof currencyExposureSchema>
+export type PropertyBreakdownResponse = z.infer<typeof propertyBreakdownSchema>
 export type PropertyValuationAnalyticsResponse = z.infer<
   typeof propertyValuationSchema
 >

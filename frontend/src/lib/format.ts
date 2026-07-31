@@ -11,10 +11,7 @@ export function formatCurrency(
   amount: number | null | undefined,
   currency: string,
 ): string {
-  if (amount === null || amount === undefined || Number.isNaN(amount)) return '—'
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
-  const symbol = symbols[currency] ?? ''
-  return `${symbol}${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  return formatAccounting(amount, currency)
 }
 
 // Compact axis formatter: collapses amounts >= 1000 to `k` (e.g.
@@ -24,29 +21,30 @@ export function formatCurrency(
 export function formatCurrencyAxis(value: number, currency: string): string {
   const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
   const symbol = symbols[currency] ?? ''
-  if (Math.abs(value) >= 1000) return `${symbol}${(value / 1000).toFixed(0)}k`
-  return `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const magnitude = Math.abs(value)
+  const rendered = magnitude >= 1000
+    ? `${(magnitude / 1000).toFixed(0)}k`
+    : magnitude.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  const amount = `${symbol}${rendered}`
+  return value < 0 ? `(${amount})` : amount
 }
 
-// Accounting format: negative numbers render as `₽(1,234)` instead of
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£', RUB: '₽',
+}
+
+// Accounting format: negative numbers render as `(₽1,234)` instead of
 // `-₽1,234`. Used in the Transactions table Amount column so expenses
-// are visually distinct from the unary-minus style. The value is signed
-// (positive = income / asset, negative = expense / liability); pass a
-// string (decimal from the API) or a number. The currency symbol is
-// always prepended (outside the parentheses for negatives) so the sign
-// convention stays unambiguous regardless of the row's currency.
+// are visually distinct from the unary-minus style.
 export function formatAccounting(
   value: number | string | null | undefined,
   currency: string,
 ): string {
   if (value === null || value === undefined) return '—'
-  const num = typeof value === 'string' ? parseFloat(value) : value
-  if (Number.isNaN(num)) return '—'
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', RUB: '₽' }
-  const symbol = symbols[currency] ?? ''
-  const abs = Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 0 })
-  if (num < 0) return `${symbol}(${abs})`
-  return `${symbol}${abs}`
+  const amount = typeof value === 'string' ? Number(value) : value
+  if (!Number.isFinite(amount)) return '—'
+  const rendered = `${CURRENCY_SYMBOLS[currency] ?? ''}${Math.abs(amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  return amount < 0 ? `(${rendered})` : rendered
 }
 
 export function formatDate(date: string | Date | null | undefined): string {

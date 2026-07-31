@@ -9,11 +9,11 @@ import type { DashboardFilterState } from './filters'
 const initialFilters: DashboardFilterState = {
   section: 'overview',
   start: '2026-01-01',
-  end: '2026-07-29',
+  end: '2026-07-30',
   currency: 'USD',
   grain: 'month',
   propertyIds: [],
-  exposureMeasure: 'property_value',
+  propertyBreakdownMeasure: 'property_value',
 }
 
 const properties = [
@@ -68,10 +68,33 @@ describe('DashboardFilters', () => {
     })
   })
 
-  it('exposes labelled 44px controls and reports desktop filter changes', async () => {
+  it('keeps settings collapsed until the user explicitly opens them', async () => {
     const user = userEvent.setup()
     setViewport(1280)
     render(<StatefulFilters />)
+
+    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument()
+    expect(screen.getByText('Jan 1, 2026–Jul 30, 2026 · USD · Monthly · All properties')).toBeVisible()
+
+    const toggle = screen.getByRole('button', { name: 'Show settings' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAttribute('aria-controls', 'dashboard-settings')
+
+    await user.click(toggle)
+    expect(screen.getByLabelText('Start date')).toBeVisible()
+    expect(screen.getByLabelText('Properties')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hide settings' })).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(screen.getByRole('button', { name: 'Hide settings' }))
+    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument()
+  })
+
+  it('exposes labelled 44px desktop controls after opening settings', async () => {
+    const user = userEvent.setup()
+    setViewport(1280)
+    render(<StatefulFilters />)
+
+    await user.click(screen.getByRole('button', { name: 'Show settings' }))
 
     const start = screen.getByLabelText('Start date')
     const end = screen.getByLabelText('As of date')
@@ -98,10 +121,13 @@ describe('DashboardFilters', () => {
     expect(grain).toHaveTextContent('Quarterly')
   })
 
-  it('keeps essential controls visible and exposes advanced controls in a bottom sheet', async () => {
+  it('exposes mobile controls through the disclosed settings and bottom sheet', async () => {
     const user = userEvent.setup()
     setViewport(390)
     render(<StatefulFilters />)
+
+    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show settings' }))
 
     expect(screen.getByLabelText('Start date')).toBeVisible()
     expect(screen.getByLabelText('As of date')).toBeVisible()
@@ -124,6 +150,8 @@ describe('DashboardFilters', () => {
     const user = userEvent.setup()
     setViewport(390)
     render(<StatefulFilters />)
+
+    await user.click(screen.getByRole('button', { name: 'Show settings' }))
 
     const start = screen.getByLabelText('Start date')
     const end = screen.getByLabelText('As of date')
@@ -160,6 +188,8 @@ describe('DashboardFilters', () => {
     const user = userEvent.setup()
     const onReset = vi.fn()
     render(<StatefulFilters onReset={onReset} />)
+
+    await user.click(screen.getByRole('button', { name: 'Show settings' }))
 
     await user.click(screen.getByRole('button', { name: 'Reset dashboard filters' }))
     expect(onReset).toHaveBeenCalledOnce()

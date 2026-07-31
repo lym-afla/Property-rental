@@ -29,8 +29,8 @@ type AnalyticsFilters = {
   propertyIds?: readonly number[]
 }
 
-type CurrencyExposureFilters = AnalyticsFilters & {
-  measure: 'property_value' | 'debt' | 'rental_income'
+type PropertyBreakdownFilters = AnalyticsFilters & {
+  measure: 'property_value' | 'equity' | 'debt' | 'rental_income'
 }
 
 function normalizePropertyIds(propertyIds: readonly number[] = []): number[] {
@@ -132,6 +132,13 @@ export const queryKeys = {
           'expense-drivers',
           normalizeAnalyticsFilters(filters),
         ] as const,
+      profitLoss: (filters: AnalyticsFilters) =>
+        [
+          'analytics',
+          'portfolio',
+          'profit-loss',
+          normalizeAnalyticsFilters(filters),
+        ] as const,
       propertyContribution: (filters: AnalyticsFilters) =>
         [
           'analytics',
@@ -146,11 +153,11 @@ export const queryKeys = {
           'yields',
           normalizeAnalyticsFilters(filters),
         ] as const,
-      currencyExposure: (filters: CurrencyExposureFilters) =>
+      propertyBreakdown: (filters: PropertyBreakdownFilters) =>
         [
           'analytics',
           'portfolio',
-          'currency-exposure',
+          'property-breakdown',
           { ...normalizeAnalyticsFilters(filters), measure: filters.measure },
         ] as const,
       occupancy: (filters: AnalyticsFilters) =>
@@ -167,7 +174,7 @@ export const queryKeys = {
       tenantId: number,
       filters: Pick<
         AnalyticsFilters,
-        'start' | 'end' | 'currency' | 'grain' | 'comparison'
+        'start' | 'end' | 'grain' | 'comparison'
       >,
     ) =>
       [
@@ -177,7 +184,6 @@ export const queryKeys = {
           tenantId,
           start: filters.start,
           end: filters.end,
-          currency: filters.currency,
           grain: filters.grain,
           comparison: filters.comparison,
         },
@@ -186,4 +192,4 @@ export const queryKeys = {
 }
 
 export { normalizePropertyIds }
-export type { AnalyticsFilters, CurrencyExposureFilters, TransactionFilters }
+export type { AnalyticsFilters, PropertyBreakdownFilters, TransactionFilters }

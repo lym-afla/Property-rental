@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { apiFetch } from './client'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { apiFetch, startAuthorizationRefresh } from './client'
 
 describe('apiFetch', () => {
   beforeEach(() => {
@@ -35,6 +35,7 @@ describe('apiFetch', () => {
 
     globalThis.fetch = originalFetch
     expect(capturedHeaders?.get('X-CSRFToken')).toBeNull()
+    expect(capturedHeaders?.get('X-Requested-With')).toBe('XMLHttpRequest')
   })
 
   it('serializes query params', async () => {
@@ -67,5 +68,70 @@ describe('apiFetch', () => {
     await expect(apiFetch('/test/')).rejects.toThrow()
     globalThis.fetch = originalFetch
     expect(events).toEqual(['fired'])
+  })
+
+  it('navigates once and never replays a mutation requiring authorization refresh', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'authorization_refresh_required',
+      refresh_url: '/oidc/authenticate/?next=%2Fproperties%2F42',
+      retry: false,
+    }), { status: 403, headers: { 'Content-Type': 'application/json' } }))
+    globalThis.fetch = fetchMock
+    const navigate = vi.fn()
+
+    await expect(apiFetch('/properties/42/', {
+      method: 'PATCH',
+      body: { name: 'Updated' },
+      startAuthorizationRefresh: navigate,
+    })).rejects.toMatchObject({ status: 403 })
+
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate).toHaveBeenCalledWith('/oidc/authenticate/?next=%2Fproperties%2F42')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('navigates on mozilla-django-oidc XHR refresh response for safe requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      refresh_url: 'https://auth.example/authorize/?prompt=none',
+    }), { status: 403, headers: { 'Content-Type': 'application/json' } }))
+    globalThis.fetch = fetchMock
+    const navigate = vi.fn()
+
+    await expect(apiFetch('/properties/', {
+      startAuthorizationRefresh: navigate,
+    })).rejects.toMatchObject({ status: 403 })
+
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate).toHaveBeenCalledWith('https://auth.example/authorize/?prompt=none')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('navigates when the authorization refresh URL is provided as a response header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      detail: 'refresh required',
+    }), {
+      status: 403,
+      headers: {
+        'Content-Type': 'application/json',
+        refresh_url: '/oidc/authenticate/?next=%2Fproperties%2F',
+      },
+    }))
+    globalThis.fetch = fetchMock
+    const navigate = vi.fn()
+
+    await expect(apiFetch('/properties/', {
+      startAuthorizationRefresh: navigate,
+    })).rejects.toMatchObject({ status: 403 })
+
+    expect(navigate).toHaveBeenCalledOnce()
+    expect(navigate).toHaveBeenCalledWith('/oidc/authenticate/?next=%2Fproperties%2F')
+  })
+
+  it('starts authorization refresh in the top-level browsing context', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('window', { top: { location: { assign } } })
+    startAuthorizationRefresh('/oidc/authenticate/?next=%2Fprofile')
+    expect(assign).toHaveBeenCalledWith('/oidc/authenticate/?next=%2Fprofile')
+    vi.unstubAllGlobals()
   })
 })

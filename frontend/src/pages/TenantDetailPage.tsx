@@ -66,6 +66,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatAccounting, formatCurrency, formatDate } from '@/lib/format'
+import { transactionCategoryLabel } from '@/lib/transactionCategories'
 import type { TenantWithStats } from '@/types/tenant'
 
 // Number of recent transactions shown in the Overview tab. The full list
@@ -278,9 +279,6 @@ export function TenantDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Rent &amp; debt</CardTitle>
-              <CardDescription>
-                Server-calculated rent, revenue, and debt. Currency shown in {currency || '—'}.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -353,7 +351,7 @@ export function TenantDetailPage() {
                     {recentTransactions.map((t) => (
                       <TableRow key={t.id}>
                         <TableCell>{formatDate(t.date)}</TableCell>
-                        <TableCell className="capitalize">{t.category}</TableCell>
+                        <TableCell>{transactionCategoryLabel(t.category)}</TableCell>
                         <TableCell>
                           <Badge
                             variant={t.type === 'income' ? 'secondary' : 'outline'}
