@@ -123,7 +123,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
     const box = (bar as SVGGraphicsElement).getBBox()
     return box.width > 0 && box.height > 0
   }))).toBe(true)
-  await expect(rentCard).toHaveScreenshot('investment-tenant-native-currency.png', { animations: 'disabled' })
+  await expect(rentCard).toHaveScreenshot('investment-tenant-native-currency.png', fontRenderingTolerance)
 
   await page.goto('/transactions')
   const transactionsTable = page.getByRole('table')
