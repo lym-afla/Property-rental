@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, type TooltipPayloadEntry, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
-import { ChartTooltip, type ChartTooltipRow } from '@/components/analytics/ChartTooltip'
+import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { FinancialDefinitions } from '@/components/analytics/FinancialDefinitions'
 import { chartSeriesStyle } from '@/components/analytics/chartTheme'
 import type { PropertyYieldsResponse } from '@/types/analytics'
+
+import { yieldTooltipRows } from './yieldTooltipRows'
 
 type Props = {
   data?: PropertyYieldsResponse
@@ -39,12 +41,6 @@ function formatYield(value: unknown) {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
-}
-
-export function yieldTooltipRows(payload: readonly TooltipPayloadEntry[]): ChartTooltipRow[] {
-  return payload
-    .filter((item) => item.dataKey === 'yield' && isFiniteNumber(item.value))
-    .map((item) => ({ label: String(item.name), value: formatYield(item.value) }))
 }
 
 function unavailableYieldMessage(row: PropertyYieldsResponse['rows'][number]) {

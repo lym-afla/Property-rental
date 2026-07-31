@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { PropertyYieldsResponse } from '@/types/analytics'
 
-import { YieldComparisonChart, yieldTooltipRows } from './YieldComparisonChart'
+import { YieldComparisonChart } from './YieldComparisonChart'
+import { yieldTooltipRows } from './yieldTooltipRows'
 
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
