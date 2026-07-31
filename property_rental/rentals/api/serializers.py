@@ -12,6 +12,7 @@ Transaction and FX. Field lists match the real model fields in
 """
 
 from rest_framework import serializers
+from django.conf import settings
 
 from rentals.models import (
     FX,
@@ -176,6 +177,12 @@ class UserSerializer(serializers.ModelSerializer):
     The role flags and the PK are set ONLY by the registration /
     admin path, never by ``PATCH /auth/me/``.
     """
+
+    def get_fields(self):
+        fields = super().get_fields()
+        if not settings.LOCAL_PASSWORD_AUTH_ENABLED:
+            fields.pop("effective_date", None)
+        return fields
 
     class Meta:
         model = User

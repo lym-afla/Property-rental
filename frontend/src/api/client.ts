@@ -14,6 +14,26 @@ export class ApiError extends Error {
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>
+  startAuthorizationRefresh?: (refreshUrl: string) => void
+}
+
+type RefreshResponse = {
+  code: 'authorization_refresh_required'
+  refresh_url: string
+  retry: false
+}
+
+export function startAuthorizationRefresh(refreshUrl: string): void {
+  const topLevelWindow = window.top ?? window
+  topLevelWindow.location.assign(refreshUrl)
+}
+
+function isAuthorizationRefreshResponse(body: unknown): body is RefreshResponse {
+  if (!body || typeof body !== 'object') return false
+  const value = body as Record<string, unknown>
+  return value.code === 'authorization_refresh_required'
+    && typeof value.refresh_url === 'string'
+    && value.retry === false
 }
 
 function getCsrfToken(): string | null {
@@ -22,7 +42,13 @@ function getCsrfToken(): string | null {
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, query, headers, ...rest } = options
+  const {
+    body,
+    query,
+    headers,
+    startAuthorizationRefresh: navigate = startAuthorizationRefresh,
+    ...rest
+  } = options
 
   const search = query
     ? '?' + new URLSearchParams(
@@ -65,6 +91,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       errorBody = await response.json()
     } catch {
       errorBody = await response.text()
+    }
+    if (response.status === 403 && isAuthorizationRefreshResponse(errorBody)) {
+      navigate(errorBody.refresh_url)
     }
     throw new ApiError(response.status, errorBody)
   }

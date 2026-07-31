@@ -66,3 +66,16 @@ def test_get_effective_date_defaults_to_today_when_unset(db, landlord_user):
     # User was created by the factory without setting effective_date.
     assert landlord_user.effective_date is None
     assert get_effective_date(landlord_user) == date.today()
+
+
+def test_production_effective_date_uses_business_timezone_today(
+    settings, monkeypatch, landlord_user
+):
+    from datetime import date
+    from rentals import utils
+
+    settings.LOCAL_PASSWORD_AUTH_ENABLED = False
+    landlord_user.effective_date = date(2040, 1, 1)
+    monkeypatch.setattr(utils.timezone, "localdate", lambda: date(2026, 7, 31))
+
+    assert utils.get_effective_date(landlord_user) == date(2026, 7, 31)

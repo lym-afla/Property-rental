@@ -4,6 +4,8 @@ import requests
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 import datetime
+from django.conf import settings
+from django.utils import timezone
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES
 
@@ -34,6 +36,8 @@ def get_effective_date(user):
     which preserves the pre-Task-8 default behavior for existing users and
     for tests that do not pin a specific date.
     """
+    if not settings.LOCAL_PASSWORD_AUTH_ENABLED:
+        return timezone.localdate()
     return getattr(user, "effective_date", None) or date.today()
 
 def get_currency_symbol(currency_code):

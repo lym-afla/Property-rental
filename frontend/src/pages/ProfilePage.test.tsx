@@ -77,4 +77,18 @@ describe('ProfilePage', () => {
     renderPage()
     expect(await screen.findByText(/failed to load profile/i)).toBeInTheDocument()
   })
+
+  it('does not expose password or effective-date controls when local auth is disabled', async () => {
+    window.__PROPERTY_RENTAL_CONFIG__ = {
+      localPasswordAuthEnabled: false,
+      oidcLoginUrl: '/oidc/authenticate/',
+    }
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(fixtureUser.username)
+    expect(screen.queryByRole('tab', { name: /change password/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /settings/i }))
+    expect(screen.queryByLabelText(/as-of date/i)).not.toBeInTheDocument()
+    delete window.__PROPERTY_RENTAL_CONFIG__
+  })
 })
