@@ -9,10 +9,63 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
 
+from rentals.management.commands.import_sqlite import MODELS
 from rentals.models import FX, Landlord, Property, User
 
 
 BUSINESS_MODELS = [User, Landlord, Property, FX]
+
+
+def _sqlite_value(value):
+    if isinstance(value, (date, Decimal)):
+        return str(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat(sep=" ")
+    if isinstance(value, bool):
+        return int(value)
+    return value
+
+
+def _write_source_sqlite(path):
+    """Serialize application rows without depending on the destination backend."""
+    source = sqlite3.connect(path)
+    try:
+        for model in MODELS:
+            fields = list(model._meta.concrete_fields)
+            definitions = []
+            for field in fields:
+                if field.primary_key:
+                    sql_type = "INTEGER PRIMARY KEY"
+                elif field.get_internal_type() in {
+                    "AutoField", "BigAutoField", "IntegerField", "PositiveIntegerField",
+                    "BooleanField", "ForeignKey", "OneToOneField",
+                }:
+                    sql_type = "INTEGER"
+                else:
+                    sql_type = "TEXT"
+                definitions.append(f'"{field.column}" {sql_type}')
+            source.execute(
+                f'CREATE TABLE "{model._meta.db_table}" ({", ".join(definitions)})'
+            )
+            rows = model.objects.order_by(model._meta.pk.name).values_list(
+                *(field.attname for field in fields)
+            )
+            placeholders = ", ".join("?" for _ in fields)
+            columns = ", ".join(f'"{field.column}"' for field in fields)
+            source.executemany(
+                f'INSERT INTO "{model._meta.db_table}" ({columns}) VALUES ({placeholders})',
+                [tuple(_sqlite_value(value) for value in row) for row in rows],
+            )
+        # Prove system-table contents are irrelevant to application emptiness.
+        source.execute(
+            "CREATE TABLE django_migrations (id INTEGER PRIMARY KEY, app TEXT, name TEXT, applied TEXT)"
+        )
+        source.execute(
+            "INSERT INTO django_migrations VALUES (1, 'rentals', 'fixture', '2026-01-01')"
+        )
+        source.commit()
+    finally:
+        source.close()
 
 
 def _source_snapshot(tmp_path):
@@ -28,9 +81,7 @@ def _source_snapshot(tmp_path):
         rate=Decimal("0.9000000000"),
     )
     path = tmp_path / "legacy.sqlite3"
-    source = sqlite3.connect(path)
-    connection.connection.backup(source)
-    source.close()
+    _write_source_sqlite(path)
     Property.objects.all().delete()
     FX.objects.all().delete()
     User.objects.all().delete()
