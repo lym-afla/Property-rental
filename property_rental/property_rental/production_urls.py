@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.urls import include, path
 
-from .urls import urlpatterns as application_urlpatterns
+from .urls import handler404, urlpatterns as application_urlpatterns
 
 
 _callback_path = urlparse(settings.OIDC_CALLBACK_URL).path.lstrip("/")

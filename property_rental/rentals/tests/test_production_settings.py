@@ -140,6 +140,22 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
     }
 
 
+def test_production_urlconf_preserves_custom_not_found_handler():
+    """Production must retain the project's plain API 404 response handler."""
+    result = import_settings(
+        production_environment(),
+        "{'module': __import__(settings.ROOT_URLCONF, fromlist=['handler404']).handler404.__module__, "
+        "'name': __import__(settings.ROOT_URLCONF, fromlist=['handler404']).handler404.__name__}",
+        setup=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "module": "property_rental.urls",
+        "name": "api_not_found",
+    }
+
+
 def test_production_configures_oidc_pkce_and_security_contracts():
     """Production must retain OIDC PKCE and HTTPS proxy/cookie/header protections."""
     result = import_settings(
