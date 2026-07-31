@@ -179,6 +179,53 @@ def test_production_configures_oidc_pkce_and_security_contracts():
     }
 
 
+def test_production_health_paths_skip_oidc_session_refresh():
+    """Authenticated OIDC sessions must not make health checks refreshable."""
+    code = """
+import django
+import json
+from django.conf import settings
+from django.test import RequestFactory
+from django.utils.module_loading import import_string
+
+django.setup()
+
+middleware_path = next(
+    path for path in settings.MIDDLEWARE
+    if path.endswith('HealthCheckSessionRefresh')
+)
+middleware = import_string(middleware_path)(lambda request: None)
+factory = RequestFactory()
+results = {}
+for path in ('/health/live', '/health/ready'):
+    request = factory.get(path)
+    request.user = type(
+        'DatabaseTouchingUser',
+        (),
+        {'is_authenticated': property(lambda self: (_ for _ in ()).throw(AssertionError()))},
+    )()
+    request.session = {
+        '_auth_user_backend': 'rentals.oidc.RentalOIDCAuthenticationBackend'
+    }
+    results[path] = middleware.is_refreshable_url(request)
+print(json.dumps(results))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=PROJECT_DIR,
+        env=production_environment(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "/health/live": False,
+        "/health/ready": False,
+    }
+
+
 def test_build_settings_need_no_runtime_secrets_but_require_vite_manifest():
     """Build settings avoid runtime secrets but stop collection without Vite output."""
     environment = os.environ.copy()

@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY
 from django.http import JsonResponse
 from django.utils import timezone
+from mozilla_django_oidc.middleware import SessionRefresh
 
 from .oidc import VIEWER_GROUP
 
@@ -12,6 +13,18 @@ from .oidc import VIEWER_GROUP
 AUTHORIZED_GROUPS_SESSION_KEY = "oidc_authorized_groups"
 LAST_AUTHORIZED_AT_SESSION_KEY = "oidc_last_authorized_at"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+HEALTH_CHECK_PATHS = frozenset({"/health/live", "/health/ready"})
+
+
+class HealthCheckSessionRefresh(SessionRefresh):
+    """Skip OIDC session inspection for process and dependency probes."""
+
+    def is_refreshable_url(self, request):
+        # Check this before SessionRefresh reads request.user, which can load
+        # an authenticated session's user record from the database.
+        if request.path in HEALTH_CHECK_PATHS:
+            return False
+        return super().is_refreshable_url(request)
 
 
 class AuthorizationAgeMiddleware:
@@ -70,7 +83,7 @@ class AuthorizationAgeMiddleware:
     def _is_exempt(cls, path):
         callback_path, authenticate_path = cls._oidc_routes()
         return (
-            path in {"/health/live", "/health/ready"}
+            path in HEALTH_CHECK_PATHS
             or path == authenticate_path
             or path == callback_path
             or path.startswith(settings.STATIC_URL)

@@ -32,6 +32,7 @@ OIDC_OP_LOGOUT_URL_METHOD = "property_rental.oidc.provider_logout_url"
 OIDC_ALLOWED_REDIRECT_HOSTS = ALLOWED_HOSTS
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
+OIDC_EXEMPT_URLS = ("/health/live", "/health/ready")
 OIDC_AUTHORIZATION_MAX_AGE = int(os.environ.get("OIDC_AUTHORIZATION_MAX_AGE", "300"))
 LOCAL_PASSWORD_AUTH_ENABLED = os.environ.get(
     "LOCAL_PASSWORD_AUTH_ENABLED", "false"
@@ -44,7 +45,7 @@ _authorization_middleware_index = MIDDLEWARE.index(
 )
 MIDDLEWARE.insert(
     _authorization_middleware_index + 1,
-    "mozilla_django_oidc.middleware.SessionRefresh",
+    "rentals.middleware.HealthCheckSessionRefresh",
 )
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
