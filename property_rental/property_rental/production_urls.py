@@ -1,0 +1,20 @@
+"""Production URL configuration, including the configured OIDC callback route."""
+
+from urllib.parse import urlparse
+
+from django.conf import settings
+from django.urls import include, path
+
+from .urls import urlpatterns as application_urlpatterns
+
+
+_callback_path = urlparse(settings.OIDC_CALLBACK_URL).path.lstrip("/")
+if not _callback_path.endswith("callback/"):
+    raise RuntimeError("OIDC_CALLBACK_URL must end with /callback/")
+
+_oidc_prefix = _callback_path[: -len("callback/")]
+
+urlpatterns = [
+    path(_oidc_prefix, include("mozilla_django_oidc.urls")),
+    *application_urlpatterns,
+]

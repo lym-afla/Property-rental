@@ -14,7 +14,7 @@ def required_env(name: str) -> str:
 
 def csv_env(name: str) -> list[str]:
     """Return non-empty, whitespace-trimmed values from a CSV environment variable."""
-    return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
+    return [value.strip() for value in required_env(name).split(",") if value.strip()]
 
 
 def postgres_database(url: str) -> dict[str, object]:

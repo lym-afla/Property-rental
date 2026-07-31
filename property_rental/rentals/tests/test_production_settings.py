@@ -32,12 +32,19 @@ def production_environment(**overrides: str) -> dict[str, str]:
     return environment
 
 
-def import_settings(environment: dict[str, str], expression: str = "settings.DATABASES") -> subprocess.CompletedProcess[str]:
+def import_settings(
+    environment: dict[str, str],
+    expression: str = "settings.DATABASES",
+    *,
+    setup: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    setup_code = "import django; django.setup(); " if setup else ""
     return subprocess.run(
         [
             sys.executable,
             "-c",
-            "from django.conf import settings; import json; print(json.dumps(" + expression + "))",
+            setup_code + "from django.conf import settings; import json; "
+            "print(json.dumps(" + expression + "))",
         ],
         cwd=PROJECT_DIR,
         env=environment,
@@ -96,6 +103,40 @@ def test_production_cannot_enable_debug_and_filters_empty_host_entries():
         "debug": False,
         "hosts": ["rent.linik.ru", "www.rent.linik.ru"],
         "origins": ["https://rent.linik.ru", "https://www.rent.linik.ru"],
+    }
+
+
+def test_production_requires_allowed_hosts_and_csrf_trusted_origins():
+    """Production host and CSRF boundaries must never silently become empty."""
+    for name in ("DJANGO_ALLOWED_HOSTS", "DJANGO_CSRF_TRUSTED_ORIGINS"):
+        environment = production_environment()
+        environment.pop(name)
+
+        result = import_settings(environment)
+
+        assert result.returncode != 0
+        assert name in result.stderr
+
+
+def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
+    """OIDC callback routing and provider logout must consume their env values."""
+    result = import_settings(
+        production_environment(
+            OIDC_CALLBACK_URL="https://rent.linik.ru/identity/callback/",
+            OIDC_LOGOUT_URL="https://auth.linik.ru/custom/end-session/",
+        ),
+        "{'callback': __import__('django.urls').urls.reverse('oidc_authentication_callback'), "
+        "'logout_method': settings.OIDC_OP_LOGOUT_URL_METHOD, "
+        "'logout_url': __import__('django.utils.module_loading').utils.module_loading.import_string("
+        "settings.OIDC_OP_LOGOUT_URL_METHOD)(None)}",
+        setup=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "callback": "/identity/callback/",
+        "logout_method": "property_rental.oidc.provider_logout_url",
+        "logout_url": "https://auth.linik.ru/custom/end-session/",
     }
 
 
