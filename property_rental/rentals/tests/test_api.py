@@ -73,6 +73,26 @@ def test_transaction_api_normalizes_cost_signs(
     assert body["type"] == stored_type
 
 
+@pytest.mark.django_db
+def test_property_valuation_api_defaults_blank_debt_to_zero(
+    auth_client, sample_property
+):
+    """Blank debt inputs represent an explicit zero-debt valuation."""
+    response = auth_client.post(
+        "/api/v1/property-valuations/",
+        {
+            "property": sample_property.id,
+            "capital_structure_date": "2026-07-31",
+            "capital_structure_value": "250000.00",
+            "capital_structure_debt": "",
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    assert Decimal(response.json()["capital_structure_debt"]) == Decimal("0.00")
+
+
 # ---------------------------------------------------------------------------
 # Serializer validation smoke tests
 # ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ describe('ValuationChart', () => {
 
     expect(screen.getByTestId('valuation-axis')).toHaveTextContent('£500k')
     expect(screen.getByText(/All time: 2018-01-01 to 2026-07-29/)).toBeInTheDocument()
+    expect(screen.queryByText(/Server-provided valuation records/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toMatch(/^url\(/)
     expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toBe(
       screen.getByTestId('valuation-bar-Equity').getAttribute('data-fill'),
@@ -73,6 +74,22 @@ describe('ValuationChart', () => {
     expect(x2023).toBe(parseISO('2023-01-01').getTime())
     expect(x2024).toBe(parseISO('2024-01-01').getTime())
     expect((x2023 - x2004) / (x2024 - x2023)).toBeGreaterThan(18)
+  })
+
+  it('shows synthetic valuation point statuses in the exact-values table', async () => {
+    const user = userEvent.setup()
+    render(<ValuationChart data={{
+      ...data,
+      start: '2021-01-01',
+      points: [
+        { period_start: '2021-01-01', period_end: '2021-01-01', total_value: 150000, debt: 60000, equity: 90000, status: 'interpolated' },
+        ...data.points,
+      ],
+    }} />)
+
+    expect(screen.getByText(/All time: 2021-01-01 to 2026-07-29/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('interpolated')
   })
 
   it('uses accounting formatting for negative values in the exact table and tooltip', async () => {

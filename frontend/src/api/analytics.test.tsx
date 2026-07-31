@@ -559,8 +559,8 @@ describe('analytics query keys', () => {
         measure: 'debt',
       }),
     )
-    expect(queryKeys.analytics.propertyValuation(7, '2026-07-29')).not.toEqual(
-      queryKeys.analytics.propertyValuation(7, '2026-06-30'),
+    expect(queryKeys.analytics.propertyValuation(7, { end: '2026-07-29' })).not.toEqual(
+      queryKeys.analytics.propertyValuation(7, { end: '2026-06-30' }),
     )
     expect(
       queryKeys.analytics.tenantRentPerformance(7, filters),
@@ -625,7 +625,7 @@ describe('analytics hooks', () => {
       () => usePropertyBreakdown({ ...filters, measure: 'property_value' }),
       () => usePortfolioOccupancy(filters),
       () => useProfitLoss({ end: filters.end, currency: filters.currency, propertyIds: filters.propertyIds }),
-      () => usePropertyValuationAnalytics(7, '2026-07-29'),
+      () => usePropertyValuationAnalytics(7, { end: '2026-07-29' }),
       () => useTenantRentPerformance(9, filters),
     ]
 

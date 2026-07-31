@@ -168,8 +168,8 @@ export const queryKeys = {
           normalizeAnalyticsFilters(filters),
         ] as const,
     },
-    propertyValuation: (propertyId: number, end?: string) =>
-      ['analytics', 'property-valuation', { propertyId, end }] as const,
+    propertyValuation: (propertyId: number, params?: { start?: string; end?: string }) =>
+      ['analytics', 'property-valuation', propertyId, params] as const,
     tenantRentPerformance: (
       tenantId: number,
       filters: Pick<

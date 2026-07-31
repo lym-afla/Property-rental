@@ -32,7 +32,32 @@ def _point_status(total_value, debt):
     return "ok"
 
 
-def property_valuation_history(user, property_id, end):
+def _valuation_point(period, total_value, debt, status):
+    return {
+        "period_start": period,
+        "period_end": period,
+        "total_value": float(total_value) if total_value is not None else None,
+        "debt": float(debt) if debt is not None else None,
+        "equity": (
+            float(total_value - debt)
+            if total_value is not None and debt is not None
+            else None
+        ),
+        "status": status,
+    }
+
+
+def _interpolate_value(before_value, after_value, before_date, after_date, target_date):
+    if before_value is None or after_value is None:
+        return None
+    span = (after_date - before_date).days
+    if span <= 0:
+        return before_value
+    elapsed = (target_date - before_date).days
+    return before_value + (after_value - before_value) * elapsed / span
+
+
+def property_valuation_history(user, property_id, end, start=None):
     """Return every owned valuation record through ``end`` without scaling."""
     property_ = get_object_or_404(
         Property.objects.filter(owned_by__user=user), pk=property_id
@@ -43,31 +68,69 @@ def property_valuation_history(user, property_id, end):
         )
     )
     points = []
+    if start is not None:
+        before = next(
+            (
+                valuation
+                for valuation in reversed(valuations)
+                if valuation.capital_structure_date <= start
+            ),
+            None,
+        )
+        after = next(
+            (
+                valuation
+                for valuation in valuations
+                if valuation.capital_structure_date > start
+            ),
+            None,
+        )
+        if before is not None and before.capital_structure_date != start:
+            if after is not None:
+                total_value = _interpolate_value(
+                    before.capital_structure_value,
+                    after.capital_structure_value,
+                    before.capital_structure_date,
+                    after.capital_structure_date,
+                    start,
+                )
+                debt = _interpolate_value(
+                    before.capital_structure_debt,
+                    after.capital_structure_debt,
+                    before.capital_structure_date,
+                    after.capital_structure_date,
+                    start,
+                )
+                points.append(_valuation_point(start, total_value, debt, "interpolated"))
+            else:
+                points.append(
+                    _valuation_point(
+                        start,
+                        before.capital_structure_value,
+                        before.capital_structure_debt,
+                        "carried_forward",
+                    )
+                )
+
     for valuation in valuations:
+        if start is not None and valuation.capital_structure_date < start:
+            continue
         total_value = valuation.capital_structure_value
         debt = valuation.capital_structure_debt
         points.append(
-            {
-                "period_start": valuation.capital_structure_date,
-                "period_end": valuation.capital_structure_date,
-                "total_value": (
-                    float(total_value) if total_value is not None else None
-                ),
-                "debt": float(debt) if debt is not None else None,
-                "equity": (
-                    float(total_value - debt)
-                    if total_value is not None and debt is not None
-                    else None
-                ),
-                "status": _point_status(total_value, debt),
-            }
+            _valuation_point(
+                valuation.capital_structure_date,
+                total_value,
+                debt,
+                _point_status(total_value, debt),
+            )
         )
 
     if property_.currency is None:
         status = "missing_currency"
     elif not valuations:
         status = "missing_valuation"
-    elif any(point["status"] != "ok" for point in points):
+    elif any(point["status"].startswith("missing_") for point in points):
         status = "partial_valuation"
     else:
         status = "ok"
@@ -77,7 +140,11 @@ def property_valuation_history(user, property_id, end):
         grain="record",
         currency=property_.currency.upper() if property_.currency else None,
         scale=1,
-        start=(valuations[0].capital_structure_date if valuations else end),
+        start=(
+            start
+            if start is not None
+            else (valuations[0].capital_structure_date if valuations else end)
+        ),
         end=end,
         status=status,
         series=(

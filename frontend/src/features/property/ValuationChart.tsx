@@ -40,6 +40,16 @@ function valuationSeries(data?: PropertyValuationAnalyticsResponse): AnalyticsSe
   }))
 }
 
+function paddedTimeDomain(points: readonly { timestamp: number }[]) {
+  if (points.length === 0) return ['dataMin', 'dataMax'] as const
+  const values = points.map((point) => point.timestamp)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = Math.max(max - min, 1000 * 60 * 60 * 24 * 30)
+  const padding = span * 0.04
+  return [min - padding, max + padding] as [number, number]
+}
+
 export function ValuationChart(props: Props) {
   const { data } = props
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
@@ -54,10 +64,12 @@ export function ValuationChart(props: Props) {
   const table = data && {
     columns: [
       { key: 'period', label: 'Record date' },
+      { key: 'status', label: 'Status' },
       ...series.map((item) => ({ key: item.key, label: item.label, numeric: true })),
     ],
     rows: data.points.map((point) => ({
       period: formatDate(point.period_start),
+      status: point.status,
       total_value: formatAccounting(point.total_value, currency),
       debt: formatAccounting(point.debt, currency),
       equity: formatAccounting(point.equity, currency),
@@ -68,9 +80,7 @@ export function ValuationChart(props: Props) {
     <AnalyticsChartCard
       state={state}
       title="Property valuation"
-      subtitle={data
-        ? `All time: ${data.start} to ${data.end}. Server-provided valuation records; no client-side time cutoff.`
-        : 'Server-provided valuation records; no client-side time cutoff.'}
+      subtitle={data ? `All time: ${data.start} to ${data.end}` : undefined}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
         if (next.has(key)) {
@@ -89,7 +99,7 @@ export function ValuationChart(props: Props) {
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
+            domain={paddedTimeDomain(chartPoints)}
             tickFormatter={(value) => formatDate(new Date(Number(value)))}
             minTickGap={24}
           />

@@ -56,6 +56,70 @@ def test_valuation_returns_full_history_in_raw_currency(
 
 
 @pytest.mark.django_db
+def test_property_valuation_history_interpolates_requested_start(
+    landlord_user, sample_property
+):
+    """A requested date inside two records gets a linearly interpolated point."""
+    from rentals.analytics.property import property_valuation_history
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2020, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2022, 1, 1),
+        capital_structure_value=Decimal("200000.00"),
+        capital_structure_debt=Decimal("80000.00"),
+    )
+
+    result = property_valuation_history(
+        landlord_user,
+        sample_property.id,
+        start=date(2021, 1, 1),
+        end=date(2022, 12, 31),
+    )
+
+    assert result.start == date(2021, 1, 1)
+    assert result.points[0]["period_start"] == date(2021, 1, 1)
+    assert result.points[0]["status"] == "interpolated"
+    assert result.points[0]["total_value"] == pytest.approx(150000, rel=0.01)
+    assert result.points[0]["debt"] == pytest.approx(60000, rel=0.01)
+    assert result.points[0]["equity"] == pytest.approx(90000, rel=0.01)
+    assert result.points[1]["period_start"] == date(2022, 1, 1)
+    assert result.points[1]["status"] == "ok"
+
+
+@pytest.mark.django_db
+def test_property_valuation_history_carries_forward_start_after_last_prior_record(
+    landlord_user, sample_property
+):
+    """A requested date after the latest record uses that record's values."""
+    from rentals.analytics.property import property_valuation_history
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2020, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+
+    result = property_valuation_history(
+        landlord_user,
+        sample_property.id,
+        start=date(2021, 1, 1),
+        end=date(2021, 12, 31),
+    )
+
+    assert result.points[0]["period_start"] == date(2021, 1, 1)
+    assert result.points[0]["status"] == "carried_forward"
+    assert result.points[0]["total_value"] == 100000.0
+    assert result.points[0]["debt"] == 40000.0
+
+
+@pytest.mark.django_db
 def test_valuation_preserves_missing_debt_and_equity(
     landlord_user, sample_property
 ):
