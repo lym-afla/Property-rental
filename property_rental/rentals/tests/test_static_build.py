@@ -84,9 +84,20 @@ def test_production_build_disables_source_maps():
     assert "sourcemap: false" in config
 
 
+def test_frontend_build_context_excludes_test_support_sources():
+    """Docker's production frontend build must not compile test-only handlers."""
+    tsconfig = (ROOT / "frontend/tsconfig.app.json").read_text(encoding="utf-8")
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert '"exclude": ["src/test", "src/__fixtures__"]' in tsconfig
+    assert "frontend/src/test/" in dockerignore
+
+
 def test_container_definition_exists_and_uses_non_root_runtime():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "USER app" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "${PORT:-8000}" in dockerfile
+    assert "X-Forwarded-Proto" in dockerfile
+    assert "COPY --from=frontend-build /build/property_rental/rentals/static/frontend ./rentals/static/frontend" in dockerfile
     assert "property_rental.wsgi:application" in dockerfile

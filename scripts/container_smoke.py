@@ -38,9 +38,10 @@ PY
     env = [
         "DJANGO_SETTINGS_MODULE=property_rental.settings.prod",
         "DATABASE_URL=postgresql://audit:audit@127.0.0.1:9/audit",
-        "DJANGO_SECRET_KEY=audit-only",
+        "DJANGO_SECRET_KEY=audit-only-key-with-enough-length-1234567890ABCDE",
         "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1",
         "DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost",
+        "BUSINESS_TIME_ZONE=Europe/Moscow",
         "OIDC_ISSUER=https://example.invalid/",
         "OIDC_CLIENT_ID=audit",
         "OIDC_CLIENT_SECRET=audit",
@@ -57,7 +58,8 @@ def wait_for(url: str, timeout: float = 30) -> bytes:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            request = urllib.request.Request(url, headers={"X-Forwarded-Proto": "https"})
+            with urllib.request.urlopen(request, timeout=2) as response:
                 assert response.status == 200
                 return response.read()
         except Exception:
@@ -72,9 +74,10 @@ def smoke_server(image: str) -> None:
     name = f"property-rental-audit-{host_port}"
     env = [
         "DATABASE_URL=postgresql://audit:audit@127.0.0.1:9/audit",
-        "DJANGO_SECRET_KEY=audit-only",
+        "DJANGO_SECRET_KEY=audit-only-key-with-enough-length-1234567890ABCDE",
         "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1",
         f"DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:{host_port}",
+        "BUSINESS_TIME_ZONE=Europe/Moscow",
         "OIDC_ISSUER=https://example.invalid/",
         "OIDC_CLIENT_ID=audit",
         "OIDC_CLIENT_SECRET=audit",

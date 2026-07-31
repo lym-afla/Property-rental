@@ -43,6 +43,7 @@ COPY --from=python-build /opt/venv /opt/venv
 COPY property_rental/manage.py property_rental/gunicorn.conf.py ./
 COPY property_rental/property_rental ./property_rental
 COPY property_rental/rentals ./rentals
+COPY --from=frontend-build /build/property_rental/rentals/static/frontend ./rentals/static/frontend
 COPY --from=static-build /app/staticfiles ./staticfiles
 RUN find /app -type d \( -name tests -o -name test -o -name e2e -o -name __fixtures__ \) -prune -exec rm -rf '{}' + && \
     find /app -type f \( -name '*.sqlite3' -o -name '*.map' -o -name '.env*' \) -delete && \
@@ -50,5 +51,5 @@ RUN find /app -type d \( -name tests -o -name test -o -name e2e -o -name __fixtu
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD python -c "import sys,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+sys.argv[1]+'/health/live',timeout=2)" "${PORT:-8000}" || exit 1
+  CMD python -c "import sys,urllib.request; request=urllib.request.Request('http://127.0.0.1:'+sys.argv[1]+'/health/live',headers={'X-Forwarded-Proto':'https'}); urllib.request.urlopen(request,timeout=2)" "${PORT:-8000}" || exit 1
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "property_rental.wsgi:application"]

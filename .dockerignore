@@ -15,6 +15,7 @@
 !frontend/src/**
 frontend/src/**/*.test.*
 frontend/src/**/__fixtures__/
+frontend/src/test/
 !property_rental/
 !property_rental/manage.py
 !property_rental/gunicorn.conf.py
