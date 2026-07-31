@@ -124,7 +124,10 @@ class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
     """
 
     def validate(self, attrs):
-        if attrs.get("capital_structure_debt") in ("", None):
+        if (
+            attrs.get("capital_structure_debt") in ("", None)
+            and (self.instance is None or "capital_structure_debt" in attrs)
+        ):
             attrs["capital_structure_debt"] = Decimal("0")
         return attrs
 

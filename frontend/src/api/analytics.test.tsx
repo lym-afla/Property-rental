@@ -562,6 +562,9 @@ describe('analytics query keys', () => {
     expect(queryKeys.analytics.propertyValuation(7, { end: '2026-07-29' })).not.toEqual(
       queryKeys.analytics.propertyValuation(7, { end: '2026-06-30' }),
     )
+    expect(queryKeys.analytics.propertyValuation(7, { start: '2026-01-01' })).not.toEqual(
+      queryKeys.analytics.propertyValuation(7, { start: '2026-02-01' }),
+    )
     expect(
       queryKeys.analytics.tenantRentPerformance(7, filters),
     ).not.toEqual(queryKeys.analytics.tenantRentPerformance(8, filters))
@@ -668,6 +671,24 @@ describe('analytics hooks', () => {
     )
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(receivedSearch).toBe('end=2026-07-29&currency=GBP&property=1&property=3')
+  })
+
+  it('serializes property valuation start and end filters', async () => {
+    let receivedSearch = ''
+    server.use(
+      http.get('/api/v1/analytics/properties/7/valuation/', ({ request }) => {
+        receivedSearch = new URL(request.url).searchParams.toString()
+        return HttpResponse.json(valuationFixture)
+      }),
+    )
+
+    const { result } = renderHook(
+      () => usePropertyValuationAnalytics(7, { start: '2026-01-01', end: '2026-07-29' }),
+      { wrapper: makeWrapper() },
+    )
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(receivedSearch).toBe('start=2026-01-01&end=2026-07-29')
   })
 
   it('sends normalized repeated property filters and breakdown measure', async () => {

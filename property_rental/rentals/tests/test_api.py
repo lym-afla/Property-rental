@@ -93,6 +93,31 @@ def test_property_valuation_api_defaults_blank_debt_to_zero(
     assert Decimal(response.json()["capital_structure_debt"]) == Decimal("0.00")
 
 
+@pytest.mark.django_db
+def test_property_valuation_patch_preserves_omitted_debt(
+    auth_client, sample_property
+):
+    """Updating a value alone must not erase an existing debt balance."""
+    from rentals.tests.factories import PropertyCapitalStructureFactory
+
+    valuation = PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_value=Decimal("250000.00"),
+        capital_structure_debt=Decimal("100000.00"),
+    )
+
+    response = auth_client.patch(
+        f"/api/v1/property-valuations/{valuation.id}/",
+        {"capital_structure_value": "300000.00"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert Decimal(response.json()["capital_structure_debt"]) == Decimal("100000.00")
+    valuation.refresh_from_db()
+    assert valuation.capital_structure_debt == Decimal("100000.00")
+
+
 # ---------------------------------------------------------------------------
 # Serializer validation smoke tests
 # ---------------------------------------------------------------------------
