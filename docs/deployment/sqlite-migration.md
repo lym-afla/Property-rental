@@ -35,6 +35,21 @@ For a validation-only pass:
 python manage.py import_sqlite --source /import/rental.sqlite3 --report /import/reconciliation.json --dry-run
 ```
 
+If only one legacy user should be carried forward, select that user's ownership
+graph explicitly:
+
+```bash
+python manage.py import_sqlite \
+  --source /import/rental.sqlite3 \
+  --include-username Yaroslav \
+  --report /import/reconciliation.json \
+  --dry-run
+```
+
+Zero or multiple source users with the selected username fail closed. The same
+selection option must be used for the real import after the dry-run report is
+reviewed.
+
 ## Guarantees
 
 The importer:
@@ -54,6 +69,20 @@ The importer:
 
 If destination business tables contain non-matching data, the command fails
 closed rather than merging or overwriting rows.
+
+With `--include-username`, the importer:
+
+- includes only the exactly matched source user, its landlord row, owned
+  properties, property capital-structure rows, tenants, lease rents, and
+  transactions;
+- keeps global FX rows because cached exchange rates are shared reference data,
+  not user-owned records;
+- excludes other users and their dependent rental records;
+- verifies that no included business row references an excluded user;
+- preserves the selected user's primary key and ownership relationships;
+- sets the selected user's Django password unusable;
+- records the selection parameters and included/excluded counts per table in
+  the reconciliation report.
 
 ## Imported users and OIDC linkage
 

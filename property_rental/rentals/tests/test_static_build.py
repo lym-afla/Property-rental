@@ -7,6 +7,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = ROOT / "property_rental/rentals/static/frontend/manifest.json"
@@ -105,3 +107,26 @@ def test_container_definition_exists_and_uses_non_root_runtime():
     assert "find /app /opt/venv" in dockerfile
     assert "COPY --from=frontend-build /build/property_rental/rentals/static/frontend ./rentals/static/frontend" in dockerfile
     assert "property_rental.wsgi:application" in dockerfile
+
+
+def test_publish_workflow_pushes_only_immutable_ghcr_sha_tag():
+    workflow_path = ROOT / ".github/workflows/publish-image.yml"
+    workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+
+    assert workflow["on"]["workflow_run"]["workflows"] == ["CI"]
+    assert workflow["on"]["workflow_run"]["types"] == ["completed"]
+    assert "workflow_dispatch" in workflow["on"]
+
+    job = workflow["jobs"]["publish-image"]
+    assert "${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}" == job["if"]
+    assert job["env"]["IMAGE_NAME"] == "ghcr.io/lym-afla/property-rental"
+
+    push_steps = [
+        step for step in job["steps"]
+        if step.get("uses", "").startswith("docker/build-push-action@")
+    ]
+    assert len(push_steps) == 1
+    build = push_steps[0]["with"]
+    assert build["push"] == "true"
+    assert build["tags"] == "${{ env.IMAGE_NAME }}:sha-${{ env.COMMIT_SHA }}"
+    assert "latest" not in build["tags"]

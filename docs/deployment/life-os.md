@@ -33,6 +33,16 @@ The image is built by the root `Dockerfile`:
 Runtime startup performs no frontend build, no `collectstatic`, and no database
 migration.
 
+Production images are published to GHCR only with immutable full-commit SHA
+tags:
+
+```text
+ghcr.io/lym-afla/property-rental:sha-<full-commit-sha>
+```
+
+Life OS deployments must pin this immutable SHA tag or a registry digest. Do
+not deploy `latest`; the repository workflow does not publish a `latest` tag.
+
 ## Networks
 
 The Life OS compose stack should attach the rental container only to:

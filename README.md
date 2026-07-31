@@ -90,6 +90,14 @@ docker build --tag property-rental:life-os .
 python scripts/container_smoke.py --image property-rental:life-os
 ```
 
+Merged `main` builds are published for deployment as immutable GHCR tags:
+
+```text
+ghcr.io/lym-afla/property-rental:sha-<full-commit-sha>
+```
+
+Life OS should deploy the full SHA tag or digest, never `latest`.
+
 Run migrations as an explicit one-shot job, never as implicit web-container
 startup work:
 

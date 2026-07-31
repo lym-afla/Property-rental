@@ -24,6 +24,10 @@ MODELS = [
 ]
 
 
+def empty_rows_by_model():
+    return {model: [] for model in MODELS}
+
+
 def read_source(source: Path):
     uri = f"file:{source.resolve().as_posix()}?mode=ro"
     try:
@@ -39,7 +43,9 @@ def read_source(source: Path):
             actual = [row[1] for row in db.execute(f'PRAGMA table_info("{table}")')]
             missing = sorted(set(expected) - set(actual))
             if missing:
-                raise CommandError(f"Unsupported source schema for {table}; missing columns: {missing}")
+                raise CommandError(
+                    f"Unsupported source schema for {table}; missing columns: {missing}"
+                )
             selected = ", ".join(f'"{column}"' for column in expected)
             result[model] = [dict(row) for row in db.execute(
                 f'SELECT {selected} FROM "{table}" ORDER BY "{model._meta.pk.column}"'
@@ -51,7 +57,7 @@ def read_source(source: Path):
     return result
 
 
-def relationship_errors(rows_by_model):
+def relationship_errors(rows_by_model, *, allowed_user_ids=None):
     errors = {model: [] for model in MODELS}
     source_ids = {
         model: {row[model._meta.pk.column] for row in rows}
@@ -63,11 +69,87 @@ def relationship_errors(rows_by_model):
                 continue
             for row in rows:
                 value = row[field.column]
-                if value is not None and value not in source_ids[field.remote_field.model]:
+                if value is None:
+                    continue
+                if (
+                    allowed_user_ids is not None
+                    and field.remote_field.model is User
+                    and value not in allowed_user_ids
+                ):
                     errors[model].append(
-                        f"{model._meta.db_table}.{field.column}={value} has no source parent"
+                        f"{model._meta.db_table}.{field.column}={value} "
+                        "references excluded user"
+                    )
+                    continue
+                if value not in source_ids[field.remote_field.model]:
+                    errors[model].append(
+                        f"{model._meta.db_table}.{field.column}={value} "
+                        "has no source parent"
                     )
     return errors
+
+
+def select_rows(rows_by_model, include_username):
+    """Return the source subset that belongs to exactly one selected user."""
+
+    selection = {"include_username": include_username}
+    if not include_username:
+        return rows_by_model, selection, None, {model: [] for model in MODELS}
+
+    errors = {model: [] for model in MODELS}
+    user_pk = User._meta.pk.column
+    matches = [
+        row for row in rows_by_model[User]
+        if row.get("username") == include_username
+    ]
+    if len(matches) != 1:
+        errors[User].append(
+            f"include_username={include_username!r} matched "
+            f"{len(matches)} source users"
+        )
+        return empty_rows_by_model(), selection, set(), errors
+
+    selected_user_ids = {matches[0][user_pk]}
+    selected = empty_rows_by_model()
+    selected[User] = matches
+
+    selected[Landlord] = [
+        row for row in rows_by_model[Landlord]
+        if row["user_id"] in selected_user_ids
+    ]
+    landlord_ids = {row[Landlord._meta.pk.column] for row in selected[Landlord]}
+
+    selected[Property] = [
+        row for row in rows_by_model[Property]
+        if row["owned_by_id"] in landlord_ids
+    ]
+    property_ids = {row[Property._meta.pk.column] for row in selected[Property]}
+
+    selected[Property_capital_structure] = [
+        row for row in rows_by_model[Property_capital_structure]
+        if row["property_id"] in property_ids
+    ]
+
+    selected[Tenant] = [
+        row for row in rows_by_model[Tenant]
+        if row["property_id"] in property_ids
+    ]
+    tenant_ids = {row[Tenant._meta.pk.column] for row in selected[Tenant]}
+
+    selected[Lease_rent] = [
+        row for row in rows_by_model[Lease_rent]
+        if row["tenant_id"] in tenant_ids
+    ]
+
+    selected[Transaction] = [
+        row for row in rows_by_model[Transaction]
+        if row["property_id"] in property_ids or row["tenant_id"] in tenant_ids
+    ]
+
+    # FX rows are global cached reference data, not user-owned business records.
+    selected[FX] = list(rows_by_model[FX])
+
+    return selected, selection, selected_user_ids, errors
 
 
 def source_value(field, value):
@@ -100,13 +182,27 @@ def destination_exactly_matches(rows_by_model):
     return True
 
 
-def build_report(rows_by_model, status, sequence_status, errors=None):
+def build_report(
+    rows_by_model,
+    status,
+    sequence_status,
+    errors=None,
+    *,
+    source_rows_by_model=None,
+    selection=None,
+):
+    source_rows_by_model = source_rows_by_model or rows_by_model
     errors = errors or {model: [] for model in MODELS}
     return {
         "status": status,
+        "selection": selection or {"include_username": None},
         "models": {
             model.__name__: {
-                "source_count": len(rows_by_model[model]),
+                "source_count": len(source_rows_by_model[model]),
+                "included_count": len(rows_by_model[model]),
+                "excluded_count": (
+                    len(source_rows_by_model[model]) - len(rows_by_model[model])
+                ),
                 "destination_count": model.objects.count(),
                 "relationship_errors": errors[model],
                 "sequence_status": sequence_status,
@@ -141,22 +237,72 @@ class Command(BaseCommand):
         parser.add_argument("--source", required=True)
         parser.add_argument("--report")
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--include-username",
+            help=(
+                "Import only the graph belonging to the single source user with "
+                "this username. Zero or multiple matches fail closed."
+            ),
+        )
 
     def handle(self, *args, **options):
         source = Path(options["source"])
         if not source.is_file():
             raise CommandError(f"SQLite source does not exist: {source}")
-        rows = read_source(source)
-        errors = relationship_errors(rows)
-        if any(errors.values()):
-            report = build_report(rows, "failed", "not-run", errors)
+        source_rows = read_source(source)
+        rows, selection, selected_user_ids, selection_errors = select_rows(
+            source_rows, options["include_username"]
+        )
+        if any(selection_errors.values()):
+            report = build_report(
+                rows,
+                "failed",
+                "not-run",
+                selection_errors,
+                source_rows_by_model=source_rows,
+                selection=selection,
+            )
             self._write_report(report, options["report"], stdout=False)
-            raise CommandError("Source relationship validation failed: " + json.dumps(
-                {model.__name__: value for model, value in errors.items() if value}, sort_keys=True
+            raise CommandError("Source user selection failed: " + json.dumps(
+                {
+                    model.__name__: value
+                    for model, value in selection_errors.items()
+                    if value
+                },
+                sort_keys=True,
             ))
 
+        errors = relationship_errors(rows, allowed_user_ids=selected_user_ids)
+        if any(errors.values()):
+            report = build_report(
+                rows,
+                "failed",
+                "not-run",
+                errors,
+                source_rows_by_model=source_rows,
+                selection=selection,
+            )
+            self._write_report(report, options["report"], stdout=False)
+            raise CommandError(
+                "Source relationship validation failed: " + json.dumps(
+                    {
+                        model.__name__: value
+                        for model, value in errors.items()
+                        if value
+                    },
+                    sort_keys=True,
+                )
+            )
+
         if options["dry_run"]:
-            report = build_report(rows, "dry-run", "not-run", errors)
+            report = build_report(
+                rows,
+                "dry-run",
+                "not-run",
+                errors,
+                source_rows_by_model=source_rows,
+                selection=selection,
+            )
             self._write_report(report, options["report"])
             return
 
@@ -191,10 +337,19 @@ class Command(BaseCommand):
                     model.objects.bulk_create(objects, batch_size=500)
 
                 if not destination_exactly_matches(rows):
-                    raise CommandError("Imported rows failed count or value reconciliation")
+                    raise CommandError(
+                        "Imported rows failed count or value reconciliation"
+                    )
                 sequence_status = reset_sequences()
 
-        report = build_report(rows, status, sequence_status, errors)
+        report = build_report(
+            rows,
+            status,
+            sequence_status,
+            errors,
+            source_rows_by_model=source_rows,
+            selection=selection,
+        )
         self._write_report(report, options["report"])
 
     def _write_report(self, report, path, stdout=True):
