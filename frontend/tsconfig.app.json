@@ -30,5 +30,11 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/test", "src/__fixtures__"]
+  "exclude": [
+    "src/test",
+    "src/__fixtures__",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "e2e"
+  ]
 }

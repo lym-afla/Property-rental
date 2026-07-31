@@ -108,7 +108,7 @@ def build_graph(as_of):
     from rentals.models import FX
 
     g = nx.Graph()
-    for fx in FX.objects.filter(date__lte=as_of):
+    for fx in FX.objects.filter(date__lte=as_of).order_by("id"):
         if fx.from_currency and fx.to_currency and fx.rate is not None:
             g.add_edge(fx.from_currency, fx.to_currency, weight=float(fx.rate))
     return g
@@ -288,7 +288,7 @@ class PreloadedConverter:
             self._rows = tuple(
                 FX.objects.filter(
                     date__lte=max(cross_currency_dates), rate__isnull=False
-                )
+                ).order_by("id")
             )
 
     def _graph(self, as_of):

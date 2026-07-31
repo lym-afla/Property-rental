@@ -53,8 +53,9 @@ tree and whether any production dependency can be safely made optional.
 - no local SQLite database files;
 - no frontend source maps;
 - no tests, Playwright/e2e directories, or fixtures under `/app`;
-- no tests, Playwright/e2e directories, or fixtures under `/opt/venv`;
+- no third-party package `tests` directories, Playwright/e2e directories, or
+  fixtures under `/opt/venv`; Django's required runtime `django.test` module is
+  retained because Django REST Framework imports it at runtime;
 - no committed `.env*` file;
 - non-root process user;
 - production settings use PostgreSQL only.
-

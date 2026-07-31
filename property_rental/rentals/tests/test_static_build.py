@@ -89,7 +89,10 @@ def test_frontend_build_context_excludes_test_support_sources():
     tsconfig = (ROOT / "frontend/tsconfig.app.json").read_text(encoding="utf-8")
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
 
-    assert '"exclude": ["src/test", "src/__fixtures__"]' in tsconfig
+    assert '"src/test"' in tsconfig
+    assert '"src/__fixtures__"' in tsconfig
+    assert '"src/**/*.test.*"' in tsconfig
+    assert '"src/**/*.spec.*"' in tsconfig
     assert "frontend/src/test/" in dockerignore
 
 

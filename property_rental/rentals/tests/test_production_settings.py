@@ -228,6 +228,8 @@ print(json.dumps(results))
 
 def test_build_settings_need_no_runtime_secrets_but_require_vite_manifest():
     """Build settings avoid runtime secrets but stop collection without Vite output."""
+    manifest_path = PROJECT_DIR / "rentals/static/frontend/manifest.json"
+    original_manifest = manifest_path.read_bytes() if manifest_path.exists() else None
     environment = os.environ.copy()
     environment["DJANGO_SETTINGS_MODULE"] = "property_rental.settings.build"
     for name in (
@@ -241,7 +243,13 @@ def test_build_settings_need_no_runtime_secrets_but_require_vite_manifest():
     ):
         environment.pop(name, None)
 
-    result = import_settings(environment, "settings.DJANGO_VITE")
+    try:
+        manifest_path.unlink(missing_ok=True)
+        result = import_settings(environment, "settings.DJANGO_VITE")
+    finally:
+        if original_manifest is not None:
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_bytes(original_manifest)
 
     assert result.returncode != 0
     assert "manifest.json" in result.stderr
