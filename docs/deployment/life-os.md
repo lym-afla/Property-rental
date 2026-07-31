@@ -76,6 +76,10 @@ Optional:
 Production must leave `LOCAL_PASSWORD_AUTH_ENABLED` unset or false. If it is set
 true under production settings, Django refuses startup.
 
+Production also sets `OIDC_CREATE_USER=False`. Unknown Authentik identities do
+not auto-create local users; imported/local ownership records must be linked
+deliberately with verified `(issuer, subject)` values.
+
 ## Database contract
 
 Life OS must create:
@@ -194,7 +198,7 @@ required when rates are absent.
 
 FX persistence is deterministic:
 
-- the canonical rate identity is `(date, source, from_currency, to_currency)`;
+- the canonical rate identity is `(date, from_currency, to_currency)`;
 - upserts do not create duplicate rates;
 - failed refreshes retain existing valid rates;
 - refresh reports distinguish cached, newly fetched, unavailable, and invalid
@@ -231,4 +235,3 @@ CI and `scripts/container_smoke.py` assert that the final runtime:
 - contains no committed `.env*` file or secret-shaped environment file;
 - serves `/health/live`;
 - serves the compiled SPA and frontend assets.
-

@@ -4,9 +4,9 @@ Measured locally on 2026-07-31 for `property-rental:life-os`.
 
 | Metric | Value |
 | --- | ---: |
-| Docker-reported local image size | 580 MB |
-| OCI image size from CI helper | 128,130,338 bytes |
-| Gzipped OCI archive from CI helper | 127,451,196 bytes |
+| Docker-reported local image size | 566 MB |
+| OCI image size from CI helper | 125,329,866 bytes |
+| Gzipped OCI archive from CI helper | 124,659,412 bytes |
 
 The byte measurements are produced by:
 
@@ -24,7 +24,7 @@ From `docker history property-rental:life-os`:
 
 | Layer | Approx. size | Notes |
 | --- | ---: | --- |
-| `/opt/venv` copy | 273 MB | Locked production Python dependencies. Largest packages are Django/DRF, scientific/analytics support such as pandas/numpy/networkx, PostgreSQL client dependencies, yfinance, and transitive packages. |
+| `/opt/venv` copy | 261 MB | Locked production Python dependencies. Largest packages are Django/DRF, scientific/analytics support such as pandas/numpy/networkx, PostgreSQL client dependencies, yfinance, and transitive packages. |
 | Debian bookworm base | 85.3 MB | Base OS layer from `python:3.11-slim-bookworm`. |
 | Python runtime install | 52.3 MB | CPython 3.11 slim runtime layer. |
 | App prune/static ownership layer | 15.1 MB | Final filesystem cleanup and ownership adjustment. |
@@ -35,7 +35,7 @@ Runtime filesystem spot check:
 
 | Path | Size |
 | --- | ---: |
-| `/opt/venv` | 233 MB |
+| `/opt/venv` | 223 MB |
 | `/app` | 15 MB |
 
 Do not remove required analytics dependencies merely to improve the number.
@@ -49,6 +49,8 @@ tree and whether any production dependency can be safely made optional.
 - no Node.js or npm;
 - no uv;
 - no gcc or cc compiler;
+- no Python lint/format tooling packages such as `djlint`, `cssbeautifier`, or
+  `jsbeautifier`;
 - no package-manager cache directories;
 - no local SQLite database files;
 - no frontend source maps;

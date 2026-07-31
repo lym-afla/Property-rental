@@ -28,12 +28,24 @@ test ! -d /home/app/.cache
 ! find /app -type d \( -name tests -o -name test -o -name e2e -o -name playwright -o -name __fixtures__ \) | grep .
 ! find /opt/venv -type d \( -name tests -o -name e2e -o -name playwright -o -name __fixtures__ \) | grep .
 python - <<'PY'
+import importlib.util
 import os
 from django.conf import settings
 import django
 django.setup()
 assert settings.DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql'
 assert os.getuid() != 0
+for module in (
+    'cssbeautifier',
+    'djlint',
+    'editorconfig',
+    'html_tag_names',
+    'html_void_elements',
+    'jsbeautifier',
+    'json5',
+    'pathspec',
+):
+    assert importlib.util.find_spec(module) is None, f'{module} must not be in runtime'
 PY
 '''
     env = [

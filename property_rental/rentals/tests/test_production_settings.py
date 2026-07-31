@@ -161,6 +161,7 @@ def test_production_configures_oidc_pkce_and_security_contracts():
     result = import_settings(
         production_environment(),
         "{'pkce': settings.OIDC_USE_PKCE, 'method': settings.OIDC_PKCE_CODE_CHALLENGE_METHOD, "
+        "'create_user': settings.OIDC_CREATE_USER, "
         "'proxy': settings.SECURE_PROXY_SSL_HEADER, 'session_secure': settings.SESSION_COOKIE_SECURE, "
         "'csrf_secure': settings.CSRF_COOKIE_SECURE, 'hsts': settings.SECURE_HSTS_SECONDS, "
         "'referrer': settings.SECURE_REFERRER_POLICY, 'cors': hasattr(settings, 'CORS_ALLOWED_ORIGINS')}",
@@ -170,6 +171,7 @@ def test_production_configures_oidc_pkce_and_security_contracts():
     assert json.loads(result.stdout) == {
         "pkce": True,
         "method": "S256",
+        "create_user": False,
         "proxy": ["HTTP_X_FORWARDED_PROTO", "https"],
         "session_secure": True,
         "csrf_secure": True,

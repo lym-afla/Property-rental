@@ -18,9 +18,9 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
 }
 
 type RefreshResponse = {
-  code: 'authorization_refresh_required'
   refresh_url: string
-  retry: false
+  code?: 'authorization_refresh_required'
+  retry?: false
 }
 
 export function startAuthorizationRefresh(refreshUrl: string): void {
@@ -31,9 +31,9 @@ export function startAuthorizationRefresh(refreshUrl: string): void {
 function isAuthorizationRefreshResponse(body: unknown): body is RefreshResponse {
   if (!body || typeof body !== 'object') return false
   const value = body as Record<string, unknown>
-  return value.code === 'authorization_refresh_required'
-    && typeof value.refresh_url === 'string'
-    && value.retry === false
+  if (typeof value.refresh_url !== 'string') return false
+  if (value.code === undefined) return true
+  return value.code === 'authorization_refresh_required' && value.retry === false
 }
 
 function getCsrfToken(): string | null {
@@ -62,6 +62,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   const isMutation = method !== 'GET' && method !== 'HEAD'
 
   const finalHeaders: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest',
     ...(headers as Record<string, string>),
   }
   if (body !== undefined) {
@@ -92,7 +93,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     } catch {
       errorBody = await response.text()
     }
-    if (response.status === 403 && isAuthorizationRefreshResponse(errorBody)) {
+    const refreshUrl = response.headers.get('refresh_url')
+      ?? response.headers.get('Refresh-Url')
+    if (response.status === 403 && refreshUrl) {
+      navigate(refreshUrl)
+    } else if (response.status === 403 && isAuthorizationRefreshResponse(errorBody)) {
       navigate(errorBody.refresh_url)
     }
     throw new ApiError(response.status, errorBody)
