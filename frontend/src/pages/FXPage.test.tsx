@@ -6,7 +6,7 @@
 // `server.use(...)` to exercise the `ErrorState` and `EmptyState`
 // affordances.
 import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
@@ -40,9 +40,14 @@ describe('FXPage', () => {
     expect(await screen.findByText(fixtureFX.rate)).toBeInTheDocument()
   })
 
-  it('renders the Update FX button', async () => {
+  it('explains scheduled refresh ownership', async () => {
     renderPage()
-    expect(await screen.findByRole('button', { name: /update fx/i })).toBeInTheDocument()
+    expect(
+      await screen.findByText(/scheduled refresh_fx command/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /update fx/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders ErrorState when the FX request fails', async () => {
@@ -60,7 +65,10 @@ describe('FXPage', () => {
     renderPage()
     expect(await screen.findByText(/no fx rates yet/i)).toBeInTheDocument()
     expect(
-      await waitFor(() => screen.getByRole('button', { name: /update fx/i })),
+      screen.getByText(/run the refresh_fx management command/i),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /update fx/i }),
+    ).not.toBeInTheDocument()
   })
 })

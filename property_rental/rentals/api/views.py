@@ -602,9 +602,10 @@ class FXViewSet(viewsets.ReadOnlyModelViewSet):
     FX rows are not scoped to a landlord (FX is a shared reference-table
     in this app — every landlord reads the same currency-pair rates). So
     only ``IsAuthenticated`` is applied here — there is no per-user
-    ownership to enforce. Writes are left open to authenticated landlords
-    to match the existing ``fx_list`` template view's behavior (Phase 3
-    may tighten this if FX editing moves entirely to a server-side job).
+    ownership to enforce. Writes are intentionally unavailable from the
+    web API; production FX acquisition is performed by the scheduled
+    ``refresh_fx`` management command so financial requests never block on
+    an external provider.
     """
 
     serializer_class = FXSerializer
