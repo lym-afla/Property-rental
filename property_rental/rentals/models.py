@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from datetime import date
 from django.db.models import Q
 # ``relativedelta`` was previously imported here for the month-iteration
@@ -50,6 +51,33 @@ class User(AbstractUser):
             Landlord.objects.get_or_create(user=self)
         elif self.is_tenant:
             Tenant.objects.get_or_create(user=self)
+
+
+class OIDCIdentity(models.Model):
+    """Stable external identity; profile fields on ``User`` remain mutable."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="oidc_identity"
+    )
+    issuer = models.URLField(max_length=500, editable=False)
+    subject = models.CharField(max_length=255, editable=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("issuer", "subject"), name="unique_oidc_issuer_subject"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.issuer} :: {self.subject}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).objects.only("issuer", "subject").get(pk=self.pk)
+            if (self.issuer, self.subject) != (original.issuer, original.subject):
+                raise ValidationError("OIDC issuer and subject are immutable")
+        return super().save(*args, **kwargs)
 
 class Landlord(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
@@ -408,4 +436,3 @@ class FX(models.Model):
         # the output values byte-for-byte; the cache is transparent.
         from rentals.services.fx import get_rate as _get_rate
         return _get_rate(from_currency, to_currency, as_of)
-                

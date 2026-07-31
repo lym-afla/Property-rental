@@ -30,6 +30,7 @@ FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 # and ``vite_asset`` tags used by ``spa_index.html``.
 INSTALLED_APPS = [
     'rentals',
+    'mozilla_django_oidc',
     'rest_framework',
     'django_vite',
 
@@ -40,6 +41,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 ]
+
+AUTHENTICATION_BACKENDS = ["rentals.oidc.RentalOIDCAuthenticationBackend"]
+
+OIDC_GROUPS_CLAIM = "groups"
+OIDC_RP_SCOPES = "openid email profile groups"
+OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_STORE_ACCESS_TOKEN = False
+OIDC_STORE_ID_TOKEN = False
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

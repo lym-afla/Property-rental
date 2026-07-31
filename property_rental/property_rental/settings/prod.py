@@ -11,24 +11,27 @@ CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS")
 TIME_ZONE = required_env("BUSINESS_TIME_ZONE")
 DATABASES = {"default": postgres_database(required_env("DATABASE_URL"))}
 
-INSTALLED_APPS += ["mozilla_django_oidc"]
 AUTHENTICATION_BACKENDS = [
-    "mozilla_django_oidc.auth.OIDCAuthenticationBackend",
-    "django.contrib.auth.backends.ModelBackend",
+    "rentals.oidc.RentalOIDCAuthenticationBackend",
 ]
-OIDC_ISSUER = required_env("OIDC_ISSUER").rstrip("/")
+OIDC_ISSUER = required_env("OIDC_ISSUER")
 OIDC_RP_CLIENT_ID = required_env("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = required_env("OIDC_CLIENT_SECRET")
 OIDC_CALLBACK_URL = required_env("OIDC_CALLBACK_URL")
 OIDC_LOGOUT_URL = required_env("OIDC_LOGOUT_URL")
 ROOT_URLCONF = "property_rental.production_urls"
-OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize/"
-OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/token/"
-OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/userinfo/"
-OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/jwks/"
+_OIDC_ENDPOINT_BASE = OIDC_ISSUER.rstrip("/")
+OIDC_OP_AUTHORIZATION_ENDPOINT = f"{_OIDC_ENDPOINT_BASE}/authorize/"
+OIDC_OP_TOKEN_ENDPOINT = f"{_OIDC_ENDPOINT_BASE}/token/"
+OIDC_OP_USER_ENDPOINT = f"{_OIDC_ENDPOINT_BASE}/userinfo/"
+OIDC_OP_JWKS_ENDPOINT = f"{_OIDC_ENDPOINT_BASE}/jwks/"
+OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_USE_PKCE = True
 OIDC_PKCE_CODE_CHALLENGE_METHOD = "S256"
 OIDC_OP_LOGOUT_URL_METHOD = "property_rental.oidc.provider_logout_url"
+OIDC_ALLOWED_REDIRECT_HOSTS = ALLOWED_HOSTS
+OIDC_STORE_ACCESS_TOKEN = False
+OIDC_STORE_ID_TOKEN = False
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True

@@ -28,5 +28,6 @@ handler404 = api_not_found
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('oidc/', include('mozilla_django_oidc.urls')),
     path('', include('rentals.urls')),
 ]
