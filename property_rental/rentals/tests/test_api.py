@@ -628,7 +628,7 @@ def test_property_valuation_create_validates_property_ownership(auth_client, sam
 #   via the ViewSet's ``get_object()`` so ownership scoping applies (an
 #   out-of-scope PK is 404, never 403 — same enumeration defense as the
 #   rest of the API).
-# * ``POST /api/v1/fx/update/`` — wraps ``services.fx.update_rates`` (which
+# * ``POST /api/v1/fx/update/`` — removed; FX acquisition is scheduled (which
 #   itself wraps yfinance). The endpoint loops over the requester's own
 #   properties (mirroring the legacy ``update_fx_view`` semantics). The
 #   service is mocked in the test — no network calls.
@@ -680,25 +680,13 @@ def test_vacate_tenant_other_landlord_404(
 
 
 @pytest.mark.django_db
-def test_fx_update_endpoint(auth_client, sample_property):
-    """POST /fx/update/ -> 200 ``{detail: "FX rates updated"}`` and
-    ``services.fx.update_rates`` was invoked (mocked — no network).
-
-    The endpoint wraps ``services.fx.update_rates`` for each of the
-    requester's properties (mirroring the legacy ``update_fx_view``).
-    Asserting the service was called rather than asserting a specific
-    property_id keeps the test decoupled from the iteration order.
-
-    Note: ``sample_property`` is needed because the real
-    ``update_rates`` signature takes a ``property_id`` (not a user), so
-    the endpoint loops the caller's properties — with no properties the
-    loop body would not run and the service would never be called.
-    """
+def test_fx_update_endpoint_is_removed(auth_client, sample_property):
+    """The web API cannot invoke an external FX provider."""
     from unittest.mock import patch
-    with patch("rentals.services.fx.update_rates") as mock_update:
+    with patch("rentals.services.fx_refresh.YahooRateProvider.get_rate") as provider:
         resp = auth_client.post("/api/v1/fx/update/")
-        assert resp.status_code == 200
-        assert mock_update.called
+        assert resp.status_code == 404
+        provider.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

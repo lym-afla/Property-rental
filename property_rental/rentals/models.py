@@ -404,7 +404,7 @@ class FX(models.Model):
     # Task 10: the graph-build + Bellman-Ford traversal lives in
     # ``rentals.services.fx`` so it can be cached (Django cache framework
     # as of Phase 4 Task 3, 2026-07-19). This model is now a thin
-    # delegate: ``get_rate`` / ``update_fx_rates`` forward to the service.
+    # delegate: ``get_rate`` forwards to the service.
     # Cache invalidation is handled by ``post_save`` / ``post_delete``
     # signal handlers in ``rentals.signals`` (registered in
     # ``RentalsConfig.ready``), so an FX write — including
@@ -418,13 +418,13 @@ class FX(models.Model):
 
     objects = FXManager()
 
-    @classmethod
-    def update_fx_rates(cls, property_id):
-        # Delegate to ``services.fx.update_rates`` (body moved there
-        # verbatim in Task 10). Kept as a classmethod so existing
-        # callers (views, tests) don't need to change.
-        from rentals.services.fx import update_rates
-        return update_rates(property_id)
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("date", "from_currency", "to_currency"),
+                name="unique_fx_rate_identity",
+            )
+        ]
 
     # Get FX quote for date
     @classmethod

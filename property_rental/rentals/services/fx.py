@@ -25,8 +25,6 @@ Public surface (the bits ``FX`` model and callers reach for):
 * ``invalidate_cache()`` — clears the cached graph. Called by the
   ``post_save`` / ``post_delete`` signal handlers in
   ``rentals.signals`` so the cache can never go stale.
-* ``update_rates(property_id)`` — the yfinance back-fill routine,
-  moved verbatim from ``FX.update_fx_rates``.
 
 Behavior preservation
 ---------------------
@@ -47,8 +45,8 @@ import networkx as nx
 from django.core.cache import cache
 from django.db.models import Q
 
-# ``FX`` / ``Property`` / ``update_FX_database`` are imported lazily
-# inside the functions that need them. Importing at module scope would
+# ``FX`` is imported lazily inside the functions that need it. Importing
+# at module scope would
 # create a circular import: ``rentals.models`` imports this module
 # (``FX.get_rate`` delegates here), and ``rentals.utils`` (imported by
 # ``rentals.models``) does the yfinance fetch.
@@ -352,57 +350,3 @@ def preload_converter(transactions, target_currency):
     """Return an FX converter that needs at most one FX-row query for a batch."""
     return PreloadedConverter(transactions, target_currency)
 
-
-def update_rates(property_id):
-    """Back-fill FX rates for a property's transaction dates via
-    yfinance. Body moved VERBATIM from ``FX.update_fx_rates`` (Task 9
-    long-schema version) — only the surrounding ``FX`` reference is
-    re-resolved locally (lazy import to avoid a module-load circular
-    import with ``rentals.models``).
-    """
-    from rentals.models import FX, Property
-    from rentals.utils import update_FX_database
-
-    # Long format: the pairs that need to be fetched are still
-    # hard-coded here (the same three pairs as before) — a future task
-    # can revisit. The pair list mirrors the legacy per-pair columns
-    # (EURUSD, GBPUSD, USDRUB) so behavior is unchanged.
-    currency_pairs = [("EUR", "USD"), ("GBP", "USD"), ("USD", "RUB")]
-
-    # Get the specific property
-    property_instance = Property.objects.get(id=property_id)
-
-    # Scan Transaction instances in the database to collect dates
-    transaction_dates = property_instance.transactions.values_list('date', flat=True)
-
-    logger.info("Checking FX rates for %s dates", len(transaction_dates))
-    count = 0
-    for date in transaction_dates:
-        count += 1
-        logger.info("%s of %s", count, len(transaction_dates))
-        for source, target in currency_pairs:
-            # Check if a long-format FX rate already exists for the
-            # (date, pair) combination.
-            existing_rate = FX.objects.filter(
-                date=date,
-                from_currency=source,
-                to_currency=target,
-            ).first()
-
-            if existing_rate is None or existing_rate.rate is None:
-                # Fetch the FX rate for the date.
-                rate_data = update_FX_database(source, target, date)
-
-                if rate_data is not None:
-                    # Upsert a long-format FX row.
-                    FX.objects.update_or_create(
-                        date=rate_data['requested_date'],
-                        from_currency=source,
-                        to_currency=target,
-                        defaults={'rate': rate_data['exchange_rate']},
-                    )
-                    logger.info("%s%s for %s is updated", source, target, rate_data["requested_date"])
-                else:
-                    raise Exception(f'{source}{target} for {date} is NOT updated. Yahoo Finance is not responding correctly')
-            else:
-                logger.info("%s%s for %s already exists", source, target, date)

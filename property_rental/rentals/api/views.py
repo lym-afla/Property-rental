@@ -610,32 +610,7 @@ class FXViewSet(viewsets.ModelViewSet):
     serializer_class = FXSerializer
     permission_classes = [IsAuthenticated]
     queryset = FX.objects.all()
-
-    @action(detail=False, methods=["post"], url_path="update")
-    def update_rates(self, request):
-        """POST /api/v1/fx/update/ -> 200 ``{detail: "FX rates updated"}``.
-
-        Wraps :func:`rentals.services.fx.update_rates` (which itself
-        wraps the yfinance fetch). ``services.fx.update_rates`` takes a
-        single ``property_id`` (NOT a user), so this endpoint mirrors
-        the legacy ``update_fx_view`` and loops over the requester's own
-        properties, calling the service once per property. Scoping to the
-        requester's properties avoids touching other users' data and
-        bounds the external yfinance calls.
-
-        The legacy view returned ``{'success': True, ...}``; we return a
-        ``{detail: ...}`` shape for consistency with the rest of the
-        ``/api/v1/`` namespace. Failures inside the service (e.g.
-        yfinance outages) propagate as 500s today, matching the legacy
-        view's ``try/except`` path that surfaced the message; a future
-        task can wrap this in a structured error envelope.
-        """
-        from rentals.services.fx import update_rates
-
-        for prop in Property.objects.filter(owned_by__user=request.user):
-            update_rates(prop.id)
-        return Response({"detail": "FX rates updated"}, status=200)
-
+    lookup_value_regex = r"\d+"
 
 class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
     """CRUD for ``Property_capital_structure`` scoped via
