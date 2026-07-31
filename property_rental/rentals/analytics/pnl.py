@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from datetime import date
 
-from rentals.constants import INCOME_CATEGORIES, TRANSACTION_CATEGORIES
+from rentals.constants import TRANSACTION_CATEGORIES
+from rentals.financial_semantics import category_kind, signed_analytics_amount
 from rentals.models import Transaction
 from rentals.services.fx import preload_converter
 
@@ -59,22 +60,14 @@ class ProfitLossResponse:
 
 
 def _columns(first_year: int, end: date):
-    annual = tuple(
+    return tuple(
         ProfitLossColumn(
             key=str(year),
-            label=str(year),
+            label=f"{year}YTD" if year == end.year else str(year),
             start=date(year, 1, 1),
             end=end if year == end.year else date(year, 12, 31),
         )
         for year in range(first_year, end.year + 1)
-    )
-    return annual + (
-        ProfitLossColumn(
-            key="ytd",
-            label="YTD",
-            start=end.replace(month=1, day=1),
-            end=end,
-        ),
     )
 
 
@@ -95,7 +88,7 @@ def profit_and_loss(user, end, currency, property_ids=()):
         for key, _label in TRANSACTION_CATEGORIES
     }
     category_kinds = {
-        key: "income" if key in INCOME_CATEGORIES else "expense"
+        key: category_kind(key)
         for key in category_keys
     }
     converter = preload_converter(transactions, currency)
@@ -107,9 +100,7 @@ def profit_and_loss(user, end, currency, property_ids=()):
         if category not in values:
             category_keys.append(category)
             values[category] = {column.key: 0.0 for column in columns}
-            category_kinds[category] = (
-                "income" if transaction.type == "income" else "expense"
-            )
+            category_kinds[category] = category_kind(category, transaction.type)
         converted = float(
             converter.convert(
                 transaction.amount,
@@ -118,26 +109,29 @@ def profit_and_loss(user, end, currency, property_ids=()):
                 transaction.date,
             )
         )
-        signed = (
-            converted
-            if category_kinds[category] == "income"
-            else -abs(converted)
-        )
+        signed = signed_analytics_amount(category, converted, transaction.type)
         values[category][str(transaction.date.year)] += signed
-        if transaction.date.year == end.year:
-            values[category]["ytd"] += signed
 
-    rows = []
+    income_rows = []
+    expense_rows = []
     for key in category_keys:
-        if any(values[key].values()):
-            rows.append(
-                ProfitLossRow(
-                    key=key,
-                    label=_category_label(key),
-                    kind=category_kinds[key],
-                    values=values[key],
-                )
-            )
+        if not any(values[key].values()):
+            continue
+        row = ProfitLossRow(
+            key=key,
+            label=_category_label(key),
+            kind=category_kinds[key],
+            values=values[key],
+        )
+        if row.kind == "income":
+            income_rows.append(row)
+        else:
+            expense_rows.append(row)
+
+    def _row_impact(row):
+        return sum(abs(value) for value in row.values.values())
+
+    expense_rows.sort(key=_row_impact, reverse=True)
 
     total_revenue = {
         column.key: sum(
@@ -159,17 +153,13 @@ def profit_and_loss(user, end, currency, property_ids=()):
         column.key: total_revenue[column.key] + total_expenses[column.key]
         for column in columns
     }
-    rows.extend(
-        (
-            ProfitLossRow(
-                "total_revenue", "Total revenue", "total_revenue", total_revenue
-            ),
-            ProfitLossRow(
-                "total_expenses", "Total expenses", "total_expenses", total_expenses
-            ),
-            ProfitLossRow("net_income", "Net income", "net_income", net_income),
-        )
-    )
+    rows = [
+        *income_rows,
+        ProfitLossRow("total_revenue", "Total revenue", "total_revenue", total_revenue),
+        *expense_rows,
+        ProfitLossRow("total_expenses", "Total expenses", "total_expenses", total_expenses),
+        ProfitLossRow("net_income", "Net income", "net_income", net_income),
+    ]
     return ProfitLossResponse(
         metric="profit_and_loss",
         currency=currency,
