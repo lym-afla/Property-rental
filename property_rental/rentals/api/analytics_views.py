@@ -41,6 +41,7 @@ from rentals.services.fx import MissingFXRate
 
 
 class _ValuationEndSerializer(serializers.Serializer):
+    start = ISODateField(required=False)
     end = ISODateField(required=False)
 
 
@@ -208,15 +209,20 @@ class PropertyValuationAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, property_id):
-        unknown = set(request.query_params) - {"end"}
+        unknown = set(request.query_params) - {"start", "end"}
         if unknown:
             raise serializers.ValidationError(
                 {key: "Unknown filter." for key in sorted(unknown)}
             )
         query = _ValuationEndSerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
+        start = query.validated_data.get("start")
         end = query.validated_data.get("end", get_effective_date(request.user))
-        result = property_valuation_history(request.user, property_id, end=end)
+        if start is not None and end < start:
+            raise serializers.ValidationError({"end": "end must be on or after start"})
+        result = property_valuation_history(
+            request.user, property_id, start=start, end=end
+        )
         return Response(PropertyValuationResponseSerializer(result).data)
 
 

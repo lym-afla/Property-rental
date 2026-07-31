@@ -12,12 +12,26 @@ vi.mock('recharts', () => ({
     <div data-testid="valuation-chart" data-points={JSON.stringify(data)}>{children}</div>
   ),
   CartesianGrid: () => null,
-  XAxis: () => null,
+  XAxis: ({ domain, padding, scale, type }: {
+    domain: [number, number]
+    padding?: { left?: number; right?: number }
+    scale?: string
+    type?: string
+  }) => (
+    <span
+      data-testid="valuation-x-axis"
+      data-domain={JSON.stringify(domain)}
+      data-padding-left={padding?.left}
+      data-padding-right={padding?.right}
+      data-scale={scale}
+      data-type={type}
+    />
+  ),
   YAxis: ({ tickFormatter }: { tickFormatter: (value: number) => string }) => <span data-testid="valuation-axis">{tickFormatter(500000)}</span>,
   Tooltip: ({ content }: { content: (props: { active: boolean; label: number; payload: Array<{ name: string; value: number }> }) => React.ReactNode }) => (
     <div data-testid="valuation-tooltip">{content({ active: true, label: parseISO('2018-01-01').getTime(), payload: [{ name: 'Debt', value: -100 }] })}</div>
   ),
-  Bar: ({ name, fill }: { name: string; fill: string }) => <span data-testid={`valuation-bar-${name}`} data-fill={fill}>{name} bars</span>,
+  Bar: ({ name, fill, maxBarSize }: { name: string; fill: string; maxBarSize?: number }) => <span data-testid={`valuation-bar-${name}`} data-fill={fill} data-max-bar-size={maxBarSize}>{name} bars</span>,
   Line: ({ name, strokeDasharray, dot }: { name: string; strokeDasharray?: string; dot?: boolean }) => <span data-testid={`valuation-line-${name}`} data-dasharray={strokeDasharray} data-dot={String(dot)}>{name} line</span>,
 }))
 
@@ -47,13 +61,14 @@ describe('ValuationChart', () => {
 
     expect(screen.getByTestId('valuation-axis')).toHaveTextContent('£500k')
     expect(screen.getByText(/All time: 2018-01-01 to 2026-07-29/)).toBeInTheDocument()
+    expect(screen.queryByText(/Server-provided valuation records/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toMatch(/^url\(/)
     expect(screen.getByTestId('valuation-bar-Debt').getAttribute('data-fill')).not.toBe(
       screen.getByTestId('valuation-bar-Equity').getAttribute('data-fill'),
     )
     expect(screen.getByTestId('valuation-line-Total value')).toHaveAttribute('data-dot', 'false')
     await user.click(screen.getByRole('button', { name: 'Table' }))
-    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('1 Jan 2018')
+    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('Jan 1, 2018')
     expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('£500,000')
   })
 
@@ -73,6 +88,37 @@ describe('ValuationChart', () => {
     expect(x2023).toBe(parseISO('2023-01-01').getTime())
     expect(x2024).toBe(parseISO('2024-01-01').getTime())
     expect((x2023 - x2004) / (x2024 - x2023)).toBeGreaterThan(18)
+  })
+
+  it('keeps the first bounded bar inside the padded linear-time plot', () => {
+    render(<ValuationChart data={data} />)
+
+    const axis = screen.getByTestId('valuation-x-axis')
+    const firstBar = screen.getByTestId('valuation-bar-Debt')
+    const leftPadding = Number(axis.dataset.paddingLeft)
+    const rightPadding = Number(axis.dataset.paddingRight)
+    const maximumBarWidth = Number(firstBar.dataset.maxBarSize)
+
+    expect(axis).toHaveAttribute('data-type', 'number')
+    expect(axis).toHaveAttribute('data-scale', 'time')
+    expect(leftPadding - maximumBarWidth / 2).toBeGreaterThan(0)
+    expect(rightPadding - maximumBarWidth / 2).toBeGreaterThan(0)
+  })
+
+  it('shows synthetic valuation point statuses in the exact-values table', async () => {
+    const user = userEvent.setup()
+    render(<ValuationChart data={{
+      ...data,
+      start: '2021-01-01',
+      points: [
+        { period_start: '2021-01-01', period_end: '2021-01-01', total_value: 150000, debt: 60000, equity: 90000, status: 'interpolated' },
+        ...data.points,
+      ],
+    }} />)
+
+    expect(screen.getByText(/All time: 2021-01-01 to 2026-07-29/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByRole('table', { name: /property valuation exact values/i })).toHaveTextContent('Interpolated')
   })
 
   it('uses accounting formatting for negative values in the exact table and tooltip', async () => {

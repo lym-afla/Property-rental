@@ -21,29 +21,42 @@ docker image inspect $Image | Out-File -Encoding utf8 $inspectPath
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 docker image history --no-trunc $Image | Out-File -Encoding utf8 $historyPath
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-docker buildx build --output "type=oci,dest=$ociArchivePath" .
+$builderName = "property-rental-oci-$PID"
+docker buildx create --name $builderName --driver docker-container --use --bootstrap | Out-Null
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+try {
+    docker buildx build --builder $builderName --output "type=oci,dest=$ociArchivePath" .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+    docker buildx rm $builderName | Out-Null
+}
 
 $uncompressedBytes = [int64](docker image inspect --format '{{.Size}}' $Image)
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $compressedArchivePath = "$ociArchivePath.gz"
-$inputStream = [System.IO.File]::OpenRead($ociArchivePath)
-$outputStream = [System.IO.File]::Create($compressedArchivePath)
-try {
-    $gzipStream = [System.IO.Compression.GZipStream]::new(
-        $outputStream,
-        [System.IO.Compression.CompressionLevel]::Optimal
-    )
+$gzipCommand = Get-Command gzip -ErrorAction SilentlyContinue
+if ($gzipCommand) {
+    gzip -f $ociArchivePath
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    $inputStream = [System.IO.File]::OpenRead($ociArchivePath)
+    $outputStream = [System.IO.File]::Create($compressedArchivePath)
     try {
-        $inputStream.CopyTo($gzipStream)
+        $gzipStream = [System.IO.Compression.GZipStream]::new(
+            $outputStream,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        )
+        try {
+            $inputStream.CopyTo($gzipStream)
+        } finally {
+            $gzipStream.Dispose()
+        }
     } finally {
-        $gzipStream.Dispose()
+        $inputStream.Dispose()
+        $outputStream.Dispose()
     }
-} finally {
-    $inputStream.Dispose()
-    $outputStream.Dispose()
+    Remove-Item -LiteralPath $ociArchivePath
 }
-Remove-Item -LiteralPath $ociArchivePath
 $compressedBytes = (Get-Item $compressedArchivePath).Length
 
 $sizes = [ordered]@{

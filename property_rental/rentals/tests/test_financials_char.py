@@ -291,9 +291,9 @@ def test_transaction_financials_aggregation(db):
         target_currency="USD",
         properties=[sc["property"]],
     )
-    # Both rows (rent $500 + tax $200) are USD; FX.get_rate('USD', 'USD',
-    # _) returns 1. Sum = 700.00.
-    EXPECTED = Decimal("700.00")
+    # Both rows are USD. The rent is +$500 and the normalized tax expense is
+    # -$200, so the signed total is $300.
+    EXPECTED = Decimal("300.00")
     assert actual == EXPECTED
 
 
@@ -323,12 +323,13 @@ def test_pnl_calc_portfolio(db):
     # now ``float`` (previously ``rent_ytd`` / ``rent_all_time`` and the
     # ``total`` sub-dict leaked raw ``Decimal`` from aggregate(Sum) /
     # convert_transactions). The numeric values are unchanged — only the
-    # types changed (Decimal("500") -> 500.0, etc.).
+    # types changed (Decimal("500") -> 500.0, etc.). Expense amounts retain
+    # their normalized negative sign.
     EXPECTED_RENT_YTD = 500.0
     EXPECTED_RENT_ALL_TIME = 500.0
     EXPECTED_EXPENSES = {
-        "Tax": {"ytd": 200.0, "all_time": 200.0},
-        "total": {"ytd": 200.0, "all_time": 200.0},
+        "Tax": {"ytd": -200.0, "all_time": -200.0},
+        "total": {"ytd": -200.0, "all_time": -200.0},
     }
     EXPECTED_CATEGORIES = ["rent", "tax"]
 

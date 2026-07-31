@@ -26,8 +26,11 @@ import { Button } from '@/components/ui/button'
 const schema = z.object({
   capital_structure_date: z.string().min(1, 'Required'),
   capital_structure_value: z.string().min(1, 'Required'),
-  capital_structure_debt: z.string().min(1, 'Required'),
-})
+  capital_structure_debt: z.string().optional().default(''),
+}).transform((values) => ({
+  ...values,
+  capital_structure_debt: values.capital_structure_debt?.trim() || '0',
+}))
 // See PropertyForm for the zod 4 + RHF input/output typing rationale.
 type Input = z.input<typeof schema>
 type Output = z.output<typeof schema>
@@ -61,9 +64,9 @@ export function PropertyValuationForm({
           name="capital_structure_date"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Capital structure date</FormLabel>
+              <FormLabel>Date</FormLabel>
               <FormControl>
-                <Input type="date" {...field} />
+                <Input className="min-h-11" type="date" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -75,10 +78,11 @@ export function PropertyValuationForm({
           name="capital_structure_value"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Capital structure value</FormLabel>
+              <FormLabel>Total value</FormLabel>
               <FormControl>
                 <Input
                   type="text"
+                  className="min-h-11"
                   inputMode="decimal"
                   placeholder="e.g. 250000.00"
                   {...field}
@@ -94,10 +98,11 @@ export function PropertyValuationForm({
           name="capital_structure_debt"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Capital structure debt</FormLabel>
+              <FormLabel>Debt</FormLabel>
               <FormControl>
                 <Input
                   type="text"
+                  className="min-h-11"
                   inputMode="decimal"
                   placeholder="e.g. 100000.00"
                   {...field}
@@ -108,7 +113,7 @@ export function PropertyValuationForm({
           )}
         />
 
-        <Button type="submit" disabled={isSubmitting}>
+        <Button className="min-h-11" type="submit" disabled={isSubmitting}>
           Save
         </Button>
       </form>

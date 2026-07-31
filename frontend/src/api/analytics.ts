@@ -138,14 +138,18 @@ export function usePortfolioOccupancy(params: PortfolioAnalyticsParams) {
   })
 }
 
-export function usePropertyValuationAnalytics(propertyId: number, end?: string) {
+export function usePropertyValuationAnalytics(
+  propertyId: number,
+  params: { start?: string; end?: string } = {},
+) {
   const search = new URLSearchParams()
-  if (end !== undefined) search.set('end', end)
+  if (params.start !== undefined) search.set('start', params.start)
+  if (params.end !== undefined) search.set('end', params.end)
   const query = search.toString()
   const path = `/analytics/properties/${propertyId}/valuation/${query ? `?${query}` : ''}`
 
   return useQuery({
-    queryKey: queryKeys.analytics.propertyValuation(propertyId, end),
+    queryKey: queryKeys.analytics.propertyValuation(propertyId, params),
     queryFn: () => fetchValidated(path, propertyValuationSchema),
     enabled: propertyId > 0,
   })

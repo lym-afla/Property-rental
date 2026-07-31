@@ -78,7 +78,7 @@ describe('NetCashFlowChart', () => {
     const disclosure = screen.getByText('Drill down to transactions')
     expect(disclosure).not.toHaveClass('sr-only')
     await user.click(disclosure)
-    const drillDown = screen.getByRole('button', { name: 'View Rent transactions for 1 Jan 2026' })
+    const drillDown = screen.getByRole('button', { name: 'View Rent transactions for Jan 1, 2026' })
     await user.click(drillDown)
     drillDown.focus()
     await user.keyboard('{Enter}')

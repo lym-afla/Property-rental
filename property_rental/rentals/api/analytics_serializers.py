@@ -294,7 +294,14 @@ class PropertyValuationPointSerializer(StrictSerializer):
     debt = serializers.FloatField(allow_null=True)
     equity = serializers.FloatField(allow_null=True)
     status = serializers.ChoiceField(
-        choices=["ok", "missing_value", "missing_debt", "missing_value_and_debt"]
+        choices=[
+            "ok",
+            "missing_value",
+            "missing_debt",
+            "missing_value_and_debt",
+            "interpolated",
+            "carried_forward",
+        ]
     )
 
 

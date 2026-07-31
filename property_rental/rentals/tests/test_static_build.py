@@ -109,6 +109,17 @@ def test_container_definition_exists_and_uses_non_root_runtime():
     assert "property_rental.wsgi:application" in dockerfile
 
 
+def test_container_ci_uses_buildx_container_driver_for_oci_export():
+    """The CI archive export must not rely on the default Docker driver."""
+    script = (ROOT / "scripts/ci_container.ps1").read_text(encoding="utf-8")
+
+    assert "--driver docker-container" in script
+    assert "docker buildx build --builder $builderName" in script
+    assert "docker buildx rm $builderName" in script
+    assert "Get-Command gzip" in script
+    assert "gzip -f" in script
+
+
 def test_publish_workflow_pushes_only_immutable_ghcr_sha_tag():
     workflow_path = ROOT / ".github/workflows/publish-image.yml"
     workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)

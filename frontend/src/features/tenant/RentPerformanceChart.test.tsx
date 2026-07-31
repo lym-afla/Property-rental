@@ -40,6 +40,12 @@ const data: TenantRentPerformanceResponse = {
 }
 
 describe('RentPerformanceChart', () => {
+  it('states the native currency in the subtitle', () => {
+    render(<RentPerformanceChart data={{ ...data, currency: 'RUB' }} />)
+
+    expect(screen.getByText(/Native currency: RUB/)).toBeInTheDocument()
+  })
+
   it('uses the server rent-performance values with explicit period and exact table values', async () => {
     const user = userEvent.setup()
     render(<RentPerformanceChart data={data} />)

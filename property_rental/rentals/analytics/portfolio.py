@@ -9,6 +9,7 @@ from django.db.models import Prefetch
 from rentals.analytics.cash_flow import _calendar_periods, _period_start
 from rentals.analytics.contracts import SeriesDefinition, TimeSeriesResponse
 from rentals.constants import INCOME_CATEGORIES
+from rentals.financial_semantics import revenue_cost_deltas
 from rentals.models import Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.fx import preload_converter
 
@@ -170,10 +171,13 @@ def _transaction_totals(properties, reporting_currency):
                 transaction.date,
             )
         )
-        if transaction.category in INCOME_CATEGORIES:
-            totals[transaction.property_id][0] += converted
-        else:
-            totals[transaction.property_id][1] += abs(converted)
+        revenue_delta, cost_delta = revenue_cost_deltas(
+            transaction.category,
+            converted,
+            transaction.type,
+        )
+        totals[transaction.property_id][0] += revenue_delta
+        totals[transaction.property_id][1] += cost_delta
     return totals
 
 
@@ -293,6 +297,7 @@ def property_yields(user, filters):
         revenue, costs = totals[property_.id]
         annualized_revenue = revenue * annualization
         annualized_costs = costs * annualization
+        annualized_net_income = annualized_revenue - annualized_costs
         if _native_currency(property_, filters.currency) is None:
             rows.append(
                 YieldRow(
@@ -356,12 +361,12 @@ def property_yields(user, filters):
                 annualized_revenue=annualized_revenue,
                 annualized_costs=annualized_costs,
                 gross_yield=(
-                    annualized_revenue / property_value * 100.0
+                    annualized_net_income / property_value * 100.0
                     if has_value_denominator
                     else None
                 ),
                 equity_yield=(
-                    (annualized_revenue - annualized_costs) / equity * 100.0
+                    annualized_net_income / equity * 100.0
                     if has_equity_denominator
                     else None
                 ),

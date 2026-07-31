@@ -9,6 +9,8 @@ import { FinancialDefinitions } from '@/components/analytics/FinancialDefinition
 import { chartSeriesStyle } from '@/components/analytics/chartTheme'
 import type { PropertyYieldsResponse } from '@/types/analytics'
 
+import { yieldTooltipRows } from './yieldTooltipRows'
+
 type Props = {
   data?: PropertyYieldsResponse
   isLoading?: boolean
@@ -96,7 +98,8 @@ export function YieldComparisonChart(props: Props) {
                   {average !== null && <ReferenceLine x={average} stroke="currentColor" strokeDasharray="4 4" label="Average displayed yield" />}
                   <Tooltip content={({ active, payload }) => {
                     const propertyName = payload?.find((item) => typeof item.payload?.property_name === 'string')?.payload?.property_name
-                    return active && propertyName ? <ChartTooltip label={propertyName} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatYield(item.value) }))} /> : null
+                    const rows = yieldTooltipRows(payload ?? [])
+                    return active && propertyName ? <ChartTooltip label={propertyName} rows={rows} /> : null
                   }} />
                   {visibleSeries.map((series) => {
                     const key: YieldKey = series.key

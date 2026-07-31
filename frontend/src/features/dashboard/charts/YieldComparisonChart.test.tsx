@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { PropertyYieldsResponse } from '@/types/analytics'
 
 import { YieldComparisonChart } from './YieldComparisonChart'
+import { yieldTooltipRows } from './yieldTooltipRows'
 
 vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
@@ -26,6 +27,15 @@ const data = {
 } as unknown as PropertyYieldsResponse
 
 describe('YieldComparisonChart', () => {
+  it('filters non-yield rows from the tooltip', () => {
+    expect(yieldTooltipRows([
+      { name: 'Property', dataKey: 'property_name', value: 'Anokhina' },
+      { name: 'Gross yield', dataKey: 'yield', value: 8.5 },
+    ] as never)).toEqual([
+      { label: 'Gross yield', value: '8.5%' },
+    ])
+  })
+
   it('shows missing valuations without fabricating a yield point', async () => {
     const user = userEvent.setup()
     render(<YieldComparisonChart data={data} />)
@@ -68,7 +78,7 @@ describe('YieldComparisonChart', () => {
     expect(screen.getByTestId('yield-Equity yield')).not.toHaveTextContent('Invalid Heights')
     expect(screen.getByText('Birch House')).toBeInTheDocument()
     expect(screen.queryByText(/Property NaN%/)).not.toBeInTheDocument()
-    expect(screen.getAllByText('—')).toHaveLength(2)
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
   })
 
   it('places the yield definitions control in the chart header', () => {

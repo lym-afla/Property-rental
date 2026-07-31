@@ -434,8 +434,8 @@ def test_profit_loss_endpoint_returns_typed_statement_and_excludes_foreign_prope
     assert payload["metric"] == "profit_and_loss"
     assert payload["currency"] == "USD"
     assert payload["columns"][-1] == {
-        "key": "ytd",
-        "label": "YTD",
+        "key": "2026",
+        "label": "2026YTD",
         "start": "2026-01-01",
         "end": "2026-07-30",
     }
@@ -444,7 +444,7 @@ def test_profit_loss_endpoint_returns_typed_statement_and_excludes_foreign_prope
         "key": "rent",
         "label": "Rent",
         "kind": "income",
-        "values": {"2026": 2000.0, "ytd": 2000.0},
+        "values": {"2026": 2000.0},
     }
 
 

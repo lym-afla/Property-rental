@@ -87,13 +87,8 @@ def test_profit_and_loss_builds_reconciling_annual_and_ytd_columns(
         currency="USD",
     )
 
-    assert [column.key for column in result.columns] == [
-        "2023",
-        "2024",
-        "2025",
-        "ytd",
-    ]
-    assert result.columns[-1].key == "ytd"
+    assert [column.key for column in result.columns] == ["2023", "2024", "2025"]
+    assert [column.label for column in result.columns] == ["2023", "2024", "2025YTD"]
     assert result.columns[-1].start == date(2025, 1, 1)
     assert result.columns[-1].end == date(2025, 7, 30)
     assert result.rows_by_key["rent"].values["2024"] == pytest.approx(24_000)
@@ -103,13 +98,12 @@ def test_profit_and_loss_builds_reconciling_annual_and_ytd_columns(
         "2024"
     ] == pytest.approx(result.net_income["2024"])
     assert result.rows_by_key["rent"].values["2025"] == pytest.approx(7_000)
-    assert result.rows_by_key["rent"].values["ytd"] == pytest.approx(7_000)
     assert [row.key for row in result.rows] == [
         "rent",
-        "tax",
-        "capex",
-        "management",
         "total_revenue",
+        "capex",
+        "tax",
+        "management",
         "total_expenses",
         "net_income",
     ]
@@ -131,7 +125,7 @@ def test_profit_and_loss_property_scope_excludes_other_owned_properties(
 
     assert result.rows_by_key["rent"].values["2024"] == pytest.approx(12_000)
     assert "management" not in result.rows_by_key
-    for key in ("2023", "2024", "2025", "ytd"):
+    for key in ("2023", "2024", "2025"):
         assert result.total_revenue[key] + result.total_expenses[
             key
         ] == pytest.approx(result.net_income[key])
@@ -179,7 +173,10 @@ def test_profit_and_loss_safely_reports_unknown_category_with_stored_type(
         amount=Decimal("250.00"),
         date=date(2025, 1, 1),
     )
-    type(transaction).objects.filter(pk=transaction.pk).update(type="income")
+    type(transaction).objects.filter(pk=transaction.pk).update(
+        type="income",
+        amount=Decimal("250.00"),
+    )
 
     result = profit_and_loss(
         landlord_user,
@@ -215,4 +212,51 @@ def test_profit_and_loss_canonicalizes_unmigrated_other_income(landlord_user):
     row = _row(result, "cost_reimbursement")
     assert row.label == "Cost reimbursement"
     assert row.kind == "expense"
-    assert row.values["2025"] == pytest.approx(-250)
+    assert row.values["2025"] == pytest.approx(250)
+    assert result.total_revenue["2025"] == pytest.approx(0)
+    assert result.total_expenses["2025"] == pytest.approx(250)
+
+
+@pytest.mark.django_db
+def test_profit_and_loss_keeps_cost_reimbursement_as_positive_expense(
+    landlord_user,
+):
+    property_ = PropertyFactory(owned_by=landlord_user.landlord)
+    TransactionFactory(
+        property=property_,
+        category="rent",
+        amount=Decimal("1000.00"),
+        date=date(2026, 1, 1),
+    )
+    TransactionFactory(
+        property=property_,
+        category="tax",
+        amount=Decimal("-300.00"),
+        date=date(2026, 1, 2),
+    )
+    TransactionFactory(
+        property=property_,
+        category="cost_reimbursement",
+        amount=Decimal("-125.00"),
+        date=date(2026, 1, 3),
+    )
+
+    result = profit_and_loss(
+        landlord_user,
+        end=date(2026, 7, 31),
+        currency="USD",
+    )
+
+    assert result.rows_by_key["cost_reimbursement"].kind == "expense"
+    assert result.rows_by_key["cost_reimbursement"].values["2026"] == pytest.approx(125)
+    assert result.total_revenue["2026"] == pytest.approx(1000)
+    assert result.total_expenses["2026"] == pytest.approx(-175)
+    assert result.net_income["2026"] == pytest.approx(825)
+    assert [row.key for row in result.rows] == [
+        "rent",
+        "total_revenue",
+        "tax",
+        "cost_reimbursement",
+        "total_expenses",
+        "net_income",
+    ]

@@ -18,6 +18,7 @@ from django.db.models import Q
 from django.core.validators import MaxValueValidator
 
 from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
+from .financial_semantics import category_kind, normalize_transaction_amount
 # ``update_FX_database`` was imported here for ``FX.update_fx_rates``.
 # Task 10 moved that body into ``rentals.services.fx``; the yfinance
 # helper is now imported locally inside ``services.fx.update_rates``.
@@ -333,14 +334,9 @@ class Transaction(models.Model):
         return self.property.name + ": " + self.category
 
     def save(self, *args, **kwargs):
-        # Automatically set the 'type' field based on the 'category' field
-        if self.category in INCOME_CATEGORIES:  
-            self.type = 'income'
-        else:
-            self.type = 'expense'
-            
+        self.type = category_kind(self.category)
+        self.amount = normalize_transaction_amount(self.category, self.amount)
         self.comment = '–' if not self.comment else self.comment
-        
         super(Transaction, self).save(*args, **kwargs)
         
 # Table with FX data

@@ -11,6 +11,8 @@ Transaction and FX. Field lists match the real model fields in
 ``rentals/models.py`` (no invented fields).
 """
 
+from decimal import Decimal
+
 from rest_framework import serializers
 from django.conf import settings
 
@@ -78,7 +80,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     ``type`` is derived from ``category`` inside ``Transaction.save`` (see
     ``rentals/models.py``), so it is exposed as read-only here to keep
     clients from setting it directly. ``amount`` sign is also normalized
-    on save (income positive, expense negative).
+    on save (income and reimbursements positive; other expenses negative).
     """
 
     type = serializers.ReadOnlyField()
@@ -121,6 +123,14 @@ class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
     currently handles ``data_type='propertyValuation'``). Field names
     match the model definition in ``rentals/models.py`` (line ~123).
     """
+
+    def validate(self, attrs):
+        if (
+            attrs.get("capital_structure_debt") in ("", None)
+            and (self.instance is None or "capital_structure_debt" in attrs)
+        ):
+            attrs["capital_structure_debt"] = Decimal("0")
+        return attrs
 
     class Meta:
         model = Property_capital_structure

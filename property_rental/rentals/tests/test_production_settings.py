@@ -255,3 +255,22 @@ def test_build_settings_need_no_runtime_secrets_but_require_vite_manifest():
 
     assert result.returncode != 0
     assert "manifest.json" in result.stderr
+
+
+def test_postgres_settings_do_not_require_vite_manifest_for_backend_ci():
+    """Backend-only PostgreSQL CI must render the SPA shell before frontend build."""
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "DJANGO_SETTINGS_MODULE": "property_rental.settings.test_postgres",
+            "DATABASE_URL": "postgresql://property_rental_ci:property_rental_ci@127.0.0.1:5432/property_rental_ci",
+        }
+    )
+
+    result = import_settings(
+        environment,
+        "settings.DJANGO_VITE['default']['dev_mode']",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) is True

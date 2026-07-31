@@ -30,12 +30,17 @@ export function ProfitLossTable({ data }: ProfitLossTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.rows.map((row) => {
+        {data.rows.map((row, index) => {
+          const previous = data.rows[index - 1]
           const isTotal = !['income', 'expense'].includes(row.kind)
+          const startsExpenseBlock = row.kind === 'expense' && previous?.kind === 'total_revenue'
           return (
             <TableRow
               key={row.key}
-              className={cn(isTotal && 'border-t font-semibold')}
+              className={cn(
+                isTotal && 'border-t font-semibold',
+                startsExpenseBlock && 'border-t-8 border-t-muted',
+              )}
             >
               <th
                 scope="row"

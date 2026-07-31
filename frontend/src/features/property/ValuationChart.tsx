@@ -19,6 +19,9 @@ type Props = {
   onViewHistory?: () => void
 }
 
+const VALUATION_BAR_MAX_SIZE = 24
+const VALUATION_AXIS_PADDING = VALUATION_BAR_MAX_SIZE / 2 + 4
+
 function stateFor({ data, isLoading, isError, onRetry, onViewHistory }: Props): AnalyticsChartState {
   if (isLoading) return { status: 'loading' }
   if (isError) return { status: 'error', message: 'Could not load property valuation.', onRetry }
@@ -40,6 +43,23 @@ function valuationSeries(data?: PropertyValuationAnalyticsResponse): AnalyticsSe
   }))
 }
 
+function paddedTimeDomain(points: readonly { timestamp: number }[]) {
+  if (points.length === 0) return ['dataMin', 'dataMax'] as const
+  const values = points.map((point) => point.timestamp)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = Math.max(max - min, 1000 * 60 * 60 * 24 * 30)
+  const padding = span * 0.04
+  return [min - padding, max + padding] as [number, number]
+}
+
+function formatValuationStatus(status: string) {
+  return status
+    .split('_')
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(' ')
+}
+
 export function ValuationChart(props: Props) {
   const { data } = props
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
@@ -54,10 +74,12 @@ export function ValuationChart(props: Props) {
   const table = data && {
     columns: [
       { key: 'period', label: 'Record date' },
+      { key: 'status', label: 'Status' },
       ...series.map((item) => ({ key: item.key, label: item.label, numeric: true })),
     ],
     rows: data.points.map((point) => ({
       period: formatDate(point.period_start),
+      status: formatValuationStatus(point.status),
       total_value: formatAccounting(point.total_value, currency),
       debt: formatAccounting(point.debt, currency),
       equity: formatAccounting(point.equity, currency),
@@ -68,9 +90,7 @@ export function ValuationChart(props: Props) {
     <AnalyticsChartCard
       state={state}
       title="Property valuation"
-      subtitle={data
-        ? `All time: ${data.start} to ${data.end}. Server-provided valuation records; no client-side time cutoff.`
-        : 'Server-provided valuation records; no client-side time cutoff.'}
+      subtitle={data ? `All time: ${data.start} to ${data.end}` : undefined}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
         if (next.has(key)) {
@@ -89,13 +109,14 @@ export function ValuationChart(props: Props) {
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
+            domain={paddedTimeDomain(chartPoints)}
+            padding={{ left: VALUATION_AXIS_PADDING, right: VALUATION_AXIS_PADDING }}
             tickFormatter={(value) => formatDate(new Date(Number(value)))}
             minTickGap={24}
           />
           <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} />
           <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(new Date(Number(label)))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatAccounting(typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
-          {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
+          {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" maxBarSize={VALUATION_BAR_MAX_SIZE} fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
           {visibleSeries.filter((item) => item.key === 'total_value').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
         </ComposedChart>
       </ResponsiveChartContainer>}
