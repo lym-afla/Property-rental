@@ -11,7 +11,9 @@ function formatYield(value: number) {
 }
 
 export function yieldTooltipRows(payload: readonly TooltipPayloadEntry[]): ChartTooltipRow[] {
-  return payload
-    .filter((item) => item.dataKey === 'yield' && isFiniteNumber(item.value))
-    .map((item) => ({ label: String(item.name), value: formatYield(item.value) }))
+  return payload.flatMap((item) => (
+    item.dataKey === 'yield' && isFiniteNumber(item.value)
+      ? [{ label: String(item.name), value: formatYield(item.value) }]
+      : []
+  ))
 }

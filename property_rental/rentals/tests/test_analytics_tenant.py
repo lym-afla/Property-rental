@@ -133,6 +133,14 @@ def test_rent_performance_converts_gbp_to_rub_without_inverse_rate(
         rent=Decimal("1000.00"),
         currency="GBP",
     )
+    TransactionFactory(
+        property=property_,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("400.00"),
+        currency="GBP",
+        date=date(2026, 1, 10),
+    )
     FXFactory(date=date(2026, 1, 5), from_currency="GBP", to_currency="USD", rate=Decimal("1.25"))
     FXFactory(date=date(2026, 1, 5), from_currency="USD", to_currency="RUB", rate=Decimal("90.00"))
 
@@ -144,6 +152,8 @@ def test_rent_performance_converts_gbp_to_rub_without_inverse_rate(
 
     assert result.currency == "RUB"
     assert result.points[0]["expected"] == pytest.approx(112500)
+    assert result.points[0]["received"] == pytest.approx(45000)
+    assert result.points[0]["variance"] == pytest.approx(-67500)
 
 
 @pytest.mark.django_db
@@ -160,6 +170,14 @@ def test_rent_performance_converts_rub_to_gbp_without_inverse_rate(
         rent=Decimal("112500.00"),
         currency="RUB",
     )
+    TransactionFactory(
+        property=property_,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("56250.00"),
+        currency="RUB",
+        date=date(2026, 1, 10),
+    )
     FXFactory(date=date(2026, 1, 5), from_currency="GBP", to_currency="USD", rate=Decimal("1.25"))
     FXFactory(date=date(2026, 1, 5), from_currency="USD", to_currency="RUB", rate=Decimal("90.00"))
 
@@ -171,6 +189,8 @@ def test_rent_performance_converts_rub_to_gbp_without_inverse_rate(
 
     assert result.currency == "GBP"
     assert result.points[0]["expected"] == pytest.approx(1000)
+    assert result.points[0]["received"] == pytest.approx(500)
+    assert result.points[0]["variance"] == pytest.approx(-500)
 
 
 @pytest.mark.django_db
