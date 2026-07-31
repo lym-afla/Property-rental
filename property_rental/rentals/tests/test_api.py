@@ -39,6 +39,40 @@ from rentals.tests.factories import (
 )
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("category", "submitted", "stored", "stored_type"),
+    [
+        ("utilities", "75.00", Decimal("-75.00"), "expense"),
+        ("utilities", "-75.00", Decimal("-75.00"), "expense"),
+        ("cost_reimbursement", "75.00", Decimal("75.00"), "expense"),
+        ("cost_reimbursement", "-75.00", Decimal("75.00"), "expense"),
+    ],
+)
+def test_transaction_api_normalizes_cost_signs(
+    auth_client, sample_property, category, submitted, stored, stored_type
+):
+    response = auth_client.post(
+        "/api/v1/transactions/",
+        {
+            "date": "2026-07-15",
+            "property": sample_property.id,
+            "tenant": None,
+            "category": category,
+            "period": "2026-07",
+            "currency": "USD",
+            "amount": submitted,
+            "comment": "",
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert Decimal(body["amount"]) == stored
+    assert body["type"] == stored_type
+
+
 # ---------------------------------------------------------------------------
 # Serializer validation smoke tests
 # ---------------------------------------------------------------------------
