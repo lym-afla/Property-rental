@@ -83,7 +83,6 @@ def source_value(field, value):
 def destination_exactly_matches(rows_by_model):
     for model, source_rows in rows_by_model.items():
         fields = list(model._meta.concrete_fields)
-        columns = [field.column for field in fields]
         destination = list(model.objects.order_by(model._meta.pk.name).values_list(
             *(field.attname for field in fields)
         ))
@@ -117,6 +116,24 @@ def build_report(rows_by_model, status, sequence_status, errors=None):
     }
 
 
+def reset_sequences():
+    sql = connection.ops.sequence_reset_sql(no_style(), MODELS)
+    with connection.cursor() as cursor:
+        for statement in sql:
+            cursor.execute(statement)
+    return "reset" if sql else "not-required"
+
+
+def lock_business_tables():
+    if connection.vendor != "postgresql":
+        return
+    tables = ", ".join(
+        connection.ops.quote_name(model._meta.db_table) for model in MODELS
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(f"LOCK TABLE {tables} IN EXCLUSIVE MODE")
+
+
 class Command(BaseCommand):
     help = "Import legacy application rows from a read-only SQLite database."
 
@@ -132,20 +149,11 @@ class Command(BaseCommand):
         rows = read_source(source)
         errors = relationship_errors(rows)
         if any(errors.values()):
+            report = build_report(rows, "failed", "not-run", errors)
+            self._write_report(report, options["report"], stdout=False)
             raise CommandError("Source relationship validation failed: " + json.dumps(
                 {model.__name__: value for model, value in errors.items() if value}, sort_keys=True
             ))
-
-        counts = {model: model.objects.count() for model in MODELS}
-        if any(counts.values()):
-            if destination_exactly_matches(rows):
-                report = build_report(rows, "reconciled", "reset", errors)
-                self._write_report(report, options["report"])
-                return
-            occupied = ", ".join(
-                f"{model.__name__}={count}" for model, count in counts.items() if count
-            )
-            raise CommandError(f"Destination business tables must be empty ({occupied})")
 
         if options["dry_run"]:
             report = build_report(rows, "dry-run", "not-run", errors)
@@ -153,31 +161,45 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
-            for model in MODELS:
-                objects = []
-                for row in rows[model]:
-                    values = {
-                        field.attname: source_value(field, row[field.column])
-                        for field in model._meta.concrete_fields
-                    }
-                    obj = model(**values)
-                    if model is User:
-                        obj.set_unusable_password()
-                    objects.append(obj)
-                model.objects.bulk_create(objects, batch_size=500)
+            lock_business_tables()
+            counts = {model: model.objects.count() for model in MODELS}
+            if any(counts.values()):
+                if destination_exactly_matches(rows):
+                    sequence_status = reset_sequences()
+                    status = "reconciled"
+                else:
+                    occupied = ", ".join(
+                        f"{model.__name__}={count}"
+                        for model, count in counts.items() if count
+                    )
+                    raise CommandError(
+                        f"Destination business tables must be empty ({occupied})"
+                    )
+            else:
+                status = "imported"
+                for model in MODELS:
+                    objects = []
+                    for row in rows[model]:
+                        values = {
+                            field.attname: source_value(field, row[field.column])
+                            for field in model._meta.concrete_fields
+                        }
+                        obj = model(**values)
+                        if model is User:
+                            obj.set_unusable_password()
+                        objects.append(obj)
+                    model.objects.bulk_create(objects, batch_size=500)
 
-            if not destination_exactly_matches(rows):
-                raise CommandError("Imported rows failed count or value reconciliation")
-            sql = connection.ops.sequence_reset_sql(no_style(), MODELS)
-            with connection.cursor() as cursor:
-                for statement in sql:
-                    cursor.execute(statement)
+                if not destination_exactly_matches(rows):
+                    raise CommandError("Imported rows failed count or value reconciliation")
+                sequence_status = reset_sequences()
 
-        report = build_report(rows, "imported", "reset", errors)
+        report = build_report(rows, status, sequence_status, errors)
         self._write_report(report, options["report"])
 
-    def _write_report(self, report, path):
+    def _write_report(self, report, path, stdout=True):
         serialized = json.dumps(report, indent=2, sort_keys=True) + "\n"
         if path:
             Path(path).write_text(serialized, encoding="utf-8")
-        self.stdout.write(serialized.rstrip())
+        if stdout:
+            self.stdout.write(serialized.rstrip())
