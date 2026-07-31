@@ -15,19 +15,19 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $inspectPath = Join-Path $ArtifactDirectory "image-inspect.json"
 $historyPath = Join-Path $ArtifactDirectory "image-history.txt"
-$archivePath = Join-Path $ArtifactDirectory "image.tar"
+$ociArchivePath = Join-Path $ArtifactDirectory "image-oci.tar"
 
 docker image inspect $Image | Out-File -Encoding utf8 $inspectPath
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 docker image history --no-trunc $Image | Out-File -Encoding utf8 $historyPath
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-docker image save --output $archivePath $Image
+docker buildx build --output "type=oci,dest=$ociArchivePath" .
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $uncompressedBytes = [int64](docker image inspect --format '{{.Size}}' $Image)
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$compressedArchivePath = "$archivePath.gz"
-$inputStream = [System.IO.File]::OpenRead($archivePath)
+$compressedArchivePath = "$ociArchivePath.gz"
+$inputStream = [System.IO.File]::OpenRead($ociArchivePath)
 $outputStream = [System.IO.File]::Create($compressedArchivePath)
 try {
     $gzipStream = [System.IO.Compression.GZipStream]::new(
@@ -43,7 +43,7 @@ try {
     $inputStream.Dispose()
     $outputStream.Dispose()
 }
-Remove-Item -LiteralPath $archivePath
+Remove-Item -LiteralPath $ociArchivePath
 $compressedBytes = (Get-Item $compressedArchivePath).Length
 
 $sizes = [ordered]@{
