@@ -104,3 +104,51 @@ def test_session_authorization_changes_only_for_viewer_claims():
     mark_session_authorized(request, [VIEWER, "another"])
     assert request.session["oidc_authorized_groups"] == ["another", VIEWER]
     assert request.session["oidc_last_authorized_at"].endswith("+00:00")
+
+
+def test_successful_oidc_login_records_authorized_groups_and_timestamp(backend):
+    request = RequestFactory().get("/oidc/callback/")
+    request.session = {}
+    user = object()
+    claims = {"iss": ISSUER, "sub": "abc", "email": "a@example.com", "groups": [VIEWER]}
+
+    def protocol_authentication(request, **kwargs):
+        assert backend.verify_claims(claims)
+        return user
+
+    with patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.authenticate",
+        side_effect=protocol_authentication,
+    ), patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
+        return_value=True,
+    ):
+        assert backend.authenticate(request, code="validated-by-parent") is user
+
+    assert request.session["oidc_authorized_groups"] == [VIEWER]
+    assert request.session["oidc_last_authorized_at"].endswith("+00:00")
+
+
+def test_oidc_login_without_viewer_clears_stale_session_authorization(backend):
+    request = RequestFactory().get("/oidc/callback/")
+    request.session = {
+        "oidc_authorized_groups": [VIEWER],
+        "oidc_last_authorized_at": "2026-01-01T00:00:00+00:00",
+    }
+    claims = {"iss": ISSUER, "sub": "abc", "email": "a@example.com", "groups": []}
+
+    def protocol_authentication(request, **kwargs):
+        assert not backend.verify_claims(claims)
+        return None
+
+    with patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.authenticate",
+        side_effect=protocol_authentication,
+    ), patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
+        return_value=True,
+    ):
+        assert backend.authenticate(request, code="validated-by-parent") is None
+
+    assert "oidc_authorized_groups" not in request.session
+    assert "oidc_last_authorized_at" not in request.session
