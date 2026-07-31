@@ -15,9 +15,9 @@ if not _callback_path.endswith("callback/"):
 _oidc_prefix = _callback_path[: -len("callback/")]
 
 urlpatterns = [
+    path(_oidc_prefix, include("mozilla_django_oidc.urls")),
     *[
         pattern for pattern in base_urlpatterns
         if getattr(pattern.pattern, "_route", "") != "oidc/"
     ],
-    path(_oidc_prefix, include("mozilla_django_oidc.urls")),
 ]
