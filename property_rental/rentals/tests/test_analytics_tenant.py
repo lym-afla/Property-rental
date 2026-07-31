@@ -83,6 +83,97 @@ def test_rent_performance_uses_property_native_currency_and_canonical_balances(
 
 
 @pytest.mark.django_db
+def test_rent_performance_rub_native_rows_do_not_use_fx(landlord_user):
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    property_ = PropertyFactory(owned_by=landlord_user.landlord, currency="RUB")
+    tenant = TenantFactory(
+        property=property_,
+        lease_start=date(2026, 1, 1),
+        payday=5,
+    )
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("100000.00"),
+        currency="RUB",
+    )
+    TransactionFactory(
+        property=property_,
+        tenant=tenant,
+        category="rent",
+        amount=Decimal("50000.00"),
+        currency="RUB",
+        date=date(2026, 1, 10),
+    )
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31", currency="GBP"),
+    )
+
+    assert result.currency == "RUB"
+    assert result.points[0]["expected"] == 100000.0
+    assert result.points[0]["received"] == 50000.0
+    assert result.points[0]["variance"] == -50000.0
+
+
+@pytest.mark.django_db
+def test_rent_performance_converts_gbp_to_rub_without_inverse_rate(
+    landlord_user,
+):
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    property_ = PropertyFactory(owned_by=landlord_user.landlord, currency="RUB")
+    tenant = TenantFactory(property=property_, lease_start=date(2026, 1, 1), payday=5)
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("1000.00"),
+        currency="GBP",
+    )
+    FXFactory(date=date(2026, 1, 5), from_currency="GBP", to_currency="USD", rate=Decimal("1.25"))
+    FXFactory(date=date(2026, 1, 5), from_currency="USD", to_currency="RUB", rate=Decimal("90.00"))
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.currency == "RUB"
+    assert result.points[0]["expected"] == pytest.approx(112500)
+
+
+@pytest.mark.django_db
+def test_rent_performance_converts_rub_to_gbp_without_inverse_rate(
+    landlord_user,
+):
+    from rentals.analytics.tenant import tenant_rent_performance
+
+    property_ = PropertyFactory(owned_by=landlord_user.landlord, currency="GBP")
+    tenant = TenantFactory(property=property_, lease_start=date(2026, 1, 1), payday=5)
+    LeaseRentFactory(
+        tenant=tenant,
+        date_rent_set=date(2026, 1, 1),
+        rent=Decimal("112500.00"),
+        currency="RUB",
+    )
+    FXFactory(date=date(2026, 1, 5), from_currency="GBP", to_currency="USD", rate=Decimal("1.25"))
+    FXFactory(date=date(2026, 1, 5), from_currency="USD", to_currency="RUB", rate=Decimal("90.00"))
+
+    result = tenant_rent_performance(
+        landlord_user,
+        tenant.id,
+        filters_for("2026-01-01", "2026-01-31", currency="RUB"),
+    )
+
+    assert result.currency == "GBP"
+    assert result.points[0]["expected"] == pytest.approx(1000)
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("lease_start", "payday", "expected"),
     [
