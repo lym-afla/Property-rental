@@ -140,6 +140,33 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
     }
 
 
+def test_oidc_provider_endpoints_can_be_configured_independently_from_issuer():
+    """Some providers expose a provider-specific issuer but shared OAuth endpoints."""
+    result = import_settings(
+        production_environment(
+            OIDC_ISSUER="https://auth.linik.ru/application/o/lifeos-rent/",
+            OIDC_AUTHORIZATION_ENDPOINT="https://auth.linik.ru/application/o/authorize/",
+            OIDC_TOKEN_ENDPOINT="https://auth.linik.ru/application/o/token/",
+            OIDC_USERINFO_ENDPOINT="https://auth.linik.ru/application/o/userinfo/",
+            OIDC_JWKS_ENDPOINT="https://auth.linik.ru/application/o/lifeos-rent/jwks/",
+        ),
+        "{'issuer': settings.OIDC_ISSUER, "
+        "'authorize': settings.OIDC_OP_AUTHORIZATION_ENDPOINT, "
+        "'token': settings.OIDC_OP_TOKEN_ENDPOINT, "
+        "'userinfo': settings.OIDC_OP_USER_ENDPOINT, "
+        "'jwks': settings.OIDC_OP_JWKS_ENDPOINT}",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "issuer": "https://auth.linik.ru/application/o/lifeos-rent/",
+        "authorize": "https://auth.linik.ru/application/o/authorize/",
+        "token": "https://auth.linik.ru/application/o/token/",
+        "userinfo": "https://auth.linik.ru/application/o/userinfo/",
+        "jwks": "https://auth.linik.ru/application/o/lifeos-rent/jwks/",
+    }
+
+
 def test_production_urlconf_preserves_custom_not_found_handler():
     """Production must retain the project's plain API 404 response handler."""
     result = import_settings(
