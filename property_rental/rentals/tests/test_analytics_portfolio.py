@@ -147,11 +147,48 @@ def test_yields_use_raw_latest_valuation_and_annualized_selected_period(
     assert row.valuation_date == date(2025, 12, 30)
     assert row.annualized_revenue == pytest.approx(36500.0)
     assert row.annualized_costs == pytest.approx(7300.0)
-    assert row.gross_yield == pytest.approx(36.5)
+    assert row.gross_yield == pytest.approx(29_200 / 100_000 * 100)
     assert row.debt == pytest.approx(40000.0)
     assert row.equity == pytest.approx(60000.0)
     assert row.equity_yield == pytest.approx(29_200 / 60_000 * 100)
     assert row.status == "stale_valuation"
+
+
+@pytest.mark.django_db
+def test_yields_use_net_income_numerator_for_value_and_equity(
+    landlord_user, sample_property
+):
+    from rentals.analytics.portfolio import property_yields
+
+    PropertyCapitalStructureFactory(
+        property=sample_property,
+        capital_structure_date=date(2026, 1, 1),
+        capital_structure_value=Decimal("100000.00"),
+        capital_structure_debt=Decimal("40000.00"),
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("12000.00"),
+        date=date(2026, 1, 15),
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="utilities",
+        amount=Decimal("-2000.00"),
+        date=date(2026, 1, 20),
+    )
+
+    result = property_yields(
+        landlord_user,
+        filters_for("2026-01-01", "2026-12-31"),
+    )
+    row = next(row for row in result.rows if row.property_id == sample_property.id)
+
+    assert row.annualized_revenue == pytest.approx(12000)
+    assert row.annualized_costs == pytest.approx(2000)
+    assert row.gross_yield == pytest.approx(10.0)
+    assert row.equity_yield == pytest.approx(16.666666)
 
 
 @pytest.mark.django_db
@@ -177,6 +214,41 @@ def test_yields_exclude_properties_sold_on_or_before_report_end(
     )
 
     assert [row.property_id for row in result.rows] == [active_property.id]
+
+
+@pytest.mark.django_db
+def test_portfolio_totals_treat_cost_reimbursement_as_contra_expense(
+    landlord_user, sample_property
+):
+    from rentals.analytics.portfolio import portfolio_summary
+
+    TransactionFactory(
+        property=sample_property,
+        category="rent",
+        amount=Decimal("1000.00"),
+        date=date(2026, 1, 1),
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="tax",
+        amount=Decimal("-300.00"),
+        date=date(2026, 1, 2),
+    )
+    TransactionFactory(
+        property=sample_property,
+        category="cost_reimbursement",
+        amount=Decimal("-125.00"),
+        date=date(2026, 1, 3),
+    )
+
+    result = portfolio_summary(
+        landlord_user,
+        filters_for("2026-01-01", "2026-01-31"),
+    )
+
+    assert result.revenue == pytest.approx(1000)
+    assert result.costs == pytest.approx(175)
+    assert result.net_income == pytest.approx(825)
 
 
 @pytest.mark.django_db

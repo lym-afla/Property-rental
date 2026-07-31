@@ -11,11 +11,12 @@ describe('FinancialDefinitions', () => {
     const trigger = screen.getByRole('button', { name: 'Yield definitions' })
 
     expect(trigger).toHaveClass('min-h-11', 'min-w-11')
+    expect(trigger.querySelector('[aria-hidden="true"]')).toHaveTextContent('i')
     trigger.focus()
     await user.keyboard('{Enter}')
 
     expect(screen.getByRole('dialog', { name: 'Yield definitions' })).toBeVisible()
-    expect(screen.getByText('Gross yield — annualized gross rental income divided by the latest property value.')).toBeVisible()
+    expect(screen.getByText('Gross yield — annualized rental income net of costs divided by the latest property value.')).toBeVisible()
     expect(screen.getByText('Equity yield — annualized rental income net of costs divided by equity.')).toBeVisible()
     expect(screen.getByText('Equity — latest property value less latest debt, using records available as of the selected date.')).toBeVisible()
 
