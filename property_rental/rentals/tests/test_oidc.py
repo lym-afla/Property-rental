@@ -70,11 +70,10 @@ def test_claims_without_viewer_group_are_denied(backend):
         assert not backend.verify_claims({"iss": ISSUER, "sub": "abc", "groups": []})
 
 
-def test_claims_require_exact_configured_issuer_and_subject(backend):
+def test_claims_use_configured_issuer_and_require_userinfo_subject(backend):
     with patch("mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims", return_value=True):
-        assert not backend.verify_claims({"iss": ISSUER.rstrip("/"), "sub": "abc", "groups": [VIEWER]})
         assert not backend.verify_claims({"iss": ISSUER, "groups": [VIEWER]})
-        assert backend.verify_claims({"iss": ISSUER, "sub": "abc", "groups": [VIEWER]})
+        assert backend.verify_claims({"sub": "abc", "groups": [VIEWER]})
 
 
 @pytest.mark.django_db

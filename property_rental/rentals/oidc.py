@@ -14,7 +14,7 @@ ADMIN_GROUP = "lifeos:app:rent:admin"
 
 
 def _identity_claims(claims):
-    return claims.get("iss"), claims.get("sub")
+    return settings.OIDC_ISSUER, claims.get("sub")
 
 
 class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
