@@ -43,6 +43,7 @@ class SpaView(TemplateView):
         context["spa_config"] = {
             "localPasswordAuthEnabled": settings.LOCAL_PASSWORD_AUTH_ENABLED,
             "oidcLoginUrl": callback_path[: -len("callback/")] + "authenticate/",
+            "lifeOsProfileUrl": settings.LIFE_OS_PROFILE_URL,
         }
         return context
 

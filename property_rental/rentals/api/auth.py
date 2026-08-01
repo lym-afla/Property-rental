@@ -34,6 +34,12 @@ from rentals.models import User
 from .serializers import UserSerializer
 
 
+LIFE_OS_MANAGED_USER_FIELDS = frozenset(
+    {"username", "email", "first_name", "last_name"}
+)
+LIFE_OS_MANAGED_FIELD_ERROR = "This field is managed by Life OS."
+
+
 class LocalPasswordAuthView:
     """Fail closed if a password endpoint is invoked outside development."""
 
@@ -101,6 +107,15 @@ class MeView(APIView):
         Returns the updated serialized user under the ``user`` key, the
         same shape as ``GET /me/``.
         """
+        blocked_fields = sorted(LIFE_OS_MANAGED_USER_FIELDS.intersection(request.data))
+        if blocked_fields:
+            return Response(
+                {
+                    field: [LIFE_OS_MANAGED_FIELD_ERROR]
+                    for field in blocked_fields
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()

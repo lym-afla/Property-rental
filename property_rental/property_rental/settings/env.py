@@ -17,6 +17,22 @@ def csv_env(name: str) -> list[str]:
     return [value.strip() for value in required_env(name).split(",") if value.strip()]
 
 
+def optional_https_url_env(name: str, *, allowed_origins: set[str]) -> str | None:
+    """Return an optional HTTPS URL whose origin is explicitly approved."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+
+    parsed = urlparse(value)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if parsed.scheme != "https" or origin not in allowed_origins:
+        allowed = ", ".join(sorted(allowed_origins))
+        raise RuntimeError(f"{name} must use one of these HTTPS origins: {allowed}")
+    if parsed.username or parsed.password:
+        raise RuntimeError(f"{name} must not include URL credentials")
+    return value
+
+
 def postgres_database(url: str) -> dict[str, object]:
     """Translate a PostgreSQL URL into Django's database connection settings."""
     parsed = urlparse(url)

@@ -13,6 +13,7 @@ type MeResponse = { user: User }
 export type RuntimeConfig = {
   localPasswordAuthEnabled: boolean
   oidcLoginUrl: string
+  lifeOsProfileUrl?: string | null
 }
 
 declare global {
@@ -25,6 +26,7 @@ export function getRuntimeConfig(): RuntimeConfig {
   return window.__PROPERTY_RENTAL_CONFIG__ ?? {
     localPasswordAuthEnabled: true,
     oidcLoginUrl: '/oidc/authenticate/',
+    lifeOsProfileUrl: null,
   }
 }
 

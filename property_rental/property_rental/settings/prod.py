@@ -1,7 +1,7 @@
 """Strict production settings, with all runtime configuration from the environment."""
 
 from .base import *  # noqa
-from .env import csv_env, postgres_database, required_env
+from .env import csv_env, optional_https_url_env, postgres_database, required_env
 
 
 DEBUG = False
@@ -43,6 +43,10 @@ OIDC_STORE_ID_TOKEN = False
 OIDC_CREATE_USER = False
 OIDC_EXEMPT_URLS = ("/health/live", "/health/ready")
 OIDC_AUTHORIZATION_MAX_AGE = int(os.environ.get("OIDC_AUTHORIZATION_MAX_AGE", "300"))
+LIFE_OS_PROFILE_URL = optional_https_url_env(
+    "LIFE_OS_PROFILE_URL",
+    allowed_origins={"https://linik.ru"},
+)
 LOCAL_PASSWORD_AUTH_ENABLED = os.environ.get(
     "LOCAL_PASSWORD_AUTH_ENABLED", "false"
 ).lower() in {"1", "true", "yes", "on"}

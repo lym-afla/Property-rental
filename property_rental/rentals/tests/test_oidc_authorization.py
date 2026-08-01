@@ -192,6 +192,35 @@ def test_admin_denies_local_staff_without_admin_authorization():
     assert admin.site.has_permission(request) is False
 
 
+@pytest.mark.django_db
+@override_settings(LOCAL_PASSWORD_AUTH_ENABLED=False)
+def test_production_user_admin_locks_life_os_identity_and_password_fields(rf):
+    managed = User.objects.create_user(
+        "managed",
+        email="managed@example.com",
+        first_name="Managed",
+        last_name="Identity",
+    )
+    operator = User.objects.create_user(
+        "operator", is_staff=True, is_superuser=True
+    )
+    request = rf.get(f"/admin/rentals/user/{managed.pk}/change/")
+    request.user = operator
+    request.session = {
+        "oidc_authorized_groups": [VIEWER_GROUP, ADMIN_GROUP],
+    }
+
+    user_admin = admin.site._registry[User]
+
+    assert {
+        "username",
+        "first_name",
+        "last_name",
+        "email",
+        "password",
+    }.issubset(set(user_admin.get_readonly_fields(request, managed)))
+
+
 def test_development_keeps_local_password_auth_enabled():
     settings.LOCAL_PASSWORD_AUTH_ENABLED = True
     assert settings.LOCAL_PASSWORD_AUTH_ENABLED is True

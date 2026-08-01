@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 from django.db import IntegrityError, transaction
-from django.core.exceptions import ValidationError
+from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.test import RequestFactory, override_settings
 from django.contrib.sessions.middleware import SessionMiddleware
 
@@ -86,12 +86,153 @@ def test_created_oidc_user_has_unusable_password_and_durable_identity(backend):
 
 
 @pytest.mark.django_db
+def test_linked_user_profile_syncs_from_life_os_claims_without_changing_identity(backend):
+    user = User.objects.create_user(
+        "legacy-yaroslav",
+        email="old@example.com",
+        password="legacy-secret",
+        first_name="Old",
+        last_name="Name",
+    )
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="abc")
+
+    with override_settings(LOCAL_PASSWORD_AUTH_ENABLED=False):
+        updated = backend.update_user(
+            user,
+            {
+                "sub": "abc",
+                "groups": [VIEWER],
+                "preferred_username": "Yaroslav",
+                "given_name": "Yaroslav",
+                "family_name": "Linik",
+                "email": "yaroslav@linik.ru",
+            },
+        )
+
+    updated.refresh_from_db()
+    assert updated.pk == user.pk
+    assert updated.username == "Yaroslav"
+    assert updated.first_name == "Yaroslav"
+    assert updated.last_name == "Linik"
+    assert updated.email == "yaroslav@linik.ru"
+    assert not updated.has_usable_password()
+    assert updated.oidc_identity.subject == "abc"
+
+
+@pytest.mark.django_db
+def test_profile_sync_preserves_existing_values_for_missing_blank_or_malformed_claims(backend):
+    user = User.objects.create_user(
+        "existing",
+        email="existing@example.com",
+        first_name="Existing",
+        last_name="Person",
+    )
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="abc")
+
+    updated = backend.update_user(
+        user,
+        {
+            "sub": "abc",
+            "groups": [VIEWER],
+            "preferred_username": "",
+            "given_name": None,
+            "family_name": 123,
+            "email": "not an email address",
+        },
+    )
+
+    updated.refresh_from_db()
+    assert updated.username == "existing"
+    assert updated.email == "existing@example.com"
+    assert updated.first_name == "Existing"
+    assert updated.last_name == "Person"
+
+
+@pytest.mark.django_db
+def test_get_or_create_user_syncs_changed_claims_for_linked_subject(backend):
+    user = User.objects.create_user(
+        "old-name",
+        email="old@example.com",
+        first_name="Old",
+        last_name="Profile",
+    )
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="abc")
+
+    claims = {
+        "sub": "abc",
+        "groups": [VIEWER],
+        "preferred_username": "new-name",
+        "given_name": "New",
+        "family_name": "Profile",
+        "email": "new@example.com",
+    }
+
+    with override_settings(OIDC_CREATE_USER=False), patch.object(
+        backend, "get_userinfo", return_value=claims
+    ), patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
+        return_value=True,
+    ):
+        assert backend.get_or_create_user("access", "id", {}) == user
+
+    user.refresh_from_db()
+    assert user.username == "new-name"
+    assert user.email == "new@example.com"
+    assert user.first_name == "New"
+
+
+@pytest.mark.django_db
+def test_userinfo_without_viewer_group_does_not_sync_profile(backend):
+    user = User.objects.create_user("old-name", email="old@example.com")
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="abc")
+    claims = {
+        "sub": "abc",
+        "groups": [],
+        "preferred_username": "new-name",
+        "email": "new@example.com",
+    }
+
+    with patch.object(backend, "get_userinfo", return_value=claims), patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
+        return_value=True,
+    ), pytest.raises(SuspiciousOperation, match="Claims verification failed"):
+        backend.get_or_create_user("access", "id", {})
+
+    user.refresh_from_db()
+    assert user.username == "old-name"
+    assert user.email == "old@example.com"
+
+
+@pytest.mark.django_db
 def test_matching_email_does_not_merge_a_local_account(backend):
     local = User.objects.create_user("local", email="person@example.com")
 
     assert not backend.filter_users_by_claims({"iss": ISSUER, "sub": "new", "email": local.email}).exists()
     oidc_user = backend.create_user({"iss": ISSUER, "sub": "new", "email": local.email})
     assert oidc_user != local
+
+
+@pytest.mark.django_db
+def test_absent_identity_link_does_not_create_or_merge_by_email_when_creation_disabled(backend):
+    local = User.objects.create_user("local", email="person@example.com")
+    claims = {
+        "sub": "unlinked",
+        "groups": [VIEWER],
+        "preferred_username": "claim-name",
+        "email": local.email,
+    }
+
+    with override_settings(OIDC_CREATE_USER=False), patch.object(
+        backend, "get_userinfo", return_value=claims
+    ), patch(
+        "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
+        return_value=True,
+    ):
+        assert backend.get_or_create_user("access", "id", {}) is None
+
+    local.refresh_from_db()
+    assert local.username == "local"
+    assert User.objects.count() == 1
 
 
 def test_session_authorization_changes_only_for_viewer_claims():

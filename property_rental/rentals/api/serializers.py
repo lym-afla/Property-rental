@@ -211,4 +211,12 @@ class UserSerializer(serializers.ModelSerializer):
             "chart_timeline",
             "digits",
         ]
-        read_only_fields = ["id", "username", "is_landlord", "is_tenant"]
+        read_only_fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_landlord",
+            "is_tenant",
+        ]

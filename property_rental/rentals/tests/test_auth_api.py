@@ -169,6 +169,43 @@ def test_patch_me_updates_settings(db):
 
 
 @pytest.mark.django_db
+def test_patch_me_rejects_life_os_identity_field_updates(db):
+    user = UserFactory(
+        username="central-user",
+        email="central@example.com",
+        first_name="Central",
+        last_name="Owner",
+        is_landlord=True,
+    )
+    c = Client()
+    c.force_login(user)
+
+    resp = c.patch(
+        "/api/v1/auth/me/",
+        {
+            "username": "local-takeover",
+            "email": "changed@example.com",
+            "first_name": "Changed",
+            "last_name": "Locally",
+        },
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert resp.json() == {
+        "username": ["This field is managed by Life OS."],
+        "email": ["This field is managed by Life OS."],
+        "first_name": ["This field is managed by Life OS."],
+        "last_name": ["This field is managed by Life OS."],
+    }
+    user.refresh_from_db()
+    assert user.username == "central-user"
+    assert user.email == "central@example.com"
+    assert user.first_name == "Central"
+    assert user.last_name == "Owner"
+
+
+@pytest.mark.django_db
 def test_patch_me_cannot_change_role(db):
     """``PATCH /auth/me/`` must NOT let a client flip role flags.
 

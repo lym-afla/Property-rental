@@ -51,6 +51,7 @@ OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False
 OIDC_AUTHORIZATION_MAX_AGE = 300
 LOCAL_PASSWORD_AUTH_ENABLED = True
+LIFE_OS_PROFILE_URL = None
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

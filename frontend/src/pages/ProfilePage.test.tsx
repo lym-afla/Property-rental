@@ -8,7 +8,7 @@
 // We also assert that each of the three tabs becomes visible on click so
 // the radix Tabs wiring (controlled via `defaultValue`, not via state) is
 // exercised end-to-end.
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -30,6 +30,10 @@ function renderPage() {
   )
 }
 
+afterEach(() => {
+  delete window.__PROPERTY_RENTAL_CONFIG__
+})
+
 describe('ProfilePage', () => {
   it('renders the page title and the default "User details" tab', async () => {
     renderPage()
@@ -43,11 +47,28 @@ describe('ProfilePage', () => {
     expect(await screen.findByText(fixtureUser.username)).toBeInTheDocument()
   })
 
-  it('renders the "Edit profile" button on the User details tab', async () => {
+  it('renders Life OS identity as read-only without local edit controls', async () => {
     renderPage()
     expect(
-      await screen.findByRole('button', { name: /edit profile/i }),
+      await screen.findByRole('heading', { name: /life os identity/i }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/managed centrally by life os/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /edit profile/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /manage life os profile/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the Life OS profile management link only when configured', async () => {
+    window.__PROPERTY_RENTAL_CONFIG__ = {
+      localPasswordAuthEnabled: false,
+      oidcLoginUrl: '/oidc/authenticate/',
+      lifeOsProfileUrl: 'https://linik.ru/profile',
+    }
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('link', { name: /manage life os profile/i }),
+    ).toHaveAttribute('href', 'https://linik.ru/profile')
   })
 
   it('switches to the Settings tab on click', async () => {
@@ -89,6 +110,6 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('tab', { name: /change password/i })).not.toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: /settings/i }))
     expect(screen.queryByLabelText(/as-of date/i)).not.toBeInTheDocument()
-    delete window.__PROPERTY_RENTAL_CONFIG__
+    expect(screen.queryByRole('link', { name: /manage life os profile/i })).not.toBeInTheDocument()
   })
 })

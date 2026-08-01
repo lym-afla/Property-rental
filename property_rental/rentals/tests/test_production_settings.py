@@ -181,6 +181,37 @@ def test_production_requests_and_reads_the_life_os_role_claim():
     }
 
 
+def test_life_os_profile_url_is_optional_and_accepts_only_linik_profile_origin():
+    """The central profile link is optional until Life OS ships linik.ru/profile."""
+    unset_environment = production_environment()
+    unset_environment.pop("LIFE_OS_PROFILE_URL", None)
+
+    unset = import_settings(unset_environment, "settings.LIFE_OS_PROFILE_URL")
+    valid = import_settings(
+        production_environment(LIFE_OS_PROFILE_URL="https://linik.ru/profile"),
+        "settings.LIFE_OS_PROFILE_URL",
+    )
+
+    assert unset.returncode == 0, unset.stderr
+    assert json.loads(unset.stdout) is None
+    assert valid.returncode == 0, valid.stderr
+    assert json.loads(valid.stdout) == "https://linik.ru/profile"
+
+
+def test_life_os_profile_url_rejects_insecure_authentik_and_unapproved_origins():
+    """Rent must not invent Authentik dashboard/security-flow links."""
+    for url in (
+        "http://linik.ru/profile",
+        "https://auth.linik.ru/if/user/",
+        "https://profile.linik.ru/",
+        "https://evil.example/profile",
+    ):
+        result = import_settings(production_environment(LIFE_OS_PROFILE_URL=url))
+
+        assert result.returncode != 0
+        assert "LIFE_OS_PROFILE_URL" in result.stderr
+
+
 def test_production_urlconf_preserves_custom_not_found_handler():
     """Production must retain the project's plain API 404 response handler."""
     result = import_settings(

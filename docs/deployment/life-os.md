@@ -82,6 +82,7 @@ Optional:
 | `PORT` | `8000` | Internal listen port. The Docker health check expands this through shell form. |
 | `GUNICORN_WORKERS` | `2` | Gunicorn worker count. |
 | `OIDC_AUTHORIZATION_MAX_AGE` | `300` | Maximum age, in seconds, of locally authorized OIDC group claims. Production default is five minutes. |
+| `LIFE_OS_PROFILE_URL` | unset | Optional central Life OS profile-management URL. When set, production accepts only HTTPS URLs on the exact origin `https://linik.ru`, for example `https://linik.ru/profile`. Do not set this until that central page exists. |
 
 Production must leave `LOCAL_PASSWORD_AUTH_ENABLED` unset or false. If it is set
 true under production settings, Django refuses startup.
@@ -137,6 +138,32 @@ database-level unique constraint. Each local user can have one OIDC identity.
 Email and username are mutable profile attributes and are never durable identity
 keys.
 
+Authentik/Life OS is the source of truth for username, first name, last name,
+email, passwords, passkeys, MFA, and application roles. After the base OIDC
+backend validates the callback/userinfo flow and the required viewer group is
+present, Rent syncs those mutable profile claims onto the already-linked local
+`User` row. Missing, blank, or malformed optional profile claims do not erase
+existing local values. Unknown users are not created or linked from matching
+email or username.
+
+The local `User` row remains a Rent ownership/preferences projection for
+foreign keys such as landlords, properties, tenants, transactions, and report
+preferences. Ordinary production API requests cannot edit `username`,
+`first_name`, `last_name`, or `email`; those fields are shown read-only in the
+SPA's Life OS identity section.
+
+The SPA can optionally show a "Manage Life OS profile" link. The current
+production deployment leaves `LIFE_OS_PROFILE_URL` unset, so no link is shown.
+When Life OS later deploys the central page, set:
+
+```text
+LIFE_OS_PROFILE_URL=https://linik.ru/profile
+```
+
+Do not point Rent at Authentik's generic user dashboard or invent an internal
+Authentik flow URL. Future direct Authentik security-flow links must be
+separately configured and validated for that specific purpose.
+
 Group claims are authorization, not identity. The app initially requires:
 
 - `lifeos:app:rent:viewer` for application access.
@@ -159,6 +186,11 @@ reauthentication.
 
 Do not trust identity, role, or group headers from the public internet. This
 application consumes OIDC claims from Authentik, not forwarded identity headers.
+
+In production, Django admin also treats Life OS identity fields and Django
+password hashes as read-only. Local `is_staff` and `is_superuser` remain
+operational flags, but they do not grant admin access without the OIDC
+`lifeos:app:rent:admin` group.
 
 ## HTTPS/proxy/security expectations
 

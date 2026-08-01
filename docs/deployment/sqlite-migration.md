@@ -105,3 +105,9 @@ If an imported user cannot be unambiguously associated with the intended Life OS
 identity, fail closed and leave that account unlinked until a verified mapping is
 available.
 
+After a linked user signs in through OIDC, Rent may update that local row's
+mutable profile projection (`username`, `first_name`, `last_name`, `email`) from
+verified Life OS claims. This does not change the imported primary key or any
+landlord, property, tenant, transaction, rent, or valuation ownership
+relationships.
+
