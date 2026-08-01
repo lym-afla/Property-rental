@@ -44,8 +44,8 @@ INSTALLED_APPS = [
 
 AUTHENTICATION_BACKENDS = ["rentals.oidc.RentalOIDCAuthenticationBackend"]
 
-OIDC_GROUPS_CLAIM = "groups"
-OIDC_RP_SCOPES = "openid email profile groups"
+OIDC_GROUPS_CLAIM = "https://linik.ru/claims/roles"
+OIDC_RP_SCOPES = "openid email profile lifeos_roles"
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_STORE_ACCESS_TOKEN = False
 OIDC_STORE_ID_TOKEN = False

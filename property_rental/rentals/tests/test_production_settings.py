@@ -167,6 +167,20 @@ def test_oidc_provider_endpoints_can_be_configured_independently_from_issuer():
     }
 
 
+def test_production_requests_and_reads_the_life_os_role_claim():
+    """Rent authorization must consume the scoped role contract issued by Life OS."""
+    result = import_settings(
+        production_environment(),
+        "{'scopes': settings.OIDC_RP_SCOPES, 'claim': settings.OIDC_GROUPS_CLAIM}",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "scopes": "openid email profile lifeos_roles",
+        "claim": "https://linik.ru/claims/roles",
+    }
+
+
 def test_production_urlconf_preserves_custom_not_found_handler():
     """Production must retain the project's plain API 404 response handler."""
     result = import_settings(
