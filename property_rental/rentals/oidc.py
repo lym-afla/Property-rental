@@ -89,7 +89,8 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
         if update_fields:
             try:
-                user.save(update_fields=sorted(set(update_fields)))
+                with transaction.atomic():
+                    user.save(update_fields=sorted(set(update_fields)))
             except IntegrityError as exc:
                 raise SuspiciousOperation("OIDC profile synchronization failed") from exc
         return user

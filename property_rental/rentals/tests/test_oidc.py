@@ -6,8 +6,9 @@ from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.test import RequestFactory, override_settings
 from django.contrib.sessions.middleware import SessionMiddleware
 
-from rentals.models import OIDCIdentity, User
+from rentals.models import OIDCIdentity, Property, Tenant, Transaction, User
 from rentals.oidc import RentalOIDCAuthenticationBackend, mark_session_authorized
+from rentals.tests.factories import PropertyFactory, TenantFactory, TransactionFactory, UserFactory
 
 
 ISSUER = "https://auth.example/application/o/rent/"
@@ -117,6 +118,91 @@ def test_linked_user_profile_syncs_from_life_os_claims_without_changing_identity
     assert updated.email == "yaroslav@linik.ru"
     assert not updated.has_usable_password()
     assert updated.oidc_identity.subject == "abc"
+
+
+@pytest.mark.django_db
+def test_profile_sync_collision_fails_closed_without_merging_identity(backend):
+    existing = UserFactory(username="YL", email="yl@example.com")
+    linked = UserFactory(
+        username="legacy-yaroslav",
+        email="old@example.com",
+        first_name="Old",
+        last_name="Name",
+    )
+    OIDCIdentity.objects.create(user=linked, issuer=ISSUER, subject="abc")
+
+    with pytest.raises(SuspiciousOperation, match="OIDC profile synchronization failed"):
+        backend.update_user(
+            linked,
+            {
+                "sub": "abc",
+                "groups": [VIEWER],
+                "preferred_username": existing.username,
+                "given_name": "Yaroslav",
+                "family_name": "Linik",
+                "email": "yaroslav@linik.ru",
+            },
+        )
+
+    existing.refresh_from_db()
+    linked.refresh_from_db()
+    assert existing.username == "YL"
+    assert linked.username == "legacy-yaroslav"
+    assert linked.email == "old@example.com"
+    assert linked.oidc_identity.subject == "abc"
+
+
+@pytest.mark.django_db
+def test_profile_sync_preserves_local_pk_and_owned_data_graph(backend):
+    user = UserFactory(
+        username="Yaroslav",
+        email="old@example.com",
+        first_name="Old",
+        last_name="Name",
+        is_landlord=True,
+    )
+    OIDCIdentity.objects.create(user=user, issuer=ISSUER, subject="abc")
+    property_ = PropertyFactory(owned_by=user.landlord)
+    tenant = TenantFactory(property=property_, user=None)
+    transaction = TransactionFactory(property=property_, tenant=tenant)
+    counts = {
+        Property: Property.objects.count(),
+        Tenant: Tenant.objects.count(),
+        Transaction: Transaction.objects.count(),
+        User: User.objects.count(),
+    }
+
+    backend.update_user(
+        user,
+        {
+            "sub": "abc",
+            "groups": [VIEWER],
+            "preferred_username": "YL",
+            "given_name": "Yaroslav",
+            "family_name": "Linik",
+            "email": "yaroslav@linik.ru",
+        },
+    )
+
+    user.refresh_from_db()
+    property_.refresh_from_db()
+    tenant.refresh_from_db()
+    transaction.refresh_from_db()
+    assert user.pk == property_.owned_by.user_id
+    assert user.username == "YL"
+    assert user.first_name == "Yaroslav"
+    assert user.last_name == "Linik"
+    assert user.email == "yaroslav@linik.ru"
+    assert property_.owned_by_id == user.landlord.pk
+    assert tenant.property_id == property_.pk
+    assert transaction.property_id == property_.pk
+    assert transaction.tenant_id == tenant.pk
+    assert {
+        Property: Property.objects.count(),
+        Tenant: Tenant.objects.count(),
+        Transaction: Transaction.objects.count(),
+        User: User.objects.count(),
+    } == counts
 
 
 @pytest.mark.django_db
