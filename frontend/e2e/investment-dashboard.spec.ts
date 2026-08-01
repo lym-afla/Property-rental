@@ -80,11 +80,10 @@ const transactions = [{
 const profitLossColumns = [
   ...Array.from({ length: 21 }, (_, index) => {
     const year = String(2004 + index)
-    return { key: year, label: year, start: `${year}-01-01`, end: year === '2024' ? range.end : `${year}-12-31` }
+    return { key: year, label: year === '2024' ? '2024YTD' : year, start: `${year}-01-01`, end: year === '2024' ? range.end : `${year}-12-31` }
   }),
-  { key: 'ytd', label: 'YTD', start: '2024-01-01', end: range.end },
 ]
-const profitLossValues = Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === 'ytd' ? 1650 : 1000 + index * 50]))
+const profitLossValues = Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === '2024' ? 1650 : 1000 + index * 50]))
 const profitLoss = {
   metric: 'profit_and_loss', currency: 'USD', scale: 1, end: range.end,
   columns: profitLossColumns,
@@ -93,7 +92,7 @@ const profitLoss = {
     { key: 'repairs', label: 'Repairs', kind: 'expense', values: Object.fromEntries(profitLossColumns.map(({ key }) => [key, -350])) },
     { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: profitLossValues },
     { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: Object.fromEntries(profitLossColumns.map(({ key }) => [key, -350])) },
-    { key: 'net_income', label: 'Net income', kind: 'net_income', values: Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === 'ytd' ? 1300 : 650 + index * 50])) },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: Object.fromEntries(profitLossColumns.map(({ key }, index) => [key, key === '2024' ? 1300 : 650 + index * 50])) },
   ],
 }
 const rentPerformance = {

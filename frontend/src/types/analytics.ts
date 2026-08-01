@@ -81,7 +81,7 @@ export const profitLossSchema = z
       label: z.string().trim().min(1),
       start: isoDateSchema,
       end: isoDateSchema,
-    }).strict()).min(2),
+    }).strict()).min(1),
     rows: z.array(profitLossRowSchema),
   })
   .strict()
@@ -90,12 +90,21 @@ export const profitLossSchema = z
     if (new Set(columnKeys).size !== columnKeys.length) {
       context.addIssue({ code: 'custom', path: ['columns'], message: 'column keys must be unique' })
     }
-    if (columnKeys.at(-1) !== 'ytd') {
-      context.addIssue({ code: 'custom', path: ['columns'], message: 'YTD must be the final column' })
+    if (columnKeys.some((key) => !/^\d{4}$/.test(key)) || columnKeys.some((key, index) => index > 0 && key <= columnKeys[index - 1])) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'columns must be chronological years' })
     }
-    const annualKeys = columnKeys.slice(0, -1)
-    if (annualKeys.some((key) => !/^\d{4}$/.test(key)) || annualKeys.some((key, index) => index > 0 && key <= annualKeys[index - 1])) {
-      context.addIssue({ code: 'custom', path: ['columns'], message: 'annual columns must be chronological years' })
+    if (columnKeys.at(-1) !== value.end.slice(0, 4)) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'final column must be the statement end year' })
+    }
+    value.columns.forEach((column, index) => {
+      const isFinal = index === value.columns.length - 1
+      const expectedLabel = isFinal ? `${column.key}YTD` : column.key
+      if (column.label !== expectedLabel) {
+        context.addIssue({ code: 'custom', path: ['columns', index, 'label'], message: `label must be ${expectedLabel}` })
+      }
+    })
+    if (value.columns.some((column) => column.key !== column.start.slice(0, 4) || column.key !== column.end.slice(0, 4))) {
+      context.addIssue({ code: 'custom', path: ['columns'], message: 'column boundaries must stay within the keyed year' })
     }
     value.columns.forEach((column, index) => {
       if (column.end < column.start) {

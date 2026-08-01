@@ -272,15 +272,14 @@ const profitLossFixture = {
   end: '2026-07-29',
   columns: [
     { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
-    { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
-    { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+    { key: '2026', label: '2026YTD', start: '2026-01-01', end: '2026-07-29' },
   ],
   rows: [
-    { key: 'rent', label: 'Rent', kind: 'income', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
-    { key: 'tax', label: 'Tax', kind: 'expense', values: { '2025': -1200, '2026': 0, ytd: 0 } },
-    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2025': 12000, '2026': 7000, ytd: 7000 } },
-    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2025': -1200, '2026': 0, ytd: 0 } },
-    { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2025': 10800, '2026': 7000, ytd: 7000 } },
+    { key: 'rent', label: 'Rent', kind: 'income', values: { '2025': 12000, '2026': 7000 } },
+    { key: 'tax', label: 'Tax', kind: 'expense', values: { '2025': -1200, '2026': 0 } },
+    { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2025': 12000, '2026': 7000 } },
+    { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2025': -1200, '2026': 0 } },
+    { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2025': 10800, '2026': 7000 } },
   ],
 } as const
 
@@ -298,7 +297,7 @@ describe('analytics runtime schemas', () => {
     expect(profitLossSchema.parse(profitLossFixture).rows[0].kind).toBe('income')
     expect(() => profitLossSchema.parse({
       ...profitLossFixture,
-      rows: [{ ...profitLossFixture.rows[0], values: { '2025': 12000, ytd: 7000 } }],
+      rows: [{ ...profitLossFixture.rows[0], values: { '2025': 12000 } }],
     })).toThrow()
     expect(() => profitLossSchema.parse({
       ...profitLossFixture,
@@ -306,14 +305,24 @@ describe('analytics runtime schemas', () => {
     })).toThrow()
   })
 
-  it('rejects P&L totals disguised as category rows and non-final YTD columns', () => {
+  it('accepts backend P&L columns where the current annual column is labelled YTD', () => {
+    const parsed = profitLossSchema.parse(profitLossFixture)
+
+    expect(parsed.columns.map((column) => [column.key, column.label])).toEqual([
+      ['2025', '2025'],
+      ['2026', '2026YTD'],
+    ])
+    expect(parsed.rows[0].values).toEqual({ '2025': 12000, '2026': 7000 })
+  })
+
+  it('rejects P&L totals disguised as category rows and non-chronological annual columns', () => {
     expect(() => profitLossSchema.parse({
       ...profitLossFixture,
       rows: [{ ...profitLossFixture.rows[2], kind: 'income' }],
     })).toThrow()
     expect(() => profitLossSchema.parse({
       ...profitLossFixture,
-      columns: [profitLossFixture.columns[0], profitLossFixture.columns[2], profitLossFixture.columns[1]],
+      columns: [profitLossFixture.columns[1], profitLossFixture.columns[0]],
     })).toThrow()
   })
 

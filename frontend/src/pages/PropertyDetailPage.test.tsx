@@ -37,13 +37,12 @@ beforeEach(() => {
       HttpResponse.json({
         metric: 'profit_and_loss', currency: 'EUR', scale: 1, end: '2026-07-29',
         columns: [
-          { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
-          { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+          { key: '2026', label: '2026YTD', start: '2026-01-01', end: '2026-07-29' },
         ],
         rows: [
-          { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2026': 0, ytd: 0 } },
-          { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2026': 0, ytd: 0 } },
-          { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2026': 0, ytd: 0 } },
+          { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2026': 0 } },
+          { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2026': 0 } },
+          { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2026': 0 } },
         ],
       }),
     ),
@@ -105,14 +104,13 @@ describe('PropertyDetailPage', () => {
           columns: [
             { key: '2024', label: '2024', start: '2024-01-01', end: '2024-12-31' },
             { key: '2025', label: '2025', start: '2025-01-01', end: '2025-12-31' },
-            { key: '2026', label: '2026', start: '2026-01-01', end: '2026-07-29' },
-            { key: 'ytd', label: 'YTD', start: '2026-01-01', end: '2026-07-29' },
+            { key: '2026', label: '2026YTD', start: '2026-01-01', end: '2026-07-29' },
           ],
           rows: [
-            { key: 'rent', label: 'Rent', kind: 'income', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
-            { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
-            { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2024': 0, '2025': 0, '2026': 0, ytd: 0 } },
-            { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2024': 12000, '2025': 13000, '2026': 7000, ytd: 7000 } },
+            { key: 'rent', label: 'Rent', kind: 'income', values: { '2024': 12000, '2025': 13000, '2026': 7000 } },
+            { key: 'total_revenue', label: 'Total revenue', kind: 'total_revenue', values: { '2024': 12000, '2025': 13000, '2026': 7000 } },
+            { key: 'total_expenses', label: 'Total expenses', kind: 'total_expenses', values: { '2024': 0, '2025': 0, '2026': 0 } },
+            { key: 'net_income', label: 'Net income', kind: 'net_income', values: { '2024': 12000, '2025': 13000, '2026': 7000 } },
           ],
         })
         )
@@ -124,7 +122,7 @@ describe('PropertyDetailPage', () => {
     expect(table).toBeVisible()
     expect(screen.getByText('2024')).toBeInTheDocument()
     expect(screen.getByText('2025')).toBeInTheDocument()
-    expect(screen.getByText('YTD')).toBeInTheDocument()
+    expect(screen.getByText('2026YTD')).toBeInTheDocument()
     expect(screen.getAllByText('€12,000').length).toBeGreaterThan(0)
     expect(pnlSearch).toBe('end=2026-07-29&currency=EUR&property=1')
     expect(screen.queryByText(/Server-calculated year-to-date performance/)).not.toBeInTheDocument()

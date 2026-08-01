@@ -86,6 +86,16 @@ function tenantStatus(leaseEnd: string | null | undefined): TenantStatus {
   return 'will-vacate'
 }
 
+function tenantDisplayName(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+): string {
+  return [firstName, lastName]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(' ')
+}
+
 const STATUS_LABEL: Record<TenantStatus, string> = {
   active: 'Active',
   'will-vacate': 'Will vacate',
@@ -178,7 +188,7 @@ export function TenantDetailPage() {
   }
 
   const status = tenantStatus(tenant.lease_end)
-  const fullName = `${tenant.first_name} ${tenant.last_name}`
+  const fullName = tenantDisplayName(tenant.first_name, tenant.last_name)
 
   // ---- Main render ---------------------------------------------------------
 
