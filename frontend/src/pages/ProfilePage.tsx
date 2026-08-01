@@ -2,18 +2,20 @@
 //
 // Profile page (Task 8 of Plan B2).
 //
-// Three tabs:
+// In production, Rent treats identity and credentials as Life OS-owned:
 //   - "Life OS identity" — read-only display of centrally managed
 //     username, name, and email claims.
 //   - "Settings" — `<ProfileSettingsForm>` (B1 Task 11) bound to
 //     `useUpdateMe` (same `PATCH /auth/me/` endpoint). The form already
 //     carries the corrected `use_default_currency_for_all_data` field name.
+//
+// Local/development password auth can additionally expose:
 //   - "Change password" — three-field form bound to
 //     `POST /auth/change-password/` via `useChangePassword`.
 //
-// All three tabs share a single `useMe()` query. Mutations either prime
-// the cache directly (`useUpdateMe`) or don't need to (password change
-// uses `update_session_auth_hash` server-side).
+// The visible tabs share a single `useMe()` query. Mutations either prime
+// the cache directly (`useUpdateMe`) or don't need to (local password
+// change uses `update_session_auth_hash` server-side).
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'

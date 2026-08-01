@@ -1,16 +1,23 @@
 """Session-auth endpoints for the SPA (Task 4).
 
-Three plain DRF ``APIView`` classes mounted under ``/api/v1/auth/``:
+The production credential boundary is Life OS / Authentik OIDC. Local
+username/password endpoints are retained only for development and isolated
+tests, and are not mounted when ``LOCAL_PASSWORD_AUTH_ENABLED`` is false.
 
-* ``POST /api/v1/auth/login/``  — body ``{username, password}`` →
-  ``200 {user: {...}}`` and sets the ``sessionid`` cookie, or
-  ``400 {detail: "Invalid credentials"}`` on bad creds.
+Plain DRF ``APIView`` classes mounted under ``/api/v1/auth/``:
+
+* ``POST /api/v1/auth/login/``  — local/dev only; body
+  ``{username, password}`` → ``200 {user: {...}}`` and sets the
+  ``sessionid`` cookie, or ``400 {detail: "Invalid credentials"}``
+  on bad creds.
 * ``POST /api/v1/auth/logout/`` — ``204`` and clears the session
   (requires an authenticated user).
 * ``GET  /api/v1/auth/me/``     — ``200 {user: {...}}`` for the
   currently authenticated user, or ``401`` when anonymous.
+* ``POST /api/v1/auth/change-password/`` — local/dev only; changes a
+  Django password when local password auth is explicitly enabled.
 
-These three views back the SPA's :class:`useAuth` hook (frontend Task 5).
+These views back the SPA's :class:`useAuth` hook (frontend Task 5).
 The session-cookie semantics are Django's defaults — ``SESSION_COOKIE_*``
 settings drive the same attributes the SPA fetch needs (``SameSite``,
 ``HttpOnly``, etc.).
