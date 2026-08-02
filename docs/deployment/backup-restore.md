@@ -53,12 +53,15 @@ Capture enough metadata to restore:
 
 5. Confirm OIDC users still have expected `rentals_oidcidentity` rows. Do not
    rebuild identity mappings from email.
-6. If FX rates are stale or intentionally absent for newer dates, run the
-   scheduled refresh command once:
+6. If FX rates are stale or intentionally absent for restored business-record
+   dates, run the scheduled full gap scan once:
 
    ```bash
    python manage.py refresh_fx
    ```
+
+   The command derives required dates and currency pairs from restored rental
+   records and fetches only missing/non-positive FX rows.
 
 ## Legacy SQLite restore/import
 

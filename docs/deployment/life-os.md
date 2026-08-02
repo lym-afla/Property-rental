@@ -229,24 +229,39 @@ At launch, production FX acquisition is performed only by:
 python manage.py refresh_fx
 ```
 
-The command accepts `--date YYYY-MM-DD` and repeatable `--pair FROM/TO`
-arguments. Without `--date`, it uses the configured business timezone's current
-local date.
+With no arguments, the command performs an idempotent full gap scan through the
+configured business timezone's current local date. It derives required effective
+dates and currency pairs from dated monetary business records: transactions,
+property capital-structure rows, lease-rent history, and tenant monthly rent due
+dates. Existing valid rates are kept; only missing or non-positive
+`(date, from_currency, to_currency)` rows are fetched.
+
+The command also accepts `--scan-gaps --through YYYY-MM-DD` for an explicit gap
+scan cutoff, and `--date YYYY-MM-DD` with repeatable `--pair FROM/TO` for
+manual single-date repair. The manual mode is not the normal production
+schedule.
 
 Ordinary web requests and financial mutations do not invoke external FX
-providers. A transaction commit is independent of Yahoo Finance availability.
-The UI reports cached FX data and tells the operator that scheduled refresh is
-required when rates are absent.
+providers. A transaction commit is independent of Yahoo Finance and CBR
+availability. The UI reports cached FX data and tells the operator that
+scheduled refresh is required when rates are absent.
 
 FX persistence is deterministic:
 
-- the canonical rate identity is `(date, from_currency, to_currency)`;
+- the canonical rate identity is `(date, from_currency, to_currency)`, where
+  `rate` is the direct multiplier from the canonical `from_currency` to
+  `to_currency`;
 - upserts do not create duplicate rates;
 - failed refreshes retain existing valid rates;
 - refresh reports distinguish cached, newly fetched, unavailable, and invalid
   rates;
+- RUB-related canonical pairs are fetched from the Central Bank of Russia over
+  HTTPS; non-RUB pairs are fetched from Yahoo Finance;
+- CBR publishes RUB per foreign unit, so the provider stores direct canonical
+  rates without ambiguity: `EUR/RUB` stores RUB per EUR, while canonical
+  `RUB/USD` stores USD per RUB by inverting CBR's RUB-per-USD quote;
 - outbound calls have bounded timeouts, and no retries are performed from web
-  requests.
+  requests. The CBR scheduled adapter retries only safe rate-limit responses.
 
 Schedule `refresh_fx` from Life OS using the same image and environment as the
 web container. No Redis, Celery, or queue service is required for launch.
