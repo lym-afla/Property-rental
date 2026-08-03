@@ -61,7 +61,9 @@ Capture enough metadata to restore:
    ```
 
    The command derives required dates and currency pairs from restored rental
-   records and fetches only missing/non-positive FX rows.
+   records, fetches only missing/non-positive FX rows, and prints compact
+   cached/fetched/unavailable/invalid counts by default. Use `--json` or
+   `--verbose` only when a full per-rate reconciliation report is needed.
 
 ## Legacy SQLite restore/import
 
