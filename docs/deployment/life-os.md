@@ -241,6 +241,11 @@ scan cutoff, and `--date YYYY-MM-DD` with repeatable `--pair FROM/TO` for
 manual single-date repair. The manual mode is not the normal production
 schedule.
 
+By default `refresh_fx` writes a compact JSON summary to stdout with
+`cached_count`, `fetched_count`, `unavailable_count`, and `invalid_count`.
+Use `--json` or `--verbose` only when an operator needs the full reconciliation
+report listing every cached, fetched, unavailable, and invalid rate.
+
 Ordinary web requests and financial mutations do not invoke external FX
 providers. A transaction commit is independent of Yahoo Finance and CBR
 availability. The UI reports cached FX data and tells the operator that

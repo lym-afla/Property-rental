@@ -1,7 +1,9 @@
+import json
 import os
 import sys
 from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
+from io import StringIO
 from types import SimpleNamespace
 
 import pytest
@@ -398,6 +400,90 @@ def test_command_default_runs_gap_scan_not_calendar_refresh(monkeypatch):
         "target_currencies": None,
         "through": date(2024, 1, 1),
         "provider": provider,
+    }
+
+
+@pytest.mark.django_db
+def test_command_default_prints_compact_gap_scan_summary(monkeypatch):
+    import rentals.management.commands.refresh_fx as command
+    from rentals.services.fx_refresh import CurrencyPair, GapRefreshReport, RateRequirement
+
+    provider = object()
+    stdout = StringIO()
+    monkeypatch.setattr(command.timezone, "now", lambda: datetime(2024, 1, 1, 21, 30, tzinfo=dt_timezone.utc))
+    monkeypatch.setattr(command, "RoutingRateProvider", lambda: provider)
+    monkeypatch.setattr(
+        command,
+        "refresh_missing_rates",
+        lambda **kwargs: GapRefreshReport(
+            cached=[
+                RateRequirement(date(2024, 1, 1), CurrencyPair("EUR", "USD")),
+                RateRequirement(date(2024, 1, 2), CurrencyPair("GBP", "USD")),
+            ],
+            fetched=[RateRequirement(date(2024, 1, 3), CurrencyPair("EUR", "GBP"))],
+        ),
+    )
+
+    call_command("refresh_fx", stdout=stdout)
+
+    payload = json.loads(stdout.getvalue())
+    assert payload == {
+        "cached_count": 2,
+        "fetched_count": 1,
+        "invalid_count": 0,
+        "mode": "gap_scan",
+        "through": "2024-01-01",
+        "unavailable_count": 0,
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("option", [{"json_report": True}, {"verbose": True}])
+def test_command_explicit_full_output_prints_gap_scan_json(monkeypatch, option):
+    import rentals.management.commands.refresh_fx as command
+    from rentals.services.fx_refresh import CurrencyPair, GapRefreshReport, RateRequirement
+
+    stdout = StringIO()
+    monkeypatch.setattr(command.timezone, "now", lambda: datetime(2024, 1, 1, 21, 30, tzinfo=dt_timezone.utc))
+    monkeypatch.setattr(command, "refresh_missing_rates", lambda **kwargs: GapRefreshReport(
+        cached=[RateRequirement(date(2024, 1, 1), CurrencyPair("EUR", "USD"))],
+        fetched=[RateRequirement(date(2024, 1, 2), CurrencyPair("GBP", "USD"))],
+    ))
+
+    call_command("refresh_fx", stdout=stdout, **option)
+
+    payload = json.loads(stdout.getvalue())
+    assert payload == {
+        "cached": [{"date": "2024-01-01", "pair": "EUR/USD"}],
+        "fetched": [{"date": "2024-01-02", "pair": "GBP/USD"}],
+        "invalid": [],
+        "mode": "gap_scan",
+        "through": "2024-01-01",
+        "unavailable": [],
+    }
+
+
+@pytest.mark.django_db
+def test_command_default_prints_compact_date_pair_summary(monkeypatch):
+    import rentals.management.commands.refresh_fx as command
+    from rentals.services.fx_refresh import CurrencyPair, RefreshReport
+
+    stdout = StringIO()
+    monkeypatch.setattr(command, "refresh_rates", lambda **kwargs: RefreshReport(
+        cached=[CurrencyPair("EUR", "USD")],
+        fetched=[CurrencyPair("GBP", "USD")],
+    ))
+
+    call_command("refresh_fx", as_of="2024-01-05", pair=["EUR/USD"], stdout=stdout)
+
+    payload = json.loads(stdout.getvalue())
+    assert payload == {
+        "as_of": "2024-01-05",
+        "cached_count": 1,
+        "fetched_count": 1,
+        "invalid_count": 0,
+        "mode": "date_pair",
+        "unavailable_count": 0,
     }
 
 
