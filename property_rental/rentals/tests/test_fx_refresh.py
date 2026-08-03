@@ -1,5 +1,8 @@
+import os
+import sys
 from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -27,6 +30,35 @@ class Provider:
         if isinstance(value, Exception):
             raise value
         return value
+
+
+class CBRResponse:
+    def __init__(self, *, status_code=200, headers=None):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.text = """<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetCursOnDateResponse xmlns="http://web.cbr.ru/">
+      <GetCursOnDateResult>
+        <diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
+          <ValuteData>
+            <ValuteCursOnDate diffgr:id="ValuteCursOnDate1">
+              <VchCode>USD</VchCode>
+              <Vnom>1</Vnom>
+              <Vcurs>90,0000</Vcurs>
+            </ValuteCursOnDate>
+            <ValuteCursOnDate diffgr:id="ValuteCursOnDate2">
+              <VchCode>EUR</VchCode>
+              <Vnom>1</Vnom>
+              <Vcurs>100,0000</Vcurs>
+            </ValuteCursOnDate>
+          </ValuteData>
+        </diffgr:diffgram>
+      </GetCursOnDateResult>
+    </GetCursOnDateResponse>
+  </soap:Body>
+</soap:Envelope>"""
 
 
 def test_legacy_synchronous_acquisition_entry_points_are_removed():
@@ -241,33 +273,7 @@ def test_routing_provider_sends_rub_pairs_to_cbr_and_others_to_yahoo():
 def test_cbr_provider_returns_direct_multiplier_for_canonical_rub_pairs():
     from rentals.services.fx_refresh import CBRRateProvider, CurrencyPair
 
-    class Response:
-        status_code = 200
-        text = """<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Body>
-    <GetCursOnDateResponse xmlns="http://web.cbr.ru/">
-      <GetCursOnDateResult>
-        <diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
-          <ValuteData>
-            <ValuteCursOnDate diffgr:id="ValuteCursOnDate1">
-              <VchCode>USD</VchCode>
-              <Vnom>1</Vnom>
-              <Vcurs>90,0000</Vcurs>
-            </ValuteCursOnDate>
-            <ValuteCursOnDate diffgr:id="ValuteCursOnDate2">
-              <VchCode>EUR</VchCode>
-              <Vnom>1</Vnom>
-              <Vcurs>100,0000</Vcurs>
-            </ValuteCursOnDate>
-          </ValuteData>
-        </diffgr:diffgram>
-      </GetCursOnDateResult>
-    </GetCursOnDateResponse>
-  </soap:Body>
-</soap:Envelope>"""
-
-    provider = CBRRateProvider(http_post=lambda *args, **kwargs: Response(), sleep=lambda seconds: None)
+    provider = CBRRateProvider(http_post=lambda *args, **kwargs: CBRResponse(), sleep=lambda seconds: None)
 
     # Stored FX rows use the canonical direct multiplier. USD/RUB canonicalizes
     # to RUB/USD, so CBR's RUB-per-USD quote must be inverted.
@@ -278,6 +284,93 @@ def test_cbr_provider_returns_direct_multiplier_for_canonical_rub_pairs():
     assert provider.get_rate(as_of=date(2024, 1, 10), pair=CurrencyPair("RUB", "EUR")) == Decimal(
         "100.0000000000"
     )
+
+
+def test_cbr_provider_retries_transient_errors_and_rate_limits_before_success():
+    from rentals.services.fx_refresh import CBRRateProvider, CurrencyPair
+
+    responses = [
+        ConnectionError("connection reset by peer"),
+        CBRResponse(status_code=429, headers={"Retry-After": "2.5"}),
+        CBRResponse(),
+    ]
+    sleeps = []
+
+    def post(*args, **kwargs):
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    provider = CBRRateProvider(http_post=post, sleep=sleeps.append)
+    provider.retry_sleep_seconds = 0.5
+
+    assert provider.get_rate(as_of=date(2024, 1, 10), pair=CurrencyPair("USD", "RUB")) == Decimal(
+        "0.0111111111"
+    )
+    assert responses == []
+    assert sleeps == [0.5, 2.5]
+
+
+def test_cbr_provider_reuses_one_response_for_multiple_pairs_on_same_date():
+    from rentals.services.fx_refresh import CBRRateProvider, CurrencyPair
+
+    calls = []
+
+    def post(*args, **kwargs):
+        calls.append(kwargs["data"])
+        return CBRResponse()
+
+    provider = CBRRateProvider(http_post=post, sleep=lambda seconds: None)
+
+    assert provider.get_rate(as_of=date(2024, 1, 10), pair=CurrencyPair("USD", "RUB")) == Decimal(
+        "0.0111111111"
+    )
+    assert provider.get_rate(as_of=date(2024, 1, 10), pair=CurrencyPair("RUB", "EUR")) == Decimal(
+        "100.0000000000"
+    )
+    assert len(calls) == 1
+
+
+def test_yahoo_provider_uses_ephemeral_cache_and_walks_back_missing_dates(monkeypatch):
+    from rentals.services.fx_refresh import CurrencyPair, YahooRateProvider
+
+    class EmptyData:
+        empty = True
+
+    class CloseSeries:
+        @property
+        def iloc(self):
+            return self
+
+        def __getitem__(self, index):
+            assert index == 0
+            return Decimal("1.20")
+
+    class Data:
+        empty = False
+
+        def __getitem__(self, key):
+            assert key == "Close"
+            return CloseSeries()
+
+    calls = []
+
+    def download(*args, **kwargs):
+        calls.append(kwargs)
+        return EmptyData() if len(calls) == 1 else Data()
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=download))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+    provider = YahooRateProvider()
+    provider.lookback_days = 1
+
+    assert provider.get_rate(as_of=date(2024, 1, 1), pair=CurrencyPair("EUR", "USD")) == Decimal("1.20")
+    assert os.environ["XDG_CACHE_HOME"] == "/tmp/.cache"
+    assert calls[0]["start"] == "2024-01-01"
+    assert calls[1]["start"] == "2023-12-31"
+    assert calls[0]["auto_adjust"] is False
 
 
 @pytest.mark.django_db
