@@ -1,9 +1,12 @@
 """Deterministic, scheduled-only acquisition of foreign-exchange rates."""
 
 import calendar
+import os
 import logging
 import time
+import warnings
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -342,24 +345,57 @@ class RoutingRateProvider:
 
 
 class YahooRateProvider:
-    """Yahoo adapter with a finite request timeout and no internal retry loop."""
+    """Yahoo adapter with bounded calls and historical market-day lookback."""
 
     timeout_seconds = 10
+    lookback_days = 7
 
     def get_rate(self, *, as_of: date, pair: CurrencyPair):
+        os.environ.setdefault("XDG_CACHE_HOME", "/tmp/.cache")
+
+        for offset in range(self.lookback_days + 1):
+            lookup_date = as_of - timedelta(days=offset)
+            rate = self._get_rate_for_provider_date(as_of=lookup_date, pair=pair)
+            if rate is not None:
+                return rate
+        return None
+
+    def _get_rate_for_provider_date(self, *, as_of: date, pair: CurrencyPair):
         import yfinance as yf
 
-        data = yf.download(
-            f"{pair.from_currency}{pair.to_currency}=X",
-            start=as_of.isoformat(),
-            end=(as_of + timedelta(days=1)).isoformat(),
-            progress=False,
-            timeout=self.timeout_seconds,
-        )
+        with warnings.catch_warnings(), _temporary_logger_level("yfinance", logging.CRITICAL):
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*YF\.download\(\) has changed argument auto_adjust default.*",
+                category=FutureWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*Timestamp\.utcnow is deprecated.*",
+            )
+            data = yf.download(
+                f"{pair.from_currency}{pair.to_currency}=X",
+                start=as_of.isoformat(),
+                end=(as_of + timedelta(days=1)).isoformat(),
+                progress=False,
+                timeout=self.timeout_seconds,
+                auto_adjust=False,
+            )
         if data.empty:
             return None
         close = data["Close"].iloc[0]
         return close.iloc[0] if hasattr(close, "iloc") else close
+
+
+@contextmanager
+def _temporary_logger_level(logger_name: str, level: int):
+    target_logger = logging.getLogger(logger_name)
+    previous_level = target_logger.level
+    target_logger.setLevel(level)
+    try:
+        yield
+    finally:
+        target_logger.setLevel(previous_level)
 
 
 class CBRRateProvider:
@@ -373,9 +409,10 @@ class CBRRateProvider:
 
     endpoint = "https://www.cbr.ru/DailyInfoWebServ/DailyInfo.asmx"
     timeout_seconds = 10
-    max_attempts = 3
+    max_attempts = 5
     lookback_days = 7
     retry_sleep_seconds = 1
+    max_retry_sleep_seconds = 30
 
     def __init__(
         self,
@@ -389,6 +426,7 @@ class CBRRateProvider:
             http_post = requests.post
         self.http_post = http_post
         self.sleep = sleep or time.sleep
+        self._rates_by_date: dict[date, dict[str, Decimal] | None] = {}
 
     def get_rate(self, *, as_of: date, pair: CurrencyPair):
         if "RUB" not in (pair.from_currency, pair.to_currency):
@@ -402,10 +440,8 @@ class CBRRateProvider:
 
         for offset in range(self.lookback_days + 1):
             lookup_date = as_of - timedelta(days=offset)
-            rub_per_foreign = self._fetch_rub_per_foreign(
-                as_of=lookup_date,
-                foreign_currency=foreign_currency,
-            )
+            rates = self._fetch_rates_for_date(as_of=lookup_date)
+            rub_per_foreign = rates.get(foreign_currency) if rates else None
             if rub_per_foreign is None:
                 continue
             if pair.to_currency == "RUB":
@@ -417,6 +453,15 @@ class CBRRateProvider:
         return None
 
     def _fetch_rub_per_foreign(self, *, as_of: date, foreign_currency: str) -> Decimal | None:
+        rates = self._fetch_rates_for_date(as_of=as_of)
+        return rates.get(foreign_currency) if rates else None
+
+    def _fetch_rates_for_date(self, *, as_of: date) -> dict[str, Decimal] | None:
+        if as_of not in self._rates_by_date:
+            self._rates_by_date[as_of] = self._request_rates_for_date(as_of=as_of)
+        return self._rates_by_date[as_of]
+
+    def _request_rates_for_date(self, *, as_of: date) -> dict[str, Decimal] | None:
         payload = _cbr_soap_payload(as_of)
         headers = {
             "Content-Type": "text/xml; charset=utf-8",
@@ -432,12 +477,37 @@ class CBRRateProvider:
                     timeout=self.timeout_seconds,
                 )
             except Exception:
-                logger.exception("CBR FX request failed for %s", as_of)
-                return None
+                if attempt >= self.max_attempts - 1:
+                    logger.warning(
+                        "CBR FX request failed after %s attempts for %s",
+                        self.max_attempts,
+                        as_of,
+                    )
+                    return None
+                self.sleep(self._retry_delay(attempt))
+                continue
 
             status_code = getattr(response, "status_code", None)
-            if status_code == 429 and attempt < self.max_attempts - 1:
-                self.sleep(self.retry_sleep_seconds * (attempt + 1))
+            if status_code == 429:
+                if attempt >= self.max_attempts - 1:
+                    logger.warning(
+                        "CBR FX request returned HTTP 429 after %s attempts for %s",
+                        self.max_attempts,
+                        as_of,
+                    )
+                    return None
+                self.sleep(self._retry_delay(attempt, response=response))
+                continue
+            if status_code in {500, 502, 503, 504}:
+                if attempt >= self.max_attempts - 1:
+                    logger.warning(
+                        "CBR FX request returned HTTP %s after %s attempts for %s",
+                        status_code,
+                        self.max_attempts,
+                        as_of,
+                    )
+                    return None
+                self.sleep(self._retry_delay(attempt, response=response))
                 continue
             if status_code != 200:
                 logger.warning(
@@ -448,8 +518,17 @@ class CBRRateProvider:
                 return None
 
             text = getattr(response, "text", "")
-            return _parse_cbr_rate(text, foreign_currency)
+            return _parse_cbr_rates(text)
         return None
+
+    def _retry_delay(self, attempt: int, *, response=None) -> float:
+        retry_after = _retry_after_seconds(response)
+        if retry_after is not None:
+            return retry_after
+        return min(
+            self.retry_sleep_seconds * (2**attempt),
+            self.max_retry_sleep_seconds,
+        )
 
 
 def _cbr_soap_payload(as_of: date) -> str:
@@ -490,22 +569,40 @@ def _parse_cbr_decimal(value: str | None) -> Decimal | None:
 
 
 def _parse_cbr_rate(xml_text: str, foreign_currency: str) -> Decimal | None:
+    return _parse_cbr_rates(xml_text).get(foreign_currency.strip().upper())
+
+
+def _parse_cbr_rates(xml_text: str) -> dict[str, Decimal]:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         logger.warning("CBR FX response was not valid XML")
-        return None
+        return {}
 
-    target = foreign_currency.strip().upper()
+    rates = {}
     for element in root.iter():
         if _local_name(element.tag) != "ValuteCursOnDate":
             continue
         code = (_child_text(element, "VchCode") or "").strip().upper()
-        if code != target:
+        if not code:
             continue
         nominal = _parse_cbr_decimal(_child_text(element, "Vnom"))
         value = _parse_cbr_decimal(_child_text(element, "Vcurs"))
         if nominal is None or value is None:
-            return None
-        return value / nominal
-    return None
+            continue
+        rates[code] = value / nominal
+    return rates
+
+
+def _retry_after_seconds(response) -> float | None:
+    if response is None:
+        return None
+    headers = getattr(response, "headers", {}) or {}
+    raw_value = headers.get("Retry-After") if hasattr(headers, "get") else None
+    if raw_value is None:
+        return None
+    try:
+        seconds = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return seconds if seconds >= 0 else None

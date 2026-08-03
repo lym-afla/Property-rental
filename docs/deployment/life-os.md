@@ -260,8 +260,18 @@ FX persistence is deterministic:
 - CBR publishes RUB per foreign unit, so the provider stores direct canonical
   rates without ambiguity: `EUR/RUB` stores RUB per EUR, while canonical
   `RUB/USD` stores USD per RUB by inverting CBR's RUB-per-USD quote;
+- CBR responses are cached per provider date within a refresh run, so multiple
+  RUB-related pairs for the same date reuse one SOAP response;
+- Yahoo and CBR both walk back over recent prior dates when the requested
+  effective date is a market holiday or weekend, while storing the rate under
+  the rental effective date required by the business record;
 - outbound calls have bounded timeouts, and no retries are performed from web
-  requests. The CBR scheduled adapter retries only safe rate-limit responses.
+  requests. The scheduled adapters retry transient CBR rate-limit/server/network
+  failures with bounded backoff.
+
+The runtime image sets `XDG_CACHE_HOME=/tmp/.cache`; in Life OS `/tmp` is a
+tmpfs mount, so provider caches are writable, ephemeral, and not embedded in the
+image or backup contract.
 
 Schedule `refresh_fx` from Life OS using the same image and environment as the
 web container. No Redis, Celery, or queue service is required for launch.

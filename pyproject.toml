@@ -33,7 +33,7 @@ dependencies = [
     "urllib3==2.0.6",
     "webencodings==0.5.1",
     "whitenoise==6.5.0",
-    "yfinance==0.2.66",
+    "yfinance==1.5.2",
 ]
 
 [dependency-groups]

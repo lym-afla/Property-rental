@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 test.skip(process.platform !== 'win32' || process.env.PW_CHANNEL !== 'chrome', 'Visual baselines are pinned to Windows Chrome.')
 
 const fontRenderingTolerance = { animations: 'disabled' as const, maxDiffPixels: 1000 }
+const chartReadinessTimeout = 15_000
 
 async function hideFixedAppChrome(page: Page) {
   await page.locator('body *').evaluateAll((elements) => elements.forEach((element) => {
@@ -63,7 +64,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
       && incomeBox.height > 0
       && expenseBox.width > 0
       && expenseBox.height > 0
-  }).toBe(true)
+  }, { timeout: chartReadinessTimeout }).toBe(true)
 
   await expect(cashFlowCard).toHaveScreenshot('investment-dashboard-populated.png', { animations: 'disabled' })
 
@@ -82,8 +83,8 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   await expect.poll(async () => yieldCard.locator('.recharts-scatter .recharts-symbols').evaluateAll((symbols) => symbols.length > 0 && symbols.every((symbol) => {
     const box = (symbol as SVGGraphicsElement).getBBox()
     return box.width > 0 && box.height > 0
-  }))).toBe(true)
-  await expect.poll(async () => breakdownCard.locator('.recharts-line-curve').evaluateAll((lines) => lines.length > 0 && lines.every((line) => (line as SVGGeometryElement).getTotalLength() > 0))).toBe(true)
+  })), { timeout: chartReadinessTimeout }).toBe(true)
+  await expect.poll(async () => breakdownCard.locator('.recharts-line-curve').evaluateAll((lines) => lines.length > 0 && lines.every((line) => (line as SVGGeometryElement).getTotalLength() > 0)), { timeout: chartReadinessTimeout }).toBe(true)
   await expect(yieldCard).toHaveScreenshot('investment-dashboard-portfolio-yields.png', { animations: 'disabled' })
   await expect(breakdownCard).toHaveScreenshot('investment-dashboard-portfolio-breakdown.png', { animations: 'disabled' })
 
@@ -91,7 +92,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   const trendCard = page.getByText('Revenue and expenses', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]')
   const profitLossCard = page.getByText('Profit & Loss', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]')
   await expect(profitLossCard.getByRole('table', { name: 'Profit and Loss statement' })).toBeVisible()
-  await expect.poll(async () => trendCard.locator('.recharts-line-curve').evaluateAll((lines) => lines.length === 2 && lines.every((line) => (line as SVGGeometryElement).getTotalLength() > 0))).toBe(true)
+  await expect.poll(async () => trendCard.locator('.recharts-line-curve').evaluateAll((lines) => lines.length === 2 && lines.every((line) => (line as SVGGeometryElement).getTotalLength() > 0)), { timeout: chartReadinessTimeout }).toBe(true)
   await expect(profitLossCard).toHaveScreenshot('investment-dashboard-profit-loss.png', { animations: 'disabled' })
   const profitLossScroller = profitLossCard.getByRole('table', { name: 'Profit and Loss statement' }).locator('xpath=..')
   expect(await profitLossScroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
@@ -112,7 +113,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   await expect.poll(async () => valuationCard.locator('.recharts-bar-rectangle').evaluateAll((bars) => bars.length === 6 && bars.every((bar) => {
     const box = (bar as SVGGraphicsElement).getBBox()
     return box.width > 0 && box.height > 0
-  }))).toBe(true)
+  })), { timeout: chartReadinessTimeout }).toBe(true)
   await expect(valuationCard).toHaveScreenshot('investment-property-valuation.png', fontRenderingTolerance)
 
   await page.goto('/tenants/1')
@@ -122,7 +123,7 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   await expect.poll(async () => rentCard.locator('.recharts-bar-rectangle').evaluateAll((bars) => bars.length > 0 && bars.every((bar) => {
     const box = (bar as SVGGraphicsElement).getBBox()
     return box.width > 0 && box.height > 0
-  }))).toBe(true)
+  })), { timeout: chartReadinessTimeout }).toBe(true)
   await expect(rentCard).toHaveScreenshot('investment-tenant-native-currency.png', fontRenderingTolerance)
 
   await page.goto('/transactions')
