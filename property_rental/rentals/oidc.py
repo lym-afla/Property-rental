@@ -5,10 +5,12 @@ from django.conf import settings
 from django.core.exceptions import SuspiciousOperation, ValidationError
 from django.db import IntegrityError
 from django.db import transaction
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
 from django.utils import timezone
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
-from .models import OIDCIdentity
+from .models import OIDCIdentity, OIDCSession
 
 
 VIEWER_GROUP = "lifeos:app:rent:viewer"
@@ -19,6 +21,9 @@ PROFILE_CLAIM_FIELDS = {
     "last_name": "family_name",
     "email": "email",
 }
+OIDC_SESSION_ISSUER_KEY = "oidc_session_issuer"
+OIDC_SESSION_SUBJECT_KEY = "oidc_session_subject"
+OIDC_SESSION_SID_KEY = "oidc_session_sid"
 
 
 def _identity_claims(claims):
@@ -45,12 +50,19 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
     def authenticate(self, request, **kwargs):
         self._authorization_groups = ()
+        self._validated_session_claims = None
         user = super().authenticate(request, **kwargs)
         groups = self._authorization_groups if user is not None else ()
         mark_session_authorized(request, groups)
+        if user is not None and VIEWER_GROUP in groups and self._validated_session_claims:
+            issuer, subject, sid = self._validated_session_claims
+            request.session[OIDC_SESSION_ISSUER_KEY] = issuer
+            request.session[OIDC_SESSION_SUBJECT_KEY] = subject
+            request.session[OIDC_SESSION_SID_KEY] = sid
         return user
 
     def verify_claims(self, claims: dict) -> bool:
+        self._validated_session_claims = None
         groups = claims.get(settings.OIDC_GROUPS_CLAIM)
         self._authorization_groups = (
             groups if isinstance(groups, (list, tuple, set, frozenset)) else ()
@@ -58,12 +70,15 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         if not super().verify_claims(claims):
             return False
         issuer, subject = _identity_claims(claims)
-        return bool(
+        verified = bool(
             issuer == settings.OIDC_ISSUER
             and subject
             and isinstance(groups, (list, tuple, set, frozenset))
             and VIEWER_GROUP in groups
         )
+        if verified:
+            self._validated_session_claims = (issuer, subject, claims.get("sid"))
+        return verified
 
     def filter_users_by_claims(self, claims: dict):
         issuer, subject = _identity_claims(claims)
@@ -115,3 +130,36 @@ def mark_session_authorized(request, groups: Collection[str]) -> None:
         return
     request.session["oidc_authorized_groups"] = sorted(set(groups))
     request.session["oidc_last_authorized_at"] = timezone.now().isoformat()
+
+
+@receiver(user_logged_in, dispatch_uid="rentals.oidc.register_oidc_session")
+def register_oidc_session(sender, request, user, **kwargs) -> None:
+    """Persist the final Django session key for a validated OIDC login."""
+    try:
+        issuer = request.session.get(OIDC_SESSION_ISSUER_KEY)
+        subject = request.session.get(OIDC_SESSION_SUBJECT_KEY)
+        sid = request.session.get(OIDC_SESSION_SID_KEY)
+        session_key = request.session.session_key
+        if not (
+            isinstance(issuer, str)
+            and issuer
+            and isinstance(subject, str)
+            and subject
+            and isinstance(sid, str)
+            and sid
+            and session_key
+        ):
+            return
+
+        identity = OIDCIdentity.objects.filter(
+            user=user, issuer=issuer, subject=subject
+        ).first()
+        if identity is None:
+            return
+        OIDCSession.objects.update_or_create(
+            session_key=session_key, defaults={"identity": identity, "sid": sid}
+        )
+    finally:
+        request.session.pop(OIDC_SESSION_ISSUER_KEY, None)
+        request.session.pop(OIDC_SESSION_SUBJECT_KEY, None)
+        request.session.pop(OIDC_SESSION_SID_KEY, None)

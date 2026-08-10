@@ -80,6 +80,38 @@ class OIDCIdentity(models.Model):
                 raise ValidationError("OIDC issuer and subject are immutable")
         return super().save(*args, **kwargs)
 
+
+class OIDCSession(models.Model):
+    identity = models.ForeignKey(
+        OIDCIdentity, on_delete=models.CASCADE, related_name="sessions"
+    )
+    sid = models.CharField(max_length=255, db_index=True)
+    session_key = models.CharField(max_length=40, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("identity", "sid", "session_key"),
+                name="unique_oidc_identity_sid_session",
+            )
+        ]
+
+
+class OIDCLogoutReplay(models.Model):
+    issuer = models.URLField(max_length=500)
+    jti = models.CharField(max_length=255)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("issuer", "jti"), name="unique_oidc_logout_issuer_jti"
+            )
+        ]
+
+
 class Landlord(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
 
