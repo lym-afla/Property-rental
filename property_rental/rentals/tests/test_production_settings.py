@@ -26,6 +26,7 @@ def production_environment(**overrides: str) -> dict[str, str]:
             "OIDC_CLIENT_SECRET": "test-only",
             "OIDC_CALLBACK_URL": "https://rent.linik.ru/oidc/callback/",
             "OIDC_LOGOUT_URL": "https://auth.linik.ru/application/o/rent/end-session/",
+            "OIDC_POST_LOGOUT_REDIRECT_URL": "https://auth.linik.ru/",
         }
     )
     environment.update(overrides)
@@ -128,7 +129,8 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
         "{'callback': __import__('django.urls').urls.reverse('oidc_authentication_callback'), "
         "'logout_method': settings.OIDC_OP_LOGOUT_URL_METHOD, "
         "'logout_url': __import__('django.utils.module_loading').utils.module_loading.import_string("
-        "settings.OIDC_OP_LOGOUT_URL_METHOD)(None)}",
+        "settings.OIDC_OP_LOGOUT_URL_METHOD)(None), "
+        "'allow_get': settings.ALLOW_LOGOUT_GET_METHOD}",
         setup=True,
     )
 
@@ -136,8 +138,25 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
     assert json.loads(result.stdout) == {
         "callback": "/identity/callback/",
         "logout_method": "property_rental.oidc.provider_logout_url",
-        "logout_url": "https://auth.linik.ru/custom/end-session/",
+        "logout_url": "https://auth.linik.ru/custom/end-session/?post_logout_redirect_uri=https%3A%2F%2Fauth.linik.ru%2F",
+        "allow_get": True,
     }
+
+
+def test_production_requires_the_registered_branded_logout_completion_url():
+    """The provider's completion URL is fixed, never supplied by a browser request."""
+    missing = production_environment()
+    missing.pop("OIDC_POST_LOGOUT_REDIRECT_URL")
+
+    missing_result = import_settings(missing)
+    invalid_result = import_settings(
+        production_environment(OIDC_POST_LOGOUT_REDIRECT_URL="https://rent.linik.ru/")
+    )
+
+    assert missing_result.returncode != 0
+    assert "OIDC_POST_LOGOUT_REDIRECT_URL" in missing_result.stderr
+    assert invalid_result.returncode != 0
+    assert "OIDC_POST_LOGOUT_REDIRECT_URL" in invalid_result.stderr
 
 
 def test_oidc_provider_endpoints_can_be_configured_independently_from_issuer():

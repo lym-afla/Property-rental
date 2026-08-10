@@ -74,6 +74,7 @@ Required:
 | `OIDC_CLIENT_SECRET` | yes | Authentik OIDC client secret. |
 | `OIDC_CALLBACK_URL` | no | `https://rent.linik.ru/oidc/callback/` unless Life OS registers a different callback path. |
 | `OIDC_LOGOUT_URL` | no | Authentik end-session/logout URL for the app. |
+| `OIDC_POST_LOGOUT_REDIRECT_URL` | no | Exactly `https://auth.linik.ru/`, the Authentik-registered completion destination after global logout. |
 
 Optional:
 
@@ -82,6 +83,7 @@ Optional:
 | `PORT` | `8000` | Internal listen port. The Docker health check expands this through shell form. |
 | `GUNICORN_WORKERS` | `2` | Gunicorn worker count. |
 | `OIDC_AUTHORIZATION_MAX_AGE` | `300` | Maximum age, in seconds, of locally authorized OIDC group claims. Production default is five minutes. |
+| `OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS` | `300` | Non-secret maximum accepted age, in seconds, for a signed Authentik back-channel logout token. |
 | `LIFE_OS_PROFILE_URL` | unset | Optional central Life OS profile-management URL. When set, production accepts only HTTPS URLs on the exact origin `https://linik.ru`, for example `https://linik.ru/profile`. Do not set this until that central page exists. |
 
 Production must leave `LOCAL_PASSWORD_AUTH_ENABLED` unset or false. If it is set
@@ -186,6 +188,22 @@ reauthentication.
 
 Do not trust identity, role, or group headers from the public internet. This
 application consumes OIDC claims from Authentik, not forwarded identity headers.
+
+### Single logout
+
+`/oidc/logout/` is the only production-visible logout route. The account menu
+navigates to it as a normal browser link, so Django clears Rent's local session
+and then redirects to Authentik's configured end-session endpoint. Authentik
+must complete the global logout at the fixed, branded
+`https://auth.linik.ru/` destination; Rent must not use `/login` or its home
+page as that completion target.
+
+`/oidc/backchannel-logout/` is reserved for Authentik server-to-server POSTs
+that invalidate Rent sessions. The local JSON endpoint
+`/api/v1/auth/logout/` remains available for explicitly local development and
+tests, but is not the production navigation contract. Authorization-age checks
+are only a fallback when a live session remains; they are not a substitute for
+single logout.
 
 In production, Django admin also treats Life OS identity fields and Django
 password hashes as read-only. Local `is_staff` and `is_superuser` remain

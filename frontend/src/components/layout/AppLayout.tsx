@@ -9,7 +9,6 @@
 // Properties, Tenants, Transactions, FX).
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useSession } from '@/context/SessionProvider'
-import { useLogout } from '@/api/auth'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -30,7 +29,6 @@ const navItems = [
 
 export function AppLayout() {
   const { user } = useSession()
-  const logout = useLogout()
   const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-background">
@@ -67,12 +65,8 @@ export function AppLayout() {
               <DropdownMenuItem onSelect={() => navigate('/profile')}>
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => logout.mutate()}
-                disabled={logout.isPending}
-              >
-                {logout.isPending ? 'Logging out…' : 'Logout'}
+              <DropdownMenuItem asChild variant="destructive">
+                <a href="/oidc/logout/" role="link">Logout</a>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

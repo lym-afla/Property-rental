@@ -19,6 +19,13 @@ OIDC_RP_CLIENT_ID = required_env("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = required_env("OIDC_CLIENT_SECRET")
 OIDC_CALLBACK_URL = required_env("OIDC_CALLBACK_URL")
 OIDC_LOGOUT_URL = required_env("OIDC_LOGOUT_URL")
+OIDC_POST_LOGOUT_REDIRECT_URL = required_env("OIDC_POST_LOGOUT_REDIRECT_URL")
+if OIDC_POST_LOGOUT_REDIRECT_URL != "https://auth.linik.ru/":
+    raise RuntimeError(
+        "OIDC_POST_LOGOUT_REDIRECT_URL must be https://auth.linik.ru/"
+    )
+ALLOW_LOGOUT_GET_METHOD = True
+LOGOUT_REDIRECT_URL = OIDC_POST_LOGOUT_REDIRECT_URL
 ROOT_URLCONF = "property_rental.production_urls"
 _OIDC_ENDPOINT_BASE = OIDC_ISSUER.rstrip("/")
 OIDC_OP_AUTHORIZATION_ENDPOINT = os.environ.get(

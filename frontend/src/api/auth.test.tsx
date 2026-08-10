@@ -124,6 +124,25 @@ describe('session identity changes', () => {
 })
 
 describe('useLogout', () => {
+  it('keeps the local development logout endpoint available', async () => {
+    // Break caught: removing the explicitly local logout mutation would stop
+    // development and test sessions from reaching their JSON endpoint.
+    let requests = 0
+    server.use(
+      http.post('/api/v1/auth/logout/', () => {
+        requests += 1
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const qc = new QueryClient()
+    const { result } = renderHook(() => useLogout(), { wrapper: wrapperFor(qc) })
+
+    result.current.mutate()
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(requests).toBe(1)
+  })
+
   it('clears the cache', async () => {
     const qc = new QueryClient()
     qc.setQueryData(['auth', 'me'], { username: 'alice' })
