@@ -5,6 +5,7 @@ from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.debug import sensitive_post_parameters
 
 from rentals.oidc_logout import invalidate_oidc_sessions, validate_logout_token
 
@@ -17,6 +18,7 @@ def _empty_response(status: int) -> HttpResponse:
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+@method_decorator(sensitive_post_parameters("logout_token"), name="dispatch")
 class BackChannelLogoutView(View):
     http_method_names = ["post"]
 

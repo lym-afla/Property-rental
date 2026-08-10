@@ -55,17 +55,20 @@ def validate_logout_token(raw_token: str, now: datetime | None = None) -> Logout
     signing_key = _get_jwk_client(
         settings.OIDC_OP_JWKS_ENDPOINT
     ).get_signing_key_from_jwt(raw_token)
-    claims = jwt.decode(
-        raw_token,
-        signing_key.key,
-        algorithms=["RS256"],
-        audience=settings.OIDC_RP_CLIENT_ID,
-        issuer=settings.OIDC_ISSUER,
-        options={
-            "require": ["iss", "aud", "iat", "jti", "events"],
-            "verify_iat": False,
-        },
-    )
+    try:
+        claims = jwt.decode(
+            raw_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=settings.OIDC_RP_CLIENT_ID,
+            issuer=settings.OIDC_ISSUER,
+            options={
+                "require": ["iss", "aud", "iat", "jti", "events"],
+                "verify_iat": False,
+            },
+        )
+    except (TypeError, ValueError, OverflowError) as error:
+        raise jwt.InvalidTokenError("invalid registered claim") from error
 
     issuer = _nonempty_identifier(claims, "iss", max_length=500)
     jti = _nonempty_identifier(claims, "jti", max_length=255)

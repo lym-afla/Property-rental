@@ -7,8 +7,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
-from django.test import Client
+from django.test import Client, RequestFactory
 from django.utils import timezone
+from django.views.debug import SafeExceptionReporterFilter
 
 from rentals.models import OIDCIdentity, OIDCLogoutReplay, OIDCSession, User
 
@@ -49,6 +50,7 @@ def make_logout_token(
     sid="provider-session-1",
     subject="person-1",
     events=None,
+    extra_claims=None,
 ):
     claims = {
         "iss": issuer,
@@ -65,6 +67,8 @@ def make_logout_token(
         claims["sid"] = sid
     if subject is not None:
         claims["sub"] = subject
+    if extra_claims:
+        claims.update(extra_claims)
     return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
 
 
@@ -355,3 +359,57 @@ def test_endpoint_response_contains_no_identity_or_token_material(client, signin
     assert "person-1" not in str(response.headers)
     assert "provider-session-1" not in str(response.headers)
     assert token not in str(response.headers)
+
+
+def test_exception_report_filter_hides_logout_token(monkeypatch):
+    from rentals.api.oidc_logout import BackChannelLogoutView
+
+    submitted_value = "sensitive-" + "post-value"
+    request = RequestFactory().post(
+        "/oidc/backchannel-logout/",
+        {"logout_token": submitted_value},
+    )
+
+    def raise_unexpected_error(raw_token):
+        raise RuntimeError("exception-report-filter-probe")
+
+    monkeypatch.setattr(
+        "rentals.api.oidc_logout.validate_logout_token",
+        raise_unexpected_error,
+    )
+
+    with pytest.raises(RuntimeError, match="exception-report-filter-probe"):
+        BackChannelLogoutView.as_view()(request)
+
+    filtered = SafeExceptionReporterFilter().get_post_parameters(request)
+    assert filtered["logout_token"] == "********************"
+    assert submitted_value not in str(filtered)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("claim", ["exp", "nbf"])
+def test_signed_malformed_optional_claim_is_rejected_without_deleting_sessions(
+    signing_keys, claim
+):
+    from rentals.api.oidc_logout import BackChannelLogoutView
+
+    registered = register_session()
+    request = RequestFactory().post(
+        "/oidc/backchannel-logout/",
+        {
+            "logout_token": make_logout_token(
+                signing_keys[0],
+                extra_claims={claim: None},
+            )
+        },
+    )
+
+    try:
+        response = BackChannelLogoutView.as_view()(request)
+    except Exception as error:
+        response = error
+
+    assert getattr(response, "status_code", None) == 400
+    assert Session.objects.filter(session_key=registered.session_key).exists()
+    assert OIDCSession.objects.filter(pk=registered.pk).exists()
+    assert OIDCLogoutReplay.objects.count() == 0
