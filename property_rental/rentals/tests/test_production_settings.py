@@ -167,6 +167,23 @@ def test_oidc_provider_endpoints_can_be_configured_independently_from_issuer():
     }
 
 
+def test_logout_token_max_age_defaults_to_five_minutes_and_is_configurable():
+    """Removing the bounded logout-token lifetime must fail this settings contract."""
+    default = import_settings(
+        production_environment(),
+        "settings.OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS",
+    )
+    configured = import_settings(
+        production_environment(OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS="120"),
+        "settings.OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS",
+    )
+
+    assert default.returncode == 0, default.stderr
+    assert json.loads(default.stdout) == 300
+    assert configured.returncode == 0, configured.stderr
+    assert json.loads(configured.stdout) == 120
+
+
 def test_production_requests_and_reads_the_life_os_role_claim():
     """Rent authorization must consume the scoped role contract issued by Life OS."""
     result = import_settings(

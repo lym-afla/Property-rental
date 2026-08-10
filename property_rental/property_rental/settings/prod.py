@@ -43,6 +43,9 @@ OIDC_STORE_ID_TOKEN = False
 OIDC_CREATE_USER = False
 OIDC_EXEMPT_URLS = ("/health/live", "/health/ready")
 OIDC_AUTHORIZATION_MAX_AGE = int(os.environ.get("OIDC_AUTHORIZATION_MAX_AGE", "300"))
+OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS = int(
+    os.environ.get("OIDC_LOGOUT_TOKEN_MAX_AGE_SECONDS", "300")
+)
 LIFE_OS_PROFILE_URL = optional_https_url_env(
     "LIFE_OS_PROFILE_URL",
     allowed_origins={"https://linik.ru"},

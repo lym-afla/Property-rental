@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.urls import include, path
 
+from rentals.api.oidc_logout import BackChannelLogoutView
+
 from .urls import handler404, urlpatterns as base_urlpatterns
 
 
@@ -15,6 +17,11 @@ if not _callback_path.endswith("callback/"):
 _oidc_prefix = _callback_path[: -len("callback/")]
 
 urlpatterns = [
+    path(
+        "oidc/backchannel-logout/",
+        BackChannelLogoutView.as_view(),
+        name="oidc_backchannel_logout",
+    ),
     path(_oidc_prefix, include("mozilla_django_oidc.urls")),
     *[
         pattern for pattern in base_urlpatterns
