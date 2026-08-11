@@ -205,6 +205,30 @@ tests, but is not the production navigation contract. Authorization-age checks
 are only a fallback when a live session remains; they are not a substitute for
 single logout.
 
+Before an image is approved, `scripts/container_smoke.py` proves the production
+URL configuration exposes the back-channel route without constructing a token:
+
+```text
+POST /oidc/backchannel-logout/ with an empty form -> 400
+GET /oidc/backchannel-logout/ -> 405
+```
+
+The Life OS production acceptance script repeats that status-only contract from
+inside the running Rent container on the trusted deployment network. These
+checks prove routing and method restriction only. They never generate or print
+logout tokens, cookies, headers, response bodies, credentials, authorization
+codes, session IDs, or sensitive query URLs. Signed-token validation, replay
+protection, and targeted session invalidation remain covered by Rent tests;
+actual Authentik delivery remains production server/browser evidence.
+
+Release acceptance must exercise both signed-in directions: Rent logout must
+finish at branded Authentik and leave both Home and Rent demanding fresh
+authentication; Profile/Home logout must finish at branded Authentik and leave
+both Rent and Home demanding fresh authentication. If safe for the active
+operator session, terminate that Authentik session administratively and confirm
+Rent is invalidated. Record only sanitized outcomes in the Life OS single-logout
+acceptance record.
+
 In production, Django admin also treats Life OS identity fields and Django
 password hashes as read-only. Local `is_staff` and `is_superuser` remain
 operational flags, but they do not grant admin access without the OIDC
@@ -324,4 +348,7 @@ CI and `scripts/container_smoke.py` assert that the final runtime:
 - contains no app tests, Playwright/e2e directories, or test fixtures;
 - contains no committed `.env*` file or secret-shaped environment file;
 - serves `/health/live`;
+- returns `400` for an empty-form `POST /oidc/backchannel-logout/` and `405` for
+  `GET /oidc/backchannel-logout/`, without submitting a token or retaining a
+  response body;
 - serves the compiled SPA and frontend assets.

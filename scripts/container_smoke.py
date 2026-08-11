@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 
@@ -60,6 +61,7 @@ PY
         "OIDC_CLIENT_SECRET=audit",
         "OIDC_CALLBACK_URL=http://localhost/oidc/callback/",
         "OIDC_LOGOUT_URL=https://example.invalid/logout/",
+        "OIDC_POST_LOGOUT_REDIRECT_URL=https://auth.linik.ru/",
     ]
     command = ["run", "--rm", "--entrypoint", "/bin/sh"]
     for value in env:
@@ -80,6 +82,23 @@ def wait_for(url: str, timeout: float = 30) -> bytes:
     raise AssertionError(f"timed out waiting for {url}")
 
 
+def request_status(url: str, method: str) -> int:
+    request = urllib.request.Request(
+        url,
+        data=b"" if method == "POST" else None,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Forwarded-Proto": "https",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=2) as response:
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
+
+
 def smoke_server(image: str) -> None:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -96,6 +115,7 @@ def smoke_server(image: str) -> None:
         "OIDC_CLIENT_SECRET=audit",
         f"OIDC_CALLBACK_URL=http://localhost:{host_port}/oidc/callback/",
         "OIDC_LOGOUT_URL=https://example.invalid/logout/",
+        "OIDC_POST_LOGOUT_REDIRECT_URL=https://auth.linik.ru/",
     ]
     command = ["run", "-d", "--name", name, "-p", f"{host_port}:8000"]
     for value in env:
@@ -108,6 +128,9 @@ def smoke_server(image: str) -> None:
         assert b"<html" in spa.lower()
         asset_path = spa.decode().split('src="/static/frontend/')[1].split('"')[0]
         assert wait_for(base + "/static/frontend/" + asset_path)
+        backchannel_url = base + "/oidc/backchannel-logout/"
+        assert request_status(backchannel_url, "POST") == 400
+        assert request_status(backchannel_url, "GET") == 405
         docker("stop", "--time", "15", name)
         state = json.loads(docker("inspect", name).stdout)[0]["State"]
         assert state["ExitCode"] == 0, state

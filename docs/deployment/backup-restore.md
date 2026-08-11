@@ -53,7 +53,12 @@ Capture enough metadata to restore:
 
 5. Confirm OIDC users still have expected `rentals_oidcidentity` rows. Do not
    rebuild identity mappings from email.
-6. If FX rates are stale or intentionally absent for restored business-record
+6. Confirm the restored schema contains the Rent OIDC session registry and
+   logout replay-protection tables (`rentals_oidcsession` and
+   `rentals_oidclogoutreplay`). Verify schema presence and migrations only;
+   never print session keys, provider session identifiers, subjects, tokens,
+   cookies, headers, response bodies, or table contents into restore evidence.
+7. If FX rates are stale or intentionally absent for restored business-record
    dates, run the scheduled full gap scan once:
 
    ```bash
