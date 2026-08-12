@@ -241,10 +241,9 @@ def test_password_view_cannot_be_invoked_when_local_auth_is_disabled():
     LOGOUT_REDIRECT_URL="https://auth.linik.ru/",
     OIDC_OP_LOGOUT_URL_METHOD="property_rental.oidc.provider_logout_url",
     OIDC_LOGOUT_URL="https://auth.example/application/o/rent/end-session/",
-    OIDC_POST_LOGOUT_REDIRECT_URL="https://auth.linik.ru/",
 )
-def test_oidc_logout_clears_the_local_session_and_ends_at_branded_authentik():
-    """A visible logout must clear Rent first, then use the fixed SSO completion."""
+def test_oidc_logout_clears_the_local_session_then_uses_bare_provider_end_session():
+    """A visible logout must not send a redirect that requires a stored ID token."""
     user = User.objects.create_user("logout-user")
     client = Client()
     authorize(client, user)
@@ -252,8 +251,5 @@ def test_oidc_logout_clears_the_local_session_and_ends_at_branded_authentik():
     response = client.get("/oidc/logout/")
 
     assert response.status_code == 302
-    assert response["Location"] == (
-        "https://auth.example/application/o/rent/end-session/"
-        "?post_logout_redirect_uri=https%3A%2F%2Fauth.linik.ru%2F"
-    )
+    assert response["Location"] == "https://auth.example/application/o/rent/end-session/"
     assert not client.session.items()

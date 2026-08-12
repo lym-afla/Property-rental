@@ -130,7 +130,9 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
         "'logout_method': settings.OIDC_OP_LOGOUT_URL_METHOD, "
         "'logout_url': __import__('django.utils.module_loading').utils.module_loading.import_string("
         "settings.OIDC_OP_LOGOUT_URL_METHOD)(None), "
-        "'allow_get': settings.ALLOW_LOGOUT_GET_METHOD}",
+        "'allow_get': settings.ALLOW_LOGOUT_GET_METHOD, "
+        "'store_id_token': settings.OIDC_STORE_ID_TOKEN, "
+        "'store_access_token': settings.OIDC_STORE_ACCESS_TOKEN}",
         setup=True,
     )
 
@@ -138,8 +140,10 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
     assert json.loads(result.stdout) == {
         "callback": "/identity/callback/",
         "logout_method": "property_rental.oidc.provider_logout_url",
-        "logout_url": "https://auth.linik.ru/custom/end-session/?post_logout_redirect_uri=https%3A%2F%2Fauth.linik.ru%2F",
+        "logout_url": "https://auth.linik.ru/custom/end-session/",
         "allow_get": True,
+        "store_id_token": False,
+        "store_access_token": False,
     }
 
 
