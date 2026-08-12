@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/api/client'
 import { useMe } from '@/api/auth'
+import { queryKeys } from '@/api/keys'
 import { clearOidcAttempt } from '@/api/oidcAttempt'
 import type { User } from '@/types/user'
 
@@ -11,19 +13,40 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue>({ user: null, isLoading: true })
 
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const { data: user, isLoading } = useMe()
+export function SessionProvider({
+  children,
+  reload = () => window.location.reload(),
+}: {
+  children: ReactNode
+  reload?: () => void
+}) {
+  const queryClient = useQueryClient()
+  const { data: user, isLoading, isFetching } = useMe()
 
   useEffect(() => {
     if (user) clearOidcAttempt()
   }, [user])
 
-  // Listen for 401 events from the API client and refetch.
+  // A later 401 is authoritative: hide identity immediately and discard all
+  // user-scoped query data before any protected chrome can render again.
   useEffect(() => {
-    const handler = () => { /* React Query will refetch on next query invalidation */ }
+    const handler = () => {
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== 'auth',
+      })
+      queryClient.setQueryData(queryKeys.auth.me, null)
+    }
     window.addEventListener('auth:unauthorized', handler)
     return () => window.removeEventListener('auth:unauthorized', handler)
-  }, [])
+  }, [queryClient])
+
+  useEffect(() => {
+    const revalidateRestoredPage = (event: PageTransitionEvent) => {
+      if (event.persisted) reload()
+    }
+    window.addEventListener('pageshow', revalidateRestoredPage)
+    return () => window.removeEventListener('pageshow', revalidateRestoredPage)
+  }, [reload])
 
   // Task 13: prime the CSRF cookie on app boot. Django's
   // ``CsrfViewMiddleware`` only stamps ``csrftoken`` on HTML responses, but
@@ -40,7 +63,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <SessionContext.Provider value={{ user: user ?? null, isLoading }}>
+    <SessionContext.Provider value={{ user: user ?? null, isLoading: isLoading || isFetching }}>
       {children}
     </SessionContext.Provider>
   )

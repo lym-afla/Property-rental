@@ -48,6 +48,9 @@ class SpaView(TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
-        # Optionally check auth here for protected routes — but the SPA
-        # handles that client-side via API 401s.
-        return super().get(request, *args, **kwargs)
+        response = super().get(request, *args, **kwargs)
+        # The shell contains no authoritative data, but caching it can restore
+        # an authenticated-looking DOM after the central session has ended.
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        return response

@@ -73,6 +73,8 @@ export function useMe() {
       }
     },
     retry: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 }
 

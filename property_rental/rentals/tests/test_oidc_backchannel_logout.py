@@ -1,9 +1,13 @@
 from datetime import timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import threading
 from types import SimpleNamespace
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
@@ -17,6 +21,7 @@ from rentals.models import OIDCIdentity, OIDCLogoutReplay, OIDCSession, User
 ISSUER = "https://auth.example/application/o/rent/"
 OTHER_ISSUER = "https://other-auth.example/application/o/rent/"
 BACKCHANNEL_LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout"
+ORIGINAL_GET_SIGNING_KEY_FROM_JWT = jwt.PyJWKClient.get_signing_key_from_jwt
 
 
 @pytest.fixture
@@ -305,6 +310,88 @@ def test_jwks_client_is_reused_between_validations(settings, monkeypatch, signin
     validate_logout_token(make_logout_token(signing_keys[0], jti="logout-event-2"))
 
     assert len(clients_seen) == 1
+
+
+def test_jwks_fetch_identifies_rent_to_the_public_auth_boundary(
+    settings, monkeypatch, signing_keys
+):
+    """Removing Rent's explicit JWKS user agent must break key discovery."""
+    from rentals.oidc_logout import _get_jwk_client, validate_logout_token
+
+    expected_user_agent = "LifeOS-Rent-OIDC/1.0"
+    public_jwk = RSAAlgorithm.to_jwk(signing_keys[1], as_dict=True)
+    public_jwk["kid"] = "test-key"
+
+    class JwksHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.headers.get("User-Agent") != expected_user_agent:
+                self.send_response(403)
+                self.end_headers()
+                return
+            body = json.dumps({"keys": [public_jwk]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), JwksHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    settings.OIDC_OP_JWKS_ENDPOINT = (
+        f"http://127.0.0.1:{server.server_address[1]}/jwks/"
+    )
+    _get_jwk_client.cache_clear()
+    monkeypatch.setattr(
+        jwt.PyJWKClient,
+        "get_signing_key_from_jwt",
+        ORIGINAL_GET_SIGNING_KEY_FROM_JWT,
+    )
+
+    try:
+        claims = validate_logout_token(make_logout_token(signing_keys[0]))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+        _get_jwk_client.cache_clear()
+
+    assert claims.sid == "provider-session-1"
+
+
+@pytest.mark.django_db
+def test_rejected_logout_logs_only_a_bounded_reason_code(
+    client, signing_keys, caplog
+):
+    """Replacing safe reason codes with silence or token details must fail."""
+    token = make_logout_token(
+        signing_keys[0],
+        extra_claims={"nonce": "sensitive-diagnostic-marker"},
+    )
+
+    with caplog.at_level("WARNING", logger="rentals.api.oidc_logout"):
+        response = post_logout(client, token)
+
+    assert response.status_code == 400
+    matching = []
+    for record in caplog.records:
+        try:
+            payload = json.loads(record.getMessage())
+        except json.JSONDecodeError:
+            continue
+        if payload.get("event") == "oidc_backchannel_logout_rejected":
+            matching.append(payload)
+    assert len(matching) == 1
+    assert matching[0] == {
+        "event": "oidc_backchannel_logout_rejected",
+        "reason_code": "nonce",
+    }
+    rendered = "\n".join(caplog.messages)
+    assert token not in rendered
+    assert "sensitive-diagnostic-marker" not in rendered
 
 
 @pytest.mark.django_db

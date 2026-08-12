@@ -51,6 +51,8 @@ def test_unknown_route_serves_spa_shell(db):
     assert '<div id="root"></div>' in body, (
         "spa_index.html should render the React mount point div#root"
     )
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Pragma"] == "no-cache"
 
 
 @pytest.mark.django_db
@@ -98,4 +100,5 @@ def test_anonymous_root_does_not_500(db):
         f"{response.status_code} (500 would mean the latent KeyError on "
         f"request.session['default_currency'] regressed)"
     )
+    assert response.headers["Cache-Control"] == "no-store"
 

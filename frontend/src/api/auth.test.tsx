@@ -44,6 +44,28 @@ describe('useMe', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.username).toBe('alice')
   })
+
+  it('rechecks the authoritative session on every protected app boot', async () => {
+    // Break caught: restoring a cached authenticated query must not render
+    // protected data for up to the global one-minute stale window.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+    })
+    qc.setQueryData(queryKeys.auth.me, fixtureUser)
+    let requests = 0
+    server.use(
+      http.get('/api/v1/auth/me/', () => {
+        requests += 1
+        return new HttpResponse(null, { status: 403 })
+      }),
+    )
+
+    const { result } = renderHook(() => useMe(), { wrapper: wrapperFor(qc) })
+
+    await waitFor(() => expect(result.current.data).toBeNull())
+    expect(requests).toBe(1)
+    expect(qc.getQueryData(queryKeys.properties.all)).toBeUndefined()
+  })
 })
 
 describe('useLogin', () => {
@@ -77,6 +99,7 @@ describe('useLogin', () => {
     expect(qc.getQueryData(aliceAnalyticsKey)).toBeUndefined()
     expect(qc.getQueryData(queryKeys.properties.all)).toBeUndefined()
   })
+
 })
 
 describe('useRegister', () => {

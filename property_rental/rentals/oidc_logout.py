@@ -15,6 +15,7 @@ from .models import OIDCLogoutReplay, OIDCSession
 
 BACKCHANNEL_LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout"
 REPLAY_PRUNE_LIMIT = 100
+JWKS_USER_AGENT = "LifeOS-Rent-OIDC/1.0"
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,12 @@ def _nonempty_identifier(
 
 @lru_cache(maxsize=8)
 def _get_jwk_client(endpoint: str) -> jwt.PyJWKClient:
-    return jwt.PyJWKClient(endpoint, lifespan=300, timeout=5)
+    return jwt.PyJWKClient(
+        endpoint,
+        lifespan=300,
+        timeout=5,
+        headers={"User-Agent": JWKS_USER_AGENT},
+    )
 
 
 def validate_logout_token(raw_token: str, now: datetime | None = None) -> LogoutClaims:
