@@ -54,7 +54,7 @@ LOCAL_PASSWORD_AUTH_ENABLED = True
 LIFE_OS_PROFILE_URL = None
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
+    'property_rental.middleware.InternalBackchannelSecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise here
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
