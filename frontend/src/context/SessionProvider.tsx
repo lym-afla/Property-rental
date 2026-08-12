@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { apiFetch } from '@/api/client'
 import { useMe } from '@/api/auth'
+import { clearOidcAttempt } from '@/api/oidcAttempt'
 import type { User } from '@/types/user'
 
 type SessionContextValue = {
@@ -12,6 +13,10 @@ const SessionContext = createContext<SessionContextValue>({ user: null, isLoadin
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const { data: user, isLoading } = useMe()
+
+  useEffect(() => {
+    if (user) clearOidcAttempt()
+  }, [user])
 
   // Listen for 401 events from the API client and refetch.
   useEffect(() => {

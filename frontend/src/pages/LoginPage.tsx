@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { getOidcLoginUrl, getRuntimeConfig, useLogin } from '@/api/auth'
+import { hasRecentOidcAttempt, recordOidcAttempt } from '@/api/oidcAttempt'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
-const OIDC_ATTEMPT_KEY = 'property-rental:oidc-attempt'
-const OIDC_LOOP_WINDOW_MS = 30_000
 const replaceWindowLocation = (url: string) => window.location.replace(url)
 
 type LoginPageProps = {
@@ -26,27 +25,11 @@ export function LoginPage({
   const location = useLocation()
   const requestedPath = (location.state as { from?: string } | null)?.from ?? '/'
   const oidcLoginUrl = getOidcLoginUrl(requestedPath)
-  let recentMatchingAttempt = false
-  if (!localPasswordAuthEnabled) {
-    try {
-      const attempt = JSON.parse(window.sessionStorage.getItem(OIDC_ATTEMPT_KEY) ?? 'null') as {
-        path?: unknown
-        timestamp?: unknown
-      } | null
-      recentMatchingAttempt = attempt?.path === requestedPath
-        && typeof attempt.timestamp === 'number'
-        && Date.now() - attempt.timestamp < OIDC_LOOP_WINDOW_MS
-    } catch {
-      window.sessionStorage.removeItem(OIDC_ATTEMPT_KEY)
-    }
-  }
+  const recentMatchingAttempt = !localPasswordAuthEnabled && hasRecentOidcAttempt(requestedPath)
 
   useEffect(() => {
     if (localPasswordAuthEnabled || recentMatchingAttempt) return
-    window.sessionStorage.setItem(OIDC_ATTEMPT_KEY, JSON.stringify({
-      path: requestedPath,
-      timestamp: Date.now(),
-    }))
+    recordOidcAttempt(requestedPath)
     navigateToOidc(oidcLoginUrl)
   }, [localPasswordAuthEnabled, navigateToOidc, oidcLoginUrl, recentMatchingAttempt, requestedPath])
 
