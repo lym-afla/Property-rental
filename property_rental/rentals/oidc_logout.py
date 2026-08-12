@@ -78,6 +78,8 @@ def validate_logout_token(raw_token: str, now: datetime | None = None) -> Logout
         raise jwt.InvalidTokenError("missing logout target")
     if claims.get("events") != {BACKCHANNEL_LOGOUT_EVENT: {}}:
         raise jwt.InvalidTokenError("invalid logout event")
+    if "nonce" in claims:
+        raise jwt.InvalidTokenError("nonce is not permitted in a logout token")
 
     iat = claims["iat"]
     if isinstance(iat, bool) or not isinstance(iat, (int, float)):

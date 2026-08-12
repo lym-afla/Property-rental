@@ -7,6 +7,7 @@ from django.urls import include, path
 
 from rentals.api.oidc_logout import BackChannelLogoutView
 
+from .oidc import RentalOIDCLogoutView
 from .urls import handler404, urlpatterns as base_urlpatterns
 
 
@@ -21,6 +22,11 @@ urlpatterns = [
         "oidc/backchannel-logout/",
         BackChannelLogoutView.as_view(),
         name="oidc_backchannel_logout",
+    ),
+    path(
+        f"{_oidc_prefix}logout/",
+        RentalOIDCLogoutView.as_view(),
+        name="oidc_logout",
     ),
     path(_oidc_prefix, include("mozilla_django_oidc.urls")),
     *[

@@ -14,12 +14,32 @@ DATABASES = {"default": postgres_database(required_env("DATABASE_URL"))}
 AUTHENTICATION_BACKENDS = [
     "rentals.oidc.RentalOIDCAuthenticationBackend",
 ]
+_CANONICAL_OIDC_ISSUER = "https://auth.linik.ru/application/o/lifeos-rent/"
+_CANONICAL_OIDC_CALLBACK_URL = "https://rent.linik.ru/oidc/callback/"
+_CANONICAL_OIDC_LOGOUT_URL = (
+    "https://auth.linik.ru/application/o/lifeos-rent/end-session/"
+)
+
+
+def _require_exact_oidc_url(name, value, expected):
+    if value != expected:
+        raise RuntimeError(f"{name} must be {expected}")
+    return value
+
+
 OIDC_ISSUER = required_env("OIDC_ISSUER")
 OIDC_RP_CLIENT_ID = required_env("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = required_env("OIDC_CLIENT_SECRET")
 OIDC_CALLBACK_URL = required_env("OIDC_CALLBACK_URL")
 OIDC_LOGOUT_URL = required_env("OIDC_LOGOUT_URL")
 OIDC_POST_LOGOUT_REDIRECT_URL = required_env("OIDC_POST_LOGOUT_REDIRECT_URL")
+_require_exact_oidc_url("OIDC_ISSUER", OIDC_ISSUER, _CANONICAL_OIDC_ISSUER)
+_require_exact_oidc_url(
+    "OIDC_CALLBACK_URL", OIDC_CALLBACK_URL, _CANONICAL_OIDC_CALLBACK_URL
+)
+_require_exact_oidc_url(
+    "OIDC_LOGOUT_URL", OIDC_LOGOUT_URL, _CANONICAL_OIDC_LOGOUT_URL
+)
 if OIDC_POST_LOGOUT_REDIRECT_URL != "https://auth.linik.ru/":
     raise RuntimeError(
         "OIDC_POST_LOGOUT_REDIRECT_URL must be https://auth.linik.ru/"

@@ -319,6 +319,22 @@ def test_logout_event_value_must_be_empty_object(client, signing_keys):
 
 
 @pytest.mark.django_db
+def test_nonce_claim_is_rejected_without_logout_side_effects(client, signing_keys):
+    """Accepting nonce violates the OIDC back-channel logout token contract."""
+    registered = register_session()
+
+    response = post_logout(
+        client,
+        make_logout_token(signing_keys[0], extra_claims={"nonce": "not-allowed"}),
+    )
+
+    assert response.status_code == 400
+    assert Session.objects.filter(session_key=registered.session_key).exists()
+    assert OIDCSession.objects.filter(pk=registered.pk).exists()
+    assert OIDCLogoutReplay.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_endpoint_requires_form_logout_token(client, signing_keys):
     token = make_logout_token(signing_keys[0])
 

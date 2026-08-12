@@ -9,9 +9,10 @@ from django.test import Client, RequestFactory, override_settings
 from django.urls import include, path
 from django.utils import timezone
 
-from rentals.models import User
+from rentals.models import OIDCIdentity, OIDCSession, User
 from rentals.oidc import ADMIN_GROUP, VIEWER_GROUP, mark_session_authorized
 from rentals.api.auth import LoginView
+from property_rental.oidc import RentalOIDCLogoutView
 from rest_framework.test import APIRequestFactory
 
 
@@ -31,6 +32,7 @@ def health_view(request):
 urlpatterns = [
     path("protected/", protected_view),
     path("health/", health_view),
+    path("oidc/logout/", RentalOIDCLogoutView.as_view(), name="oidc_logout"),
     path("oidc/", include("mozilla_django_oidc.urls")),
 ]
 
@@ -247,9 +249,39 @@ def test_oidc_logout_clears_the_local_session_then_uses_bare_provider_end_sessio
     user = User.objects.create_user("logout-user")
     client = Client()
     authorize(client, user)
+    identity = OIDCIdentity.objects.create(
+        user=user,
+        issuer="https://auth.example/application/o/rent/",
+        subject="logout-user-subject",
+    )
+    current_session_key = client.session.session_key
+    current = OIDCSession.objects.create(
+        identity=identity,
+        sid="current-provider-session",
+        session_key=current_session_key,
+    )
+    unrelated_user = User.objects.create_user("unrelated-logout-user")
+    unrelated_identity = OIDCIdentity.objects.create(
+        user=unrelated_user,
+        issuer="https://auth.example/application/o/rent/",
+        subject="unrelated-subject",
+    )
+    unrelated = OIDCSession.objects.create(
+        identity=unrelated_identity,
+        sid="unrelated-provider-session",
+        session_key="unrelated-session-key",
+    )
 
     response = client.get("/oidc/logout/")
 
     assert response.status_code == 302
     assert response["Location"] == "https://auth.example/application/o/rent/end-session/"
     assert not client.session.items()
+    assert not OIDCSession.objects.filter(pk=current.pk).exists()
+    assert OIDCSession.objects.filter(pk=unrelated.pk).exists()
+
+    repeated = client.get("/oidc/logout/")
+
+    assert repeated.status_code == 302
+    assert repeated["Location"] == "https://auth.example/application/o/rent/end-session/"
+    assert OIDCSession.objects.filter(pk=unrelated.pk).exists()

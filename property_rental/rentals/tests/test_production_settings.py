@@ -21,11 +21,11 @@ def production_environment(**overrides: str) -> dict[str, str]:
             "DJANGO_ALLOWED_HOSTS": "rent.linik.ru, www.rent.linik.ru,",
             "DJANGO_CSRF_TRUSTED_ORIGINS": "https://rent.linik.ru,https://www.rent.linik.ru,",
             "BUSINESS_TIME_ZONE": "Europe/Moscow",
-            "OIDC_ISSUER": "https://auth.linik.ru/application/o/rent/",
+            "OIDC_ISSUER": "https://auth.linik.ru/application/o/lifeos-rent/",
             "OIDC_CLIENT_ID": "rent-test",
             "OIDC_CLIENT_SECRET": "test-only",
             "OIDC_CALLBACK_URL": "https://rent.linik.ru/oidc/callback/",
-            "OIDC_LOGOUT_URL": "https://auth.linik.ru/application/o/rent/end-session/",
+            "OIDC_LOGOUT_URL": "https://auth.linik.ru/application/o/lifeos-rent/end-session/",
             "OIDC_POST_LOGOUT_REDIRECT_URL": "https://auth.linik.ru/",
         }
     )
@@ -119,13 +119,10 @@ def test_production_requires_allowed_hosts_and_csrf_trusted_origins():
         assert name in result.stderr
 
 
-def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
-    """OIDC callback routing and provider logout must consume their env values."""
+def test_oidc_callback_and_logout_use_canonical_production_boundaries():
+    """Production must expose only the reviewed callback and logout endpoints."""
     result = import_settings(
-        production_environment(
-            OIDC_CALLBACK_URL="https://rent.linik.ru/identity/callback/",
-            OIDC_LOGOUT_URL="https://auth.linik.ru/custom/end-session/",
-        ),
+        production_environment(),
         "{'callback': __import__('django.urls').urls.reverse('oidc_authentication_callback'), "
         "'logout_method': settings.OIDC_OP_LOGOUT_URL_METHOD, "
         "'logout_url': __import__('django.utils.module_loading').utils.module_loading.import_string("
@@ -138,13 +135,42 @@ def test_oidc_callback_and_logout_environment_drive_integration_boundaries():
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "callback": "/identity/callback/",
+        "callback": "/oidc/callback/",
         "logout_method": "property_rental.oidc.provider_logout_url",
-        "logout_url": "https://auth.linik.ru/custom/end-session/",
+        "logout_url": "https://auth.linik.ru/application/o/lifeos-rent/end-session/",
         "allow_get": True,
         "store_id_token": False,
         "store_access_token": False,
     }
+
+
+def test_production_rejects_noncanonical_oidc_origins_and_paths():
+    """Changing any trusted OIDC origin/path must fail production startup."""
+    invalid_values = [
+        ("OIDC_ISSUER", "http://auth.linik.ru/application/o/lifeos-rent/"),
+        ("OIDC_ISSUER", "https://auth.example/application/o/lifeos-rent/"),
+        ("OIDC_ISSUER", "https://auth.linik.ru.evil.example/application/o/lifeos-rent/"),
+        ("OIDC_ISSUER", "https://evil.example@auth.linik.ru/application/o/lifeos-rent/"),
+        ("OIDC_ISSUER", "https://auth.linik.ru/application/o/other/"),
+        ("OIDC_ISSUER", "https://auth.linik.ru/application/o/lifeos-rent/?next=evil"),
+        ("OIDC_CALLBACK_URL", "http://rent.linik.ru/oidc/callback/"),
+        ("OIDC_CALLBACK_URL", "https://rent.example/oidc/callback/"),
+        ("OIDC_CALLBACK_URL", "https://evil.example@rent.linik.ru/oidc/callback/"),
+        ("OIDC_CALLBACK_URL", "https://rent.linik.ru/identity/callback/"),
+        ("OIDC_CALLBACK_URL", "https://rent.linik.ru/oidc/callback/#fragment"),
+        ("OIDC_LOGOUT_URL", "http://auth.linik.ru/application/o/lifeos-rent/end-session/"),
+        ("OIDC_LOGOUT_URL", "https://auth.example/application/o/lifeos-rent/end-session/"),
+        ("OIDC_LOGOUT_URL", "https://evil.example@auth.linik.ru/application/o/lifeos-rent/end-session/"),
+        ("OIDC_LOGOUT_URL", "https://auth.linik.ru/application/o/other/end-session/"),
+        ("OIDC_LOGOUT_URL", "https://auth.linik.ru/application/o/lifeos-rent/end-session/?next=evil"),
+        ("OIDC_LOGOUT_URL", "https://auth.linik.ru/application/o/lifeos-rent/end-session/#fragment"),
+    ]
+
+    for name, value in invalid_values:
+        result = import_settings(production_environment(**{name: value}))
+
+        assert result.returncode != 0, (name, value, result.stdout)
+        assert name in result.stderr
 
 
 def test_production_requires_the_registered_branded_logout_completion_url():
