@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { getOidcLoginUrl, getRuntimeConfig, useLogin } from '@/api/auth'
 import { Button } from '@/components/ui/button'
@@ -6,7 +6,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
-export function LoginPage() {
+const OIDC_ATTEMPT_KEY = 'property-rental:oidc-attempt'
+const OIDC_LOOP_WINDOW_MS = 30_000
+const replaceWindowLocation = (url: string) => window.location.replace(url)
+
+type LoginPageProps = {
+  navigateToOidc?: (url: string) => void
+}
+
+export function LoginPage({
+  navigateToOidc = replaceWindowLocation,
+}: LoginPageProps = {}) {
   const { localPasswordAuthEnabled } = getRuntimeConfig()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -15,6 +25,30 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const requestedPath = (location.state as { from?: string } | null)?.from ?? '/'
+  const oidcLoginUrl = getOidcLoginUrl(requestedPath)
+  let recentMatchingAttempt = false
+  if (!localPasswordAuthEnabled) {
+    try {
+      const attempt = JSON.parse(window.sessionStorage.getItem(OIDC_ATTEMPT_KEY) ?? 'null') as {
+        path?: unknown
+        timestamp?: unknown
+      } | null
+      recentMatchingAttempt = attempt?.path === requestedPath
+        && typeof attempt.timestamp === 'number'
+        && Date.now() - attempt.timestamp < OIDC_LOOP_WINDOW_MS
+    } catch {
+      window.sessionStorage.removeItem(OIDC_ATTEMPT_KEY)
+    }
+  }
+
+  useEffect(() => {
+    if (localPasswordAuthEnabled || recentMatchingAttempt) return
+    window.sessionStorage.setItem(OIDC_ATTEMPT_KEY, JSON.stringify({
+      path: requestedPath,
+      timestamp: Date.now(),
+    }))
+    navigateToOidc(oidcLoginUrl)
+  }, [localPasswordAuthEnabled, navigateToOidc, oidcLoginUrl, recentMatchingAttempt, requestedPath])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,16 +67,23 @@ export function LoginPage() {
   }
 
   if (!localPasswordAuthEnabled) {
+    if (!recentMatchingAttempt) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <p role="status" aria-label="Continuing to Authentik">Continuing to your organization account…</p>
+        </div>
+      )
+    }
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>Use your organization account to access your portfolio.</CardDescription>
+            <CardDescription>Automatic sign-in did not complete.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button className="w-full" asChild>
-              <a href={getOidcLoginUrl(requestedPath)}>Sign in with Authentik</a>
+              <a href={oidcLoginUrl}>Try sign in with Authentik again</a>
             </Button>
           </CardContent>
         </Card>
