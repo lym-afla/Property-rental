@@ -252,6 +252,7 @@ def test_get_or_create_user_syncs_changed_claims_for_linked_subject(backend):
         "family_name": "Profile",
         "email": "new@example.com",
     }
+    backend.request = RequestFactory().get("/oidc/callback/")
 
     with override_settings(OIDC_CREATE_USER=False), patch.object(
         backend, "get_userinfo", return_value=claims
@@ -259,7 +260,9 @@ def test_get_or_create_user_syncs_changed_claims_for_linked_subject(backend):
         "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
         return_value=True,
     ):
-        assert backend.get_or_create_user("access", "id", {}) == user
+        assert backend.get_or_create_user(
+            "access", "id", {"sid": "provider-session-abc"}
+        ) == user
 
     user.refresh_from_db()
     assert user.username == "new-name"
@@ -277,12 +280,15 @@ def test_userinfo_without_viewer_group_does_not_sync_profile(backend):
         "preferred_username": "new-name",
         "email": "new@example.com",
     }
+    backend.request = RequestFactory().get("/oidc/callback/")
 
     with patch.object(backend, "get_userinfo", return_value=claims), patch(
         "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
         return_value=True,
     ), pytest.raises(SuspiciousOperation, match="Claims verification failed"):
-        backend.get_or_create_user("access", "id", {})
+        backend.get_or_create_user(
+            "access", "id", {"sid": "provider-session-abc"}
+        )
 
     user.refresh_from_db()
     assert user.username == "old-name"
@@ -307,6 +313,7 @@ def test_absent_identity_link_does_not_create_or_merge_by_email_when_creation_di
         "preferred_username": "claim-name",
         "email": local.email,
     }
+    backend.request = RequestFactory().get("/oidc/callback/")
 
     with override_settings(OIDC_CREATE_USER=False), patch.object(
         backend, "get_userinfo", return_value=claims
@@ -314,7 +321,9 @@ def test_absent_identity_link_does_not_create_or_merge_by_email_when_creation_di
         "mozilla_django_oidc.auth.OIDCAuthenticationBackend.verify_claims",
         return_value=True,
     ):
-        assert backend.get_or_create_user("access", "id", {}) is None
+        assert backend.get_or_create_user(
+            "access", "id", {"sid": "provider-session-unlinked"}
+        ) is None
 
     local.refresh_from_db()
     assert local.username == "local"

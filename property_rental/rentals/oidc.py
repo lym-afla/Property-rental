@@ -24,6 +24,7 @@ PROFILE_CLAIM_FIELDS = {
 OIDC_SESSION_ISSUER_KEY = "oidc_session_issuer"
 OIDC_SESSION_SUBJECT_KEY = "oidc_session_subject"
 OIDC_SESSION_SID_KEY = "oidc_session_sid"
+_VERIFIED_ID_TOKEN_SID_ATTR = "_rent_verified_id_token_sid"
 
 
 def _identity_claims(claims):
@@ -51,15 +52,31 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def authenticate(self, request, **kwargs):
         self._authorization_groups = ()
         self._validated_session_claims = None
-        user = super().authenticate(request, **kwargs)
-        groups = self._authorization_groups if user is not None else ()
-        mark_session_authorized(request, groups)
-        if user is not None and VIEWER_GROUP in groups and self._validated_session_claims:
-            issuer, subject, sid = self._validated_session_claims
-            request.session[OIDC_SESSION_ISSUER_KEY] = issuer
-            request.session[OIDC_SESSION_SUBJECT_KEY] = subject
-            request.session[OIDC_SESSION_SID_KEY] = sid
-        return user
+        try:
+            user = super().authenticate(request, **kwargs)
+            groups = self._authorization_groups if user is not None else ()
+            mark_session_authorized(request, groups)
+            if (
+                user is not None
+                and VIEWER_GROUP in groups
+                and self._validated_session_claims
+            ):
+                issuer, subject, sid = self._validated_session_claims
+                request.session[OIDC_SESSION_ISSUER_KEY] = issuer
+                request.session[OIDC_SESSION_SUBJECT_KEY] = subject
+                request.session[OIDC_SESSION_SID_KEY] = sid
+            return user
+        finally:
+            if request is not None:
+                request.__dict__.pop(_VERIFIED_ID_TOKEN_SID_ATTR, None)
+
+    def get_or_create_user(self, access_token, id_token, payload):
+        """Carry only a verified ID-token ``sid`` through userinfo validation."""
+        sid = payload.get("sid")
+        if not isinstance(sid, str) or not sid or len(sid) > 255:
+            raise SuspiciousOperation("Verified ID token requires a valid sid")
+        setattr(self.request, _VERIFIED_ID_TOKEN_SID_ATTR, sid)
+        return super().get_or_create_user(access_token, id_token, payload)
 
     def verify_claims(self, claims: dict) -> bool:
         self._validated_session_claims = None
@@ -77,7 +94,10 @@ class RentalOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             and VIEWER_GROUP in groups
         )
         if verified:
-            self._validated_session_claims = (issuer, subject, claims.get("sid"))
+            request = getattr(self, "request", None)
+            sid = getattr(request, _VERIFIED_ID_TOKEN_SID_ATTR, None)
+            if isinstance(sid, str) and sid and len(sid) <= 255:
+                self._validated_session_claims = (issuer, subject, sid)
         return verified
 
     def filter_users_by_claims(self, claims: dict):
