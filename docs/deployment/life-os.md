@@ -229,6 +229,15 @@ operator session, terminate that Authentik session administratively and confirm
 Rent is invalidated. Record only sanitized outcomes in the Life OS single-logout
 acceptance record.
 
+### OIDC session reconciliation
+
+`python manage.py purge_oidc_sessions` is a maintenance-only command for the
+controlled session-reconciliation boundary. It dry-runs by default and emits
+counts only. Run it before a new login; use
+`python manage.py purge_oidc_sessions --confirm-all-current` only to perform
+the transactional maintenance purge of the associations and Django sessions
+currently selected at that boundary.
+
 In production, Django admin also treats Life OS identity fields and Django
 password hashes as read-only. Local `is_staff` and `is_superuser` remain
 operational flags, but they do not grant admin access without the OIDC
