@@ -28,11 +28,12 @@ jobs:
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_CSRF_TRUSTED_ORIGINS: https://localhost
       BUSINESS_TIME_ZONE: Europe/Moscow
-      OIDC_ISSUER: https://oidc.example.invalid/
+      OIDC_ISSUER: https://auth.linik.ru/application/o/lifeos-rent/
       OIDC_CLIENT_ID: ci-only-client
       OIDC_CLIENT_SECRET: ci-only-secret
-      OIDC_CALLBACK_URL: https://localhost/oidc/callback/
-      OIDC_LOGOUT_URL: https://oidc.example.invalid/logout/
+      OIDC_CALLBACK_URL: https://rent.linik.ru/oidc/callback/
+      OIDC_LOGOUT_URL: https://auth.linik.ru/application/o/lifeos-rent/end-session/
+      OIDC_POST_LOGOUT_REDIRECT_URL: https://auth.linik.ru/
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]

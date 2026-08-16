@@ -51,7 +51,9 @@ test('populated dashboard visual baseline preserves chart layout and exact value
   test.setTimeout(60_000)
   await mockAnalyticsApi(page)
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible()
+  // Cold CI runners transform the SPA on first request; allow well past the
+  // default 5s expect timeout for the first render.
+  await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('Net cash flow', { exact: true })).toBeVisible()
   await expect(page.getByText('Cumulative cash', { exact: true })).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
@@ -152,7 +154,7 @@ test('populated dashboard renders in dark mode with the lifted chart palette', a
   await mockAnalyticsApi(page)
   await page.goto('/')
   await expect(page.locator('html')).toHaveClass(/dark/)
-  await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('Net cash flow', { exact: true })).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
   await hideFixedAppChrome(page)
