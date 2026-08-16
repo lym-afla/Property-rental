@@ -5,7 +5,8 @@ import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 
 import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisualTokens, type ChartDataProps } from './chartUtils'
@@ -13,6 +14,7 @@ import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisual
 const TREND_KINDS = new Set(['income_total', 'expense_total'])
 
 export function RevenueExpenseTrendChart({ data, isLoading, isError, onRetry }: ChartDataProps) {
+  const charts = useChartTheme()
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
   const series = data ? seriesWithVisualTokens(data.series.filter((item) => TREND_KINDS.has(item.kind))) : []
   const state = chartState('Revenue and expenses', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
@@ -29,10 +31,10 @@ export function RevenueExpenseTrendChart({ data, isLoading, isError, onRetry }: 
     })} />} table={state.status === 'success' && data ? cashTable(data, series) : undefined}>
       {state.status === 'success' && data && <ResponsiveChartContainer width="100%" height="100%"><LineChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-        <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
-        <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
+        <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} {...CHART_AXIS_PROPS} />
+        <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} {...CHART_AXIS_PROPS} />
         <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
-        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
+        {visibleSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={charts.style(item.visualToken).color} strokeWidth={charts.style(item.visualToken).strokeWidth} dot={false} />)}
       </LineChart></ResponsiveChartContainer>}
     </AnalyticsChartCard>
   )

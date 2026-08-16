@@ -6,7 +6,8 @@ import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analy
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import { Button } from '@/components/ui/button'
 import { formatAccounting, formatCurrencyAxis, formatDate } from '@/lib/format'
 import type { PropertyValuationAnalyticsResponse } from '@/types/analytics'
@@ -61,6 +62,7 @@ function formatValuationStatus(status: string) {
 }
 
 export function ValuationChart(props: Props) {
+  const charts = useChartTheme()
   const { data } = props
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
   const state = stateFor(props)
@@ -113,11 +115,12 @@ export function ValuationChart(props: Props) {
             padding={{ left: VALUATION_AXIS_PADDING, right: VALUATION_AXIS_PADDING }}
             tickFormatter={(value) => formatDate(new Date(Number(value)))}
             minTickGap={24}
+            {...CHART_AXIS_PROPS}
           />
-          <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} />
+          <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} {...CHART_AXIS_PROPS} />
           <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(new Date(Number(label)))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatAccounting(typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
-          {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" maxBarSize={VALUATION_BAR_MAX_SIZE} fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
-          {visibleSeries.filter((item) => item.key === 'total_value').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} />)}
+          {visibleSeries.filter((item) => item.key !== 'total_value').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="valuation" maxBarSize={VALUATION_BAR_MAX_SIZE} fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} />)}
+          {visibleSeries.filter((item) => item.key === 'total_value').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={charts.style(item.visualToken).color} strokeWidth={charts.style(item.visualToken).strokeWidth} dot={false} />)}
         </ComposedChart>
       </ResponsiveChartContainer>}
     </AnalyticsChartCard>

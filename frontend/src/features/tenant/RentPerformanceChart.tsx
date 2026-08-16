@@ -5,7 +5,8 @@ import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analy
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS, type AnalyticsSeriesDefinition } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import { formatAccounting, formatCurrency, formatCurrencyAxis, formatDate } from '@/lib/format'
 import type { TenantRentPerformanceResponse } from '@/types/analytics'
 
@@ -38,6 +39,7 @@ function formatPerformanceValue(key: string, value: number | null, currency: str
 }
 
 export function RentPerformanceChart(props: Props) {
+  const charts = useChartTheme()
   const { data } = props
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
   const state = stateFor(props)
@@ -82,12 +84,12 @@ export function RentPerformanceChart(props: Props) {
           <ResponsiveChartContainer width="100%" height="100%">
             <ComposedChart data={data.points} margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} />
-              <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} />
+              <XAxis dataKey="period_start" tickFormatter={formatDate} minTickGap={24} {...CHART_AXIS_PROPS} />
+              <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), currency)} {...CHART_AXIS_PROPS} />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={formatDate(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatPerformanceValue(String(item.dataKey), typeof item.value === 'number' ? item.value : null, currency) }))} /> : null} />
               <ReferenceLine y={0} stroke="currentColor" aria-label="Variance zero baseline" />
-              {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} />)}
-              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={chartSeriesStyle(item.visualToken).color} strokeWidth={chartSeriesStyle(item.visualToken).strokeWidth} dot={false} activeDot={false} />)}
+              {visibleSeries.filter((item) => item.key === 'received' || item.key === 'variance').map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} />)}
+              {visibleSeries.filter((item) => item.key === 'expected' || item.key === 'cumulative_arrears').map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={charts.style(item.visualToken).color} strokeWidth={charts.style(item.visualToken).strokeWidth} dot={false} activeDot={false} />)}
             </ComposedChart>
           </ResponsiveChartContainer>
         </div>

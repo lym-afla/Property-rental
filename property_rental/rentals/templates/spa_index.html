@@ -5,6 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Property Rental</title>
+    <script>
+        ;(function () {
+            try {
+                var t = localStorage.getItem('theme');
+                if (t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+            } catch (e) {}
+        })()
+    </script>
     {{ spa_config|json_script:"property-rental-config" }}
     <script>
         window.__PROPERTY_RENTAL_CONFIG__ = JSON.parse(

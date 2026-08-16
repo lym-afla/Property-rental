@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-16",
+  "title": "Design System: Rent",
+  "extensions": {
+    "colorMeta": {
+      "instrument-paper": { "role": "neutral", "displayName": "Instrument Paper", "canonical": "oklch(1 0 0)", "tonalRamp": ["oklch(0.269 0 0)", "oklch(0.371 0 0)", "oklch(0.556 0 0)", "oklch(0.708 0 0)", "oklch(0.87 0 0)", "oklch(0.922 0 0)", "oklch(0.97 0 0)", "oklch(1 0 0)"] },
+      "instrument-void": { "role": "neutral", "displayName": "Instrument Void", "canonical": "oklch(0.145 0 0)", "tonalRamp": ["oklch(0.145 0 0)", "oklch(0.205 0 0)", "oklch(0.269 0 0)", "oklch(0.439 0 0)", "oklch(0.556 0 0)", "oklch(0.708 0 0)", "oklch(0.922 0 0)", "oklch(0.97 0 0)"] },
+      "graphite-panel": { "role": "neutral", "displayName": "Graphite Panel", "canonical": "oklch(0.205 0 0)" },
+      "graphite-raised": { "role": "neutral", "displayName": "Graphite Raised", "canonical": "oklch(0.269 0 0)" },
+      "graphite-rule": { "role": "neutral", "displayName": "Graphite Rule", "canonical": "oklch(0.97 0 0)" },
+      "graphite-line": { "role": "neutral", "displayName": "Graphite Line", "canonical": "oklch(0.922 0 0)" },
+      "graphite-mid": { "role": "neutral", "displayName": "Graphite Mid", "canonical": "oklch(0.556 0 0)" },
+      "graphite-ring": { "role": "neutral", "displayName": "Graphite Ring", "canonical": "oklch(0.708 0 0)" },
+      "ledger-red": { "role": "semantic", "displayName": "Ledger Red", "canonical": "oklch(0.577 0.245 27.325)", "tonalRamp": ["oklch(0.25 0.1 27)", "oklch(0.35 0.15 27)", "oklch(0.45 0.2 27)", "oklch(0.577 0.245 27.3)", "oklch(0.67 0.2 27)", "oklch(0.77 0.14 27)", "oklch(0.87 0.08 27)", "oklch(0.95 0.03 27)"] },
+      "ledger-red-dark": { "role": "semantic", "displayName": "Ledger Red Dark", "canonical": "oklch(0.704 0.191 22.216)" },
+      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "#2563EB", "darkCanonical": "#3B82F6", "tonalRamp": ["oklch(0.25 0.08 263)", "oklch(0.35 0.13 263)", "oklch(0.45 0.18 263)", "oklch(0.546 0.215 263)", "oklch(0.65 0.17 263)", "oklch(0.75 0.12 263)", "oklch(0.85 0.07 263)", "oklch(0.94 0.03 263)"] },
+      "signal-amber": { "role": "data", "displayName": "Signal Amber", "canonical": "#D97706" },
+      "signal-green": { "role": "data", "displayName": "Signal Green", "canonical": "#059669" },
+      "signal-violet": { "role": "data", "displayName": "Signal Violet", "canonical": "#7C3AED", "darkCanonical": "#8B5CF6" },
+      "signal-red": { "role": "data", "displayName": "Signal Red", "canonical": "#DC2626", "darkCanonical": "#EF4444" },
+      "signal-cyan": { "role": "data", "displayName": "Signal Cyan", "canonical": "#0891B2" },
+      "signal-magenta": { "role": "data", "displayName": "Signal Magenta", "canonical": "#C026D3" },
+      "signal-lime": { "role": "data", "displayName": "Signal Lime", "canonical": "#65A30D" },
+      "signal-slate": { "role": "data", "displayName": "Signal Slate", "canonical": "#475569", "darkCanonical": "#64748B" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Ledger Figure", "purpose": "Page titles and KPI figures — the loudest voice on any surface." },
+      "title": { "displayName": "Card Title", "purpose": "Card titles; detail-page headings step up to 1.25rem." },
+      "body": { "displayName": "Ledger Body", "purpose": "All default text, table cells, controls, navigation." },
+      "label": { "displayName": "Muted Label", "purpose": "KPI labels, captions, badges; mobile tab labels drop to 11px." }
+    },
+    "motion": [
+      { "name": "state-fade", "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default hover/focus/color transitions on controls and links (framework default)." },
+      { "name": "press-settle", "value": "translateY(1px)", "purpose": "Active buttons press down 1px instead of scaling or shadowing." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled control: graphite fill, paper text, for the primary action on a surface.",
+      "html": "<button class=\"ds-btn-primary\">Save transaction</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, #2563EB); color: var(--primary-foreground, oklch(0.985 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, #2563EB) 90%, oklch(0.145 0 0)); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, #2563EB) 50%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { pointer-events: none; opacity: 0.5; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Hairline workhorse for table row actions and segmented navigation.",
+      "html": "<button class=\"ds-btn-outline\">View detail</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: 10px; background: var(--background, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-outline:hover { background: var(--muted, oklch(0.97 0 0)); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); } .ds-btn-outline:active { transform: translateY(1px); } .ds-btn-outline:disabled { pointer-events: none; opacity: 0.5; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Tinted danger action: 10% red fill with red text, never a solid red.",
+      "html": "<button class=\"ds-btn-danger\">Delete tenant</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 10%, transparent); color: var(--destructive, oklch(0.577 0.245 27.325)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-danger:hover { background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); } .ds-btn-danger:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); } .ds-btn-danger:active { transform: translateY(1px); } .ds-btn-danger:disabled { pointer-events: none; opacity: 0.5; }"
+    },
+    {
+      "name": "Graphite Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Compact 32px field with hairline stroke; focus adds the 3px/50% ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Rent received\" />",
+      "css": ".ds-input { display: block; width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; border-color: var(--ring, oklch(0.708 0 0)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.708 0 0)) 50%, transparent); } .ds-input:disabled { opacity: 0.5; cursor: not-allowed; background: color-mix(in oklch, var(--input, oklch(0.922 0 0)) 50%, transparent); }"
+    },
+    {
+      "name": "Ledger Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat 14px-radius surface with a 1px ring at 10% foreground; footer is a muted hairline band.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Portfolio summary</div><div class=\"ds-card-desc\">All figures in reporting currency.</div><div class=\"ds-card-footer\">Updated by refresh_fx</div></div>",
+      "css": ".ds-card { border-radius: 14px; background: var(--card, oklch(1 0 0)); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); padding: 16px; font-family: 'Geist Variable', system-ui, sans-serif; color: var(--card-foreground, oklch(0.145 0 0)); overflow: hidden; } .ds-card-title { font-size: 1rem; font-weight: 500; line-height: 1.375rem; margin-bottom: 4px; } .ds-card-desc { font-size: 0.875rem; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-card-footer { margin: 16px -16px -16px; padding: 12px 16px; border-top: 1px solid var(--border, oklch(0.922 0 0)); background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 50%, transparent); font-size: 0.875rem; }"
+    },
+    {
+      "name": "KPI Figure Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Signature unit: muted label, one Display-size accounting figure, optional caption.",
+      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-label\">Net cash flow</div><div class=\"ds-kpi-value\">1 284 500.00</div><div class=\"ds-kpi-note\">Last 12 months, RUB</div></div>",
+      "css": ".ds-kpi { display: flex; flex-direction: column; gap: 4px; border-radius: 14px; background: var(--card, oklch(1 0 0)); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); padding: 16px 16px 8px; font-family: 'Geist Variable', system-ui, sans-serif; } .ds-kpi-label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 2rem; color: var(--foreground, oklch(0.145 0 0)); font-variant-numeric: tabular-nums; } .ds-kpi-note { font-size: 0.75rem; color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-secondary",
+      "description": "20px pill for statuses and row tags; secondary, danger-tint, and hairline-outline variants.",
+      "html": "<span class=\"ds-badge\">Renting</span> <span class=\"ds-badge ds-badge--danger\">Arrears</span> <span class=\"ds-badge ds-badge--outline\">Vacant</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; background: var(--secondary, oklch(0.97 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; white-space: nowrap; } .ds-badge--danger { background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 10%, transparent); color: var(--destructive, oklch(0.577 0.245 27.325)); } .ds-badge--outline { background: transparent; box-shadow: inset 0 0 0 1px var(--border, oklch(0.922 0 0)); color: var(--foreground, oklch(0.145 0 0)); }"
+    },
+    {
+      "name": "Primary Navbar",
+      "kind": "nav",
+      "refersTo": "button-primary",
+      "description": "56px ledger bar: wordmark, five data-surface links, account dropdown trigger.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-brand\">Property Rental</span><div class=\"ds-nav-links\"><a class=\"ds-nav-link is-active\" href=\"#\">Dashboard</a><a class=\"ds-nav-link\" href=\"#\">Properties</a><a class=\"ds-nav-link\" href=\"#\">Tenants</a><a class=\"ds-nav-link\" href=\"#\">Transactions</a><a class=\"ds-nav-link\" href=\"#\">FX</a></div><button class=\"ds-nav-user\">operator</button></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; } .ds-nav-brand { font-weight: 600; font-size: 0.875rem; color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-links { display: flex; gap: 16px; } .ds-nav-link { font-size: 0.875rem; color: var(--muted-foreground, oklch(0.556 0 0)); text-decoration: none; transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-nav-link:hover { color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-link.is-active { color: var(--primary, #2563EB); font-weight: 500; } .ds-nav-user { height: 32px; padding: 0 10px; border: none; border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-family: inherit; font-size: 0.875rem; cursor: pointer; } .ds-nav-user:hover { background: var(--muted, oklch(0.97 0 0)); }"
+    },
+    {
+      "name": "Mobile Tab Bar",
+      "kind": "nav",
+      "refersTo": "button-primary",
+      "description": "Mobile replacement for top links: five equal columns, blurred paper, 44px targets, 11px labels.",
+      "html": "<nav class=\"ds-tabbar\"><a class=\"ds-tab is-active\" href=\"#\">Dashboard</a><a class=\"ds-tab\" href=\"#\">Properties</a><a class=\"ds-tab\" href=\"#\">Tenants</a><a class=\"ds-tab\" href=\"#\">Transactions</a><a class=\"ds-tab\" href=\"#\">FX</a></nav>",
+      "css": ".ds-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--border, oklch(0.922 0 0)); background: color-mix(in oklch, var(--background, oklch(1 0 0)) 95%, transparent); backdrop-filter: blur(8px); padding: 4px 4px 8px; font-family: 'Geist Variable', system-ui, sans-serif; } .ds-tab { display: flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 4px; font-size: 11px; line-height: 1.15; text-align: center; text-decoration: none; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-tab.is-active { color: var(--primary, #2563EB); font-weight: 500; }"
+    },
+    {
+      "name": "Ledger Table",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Ruled-line table: 14px cells, hairline rows, muted hover fill, accounting-formatted right-aligned numerics.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Period</th><th>Rent</th><th>Costs</th></tr></thead><tbody><tr><td>Jan 2026</td><td class=\"num\">85 000.00</td><td class=\"num\">(12 400.00)</td></tr><tr><td>Feb 2026</td><td class=\"num\">85 000.00</td><td class=\"num\">(9 150.00)</td></tr></tbody><tfoot><tr><td>Total</td><td class=\"num\">170 000.00</td><td class=\"num\">(21 550.00)</td></tr></tfoot></table>",
+      "css": ".ds-table { width: 100%; border-collapse: collapse; font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; color: var(--foreground, oklch(0.145 0 0)); } .ds-table th { text-align: left; font-weight: 500; padding: 8px 12px; border-bottom: 1px solid var(--border, oklch(0.922 0 0)); color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-table td { padding: 8px 12px; border-bottom: 1px solid var(--border, oklch(0.922 0 0)); } .ds-table .num { text-align: right; font-variant-numeric: tabular-nums; } .ds-table tbody tr:hover { background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 50%, transparent); } .ds-table tfoot td { border-top: 1px solid var(--border, oklch(0.922 0 0)); border-bottom: none; background: color-mix(in oklch, var(--muted, oklch(0.97 0 0)) 50%, transparent); font-weight: 500; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Ledger",
+    "overview": "Rent is a bookkeeping instrument, not a marketing surface. The chrome is machined from a single graphite ramp — hairline rules, flat panels, compact controls — so that recorded figures and charts are the loudest things on any screen. Nothing decorative stands between the operator and the numbers; the interface's job is to be legible at a glance during a recurring review pass, then get out of the way.\n\nDensity is deliberate: 32px controls, 14px body text, 16px card interiors, and tables that read like a ledger's ruled lines. Depth is drawn with 1px hairlines and rings rather than shadows, which keeps every surface on one machined plane. Light and dark modes are both first-class: paper-white vs near-black grounds with the same grey ramp inverted.\n\nColor lives in the data layer first. The chart palette mints nine saturated \"signal\" hues, and Signal Blue circulates through the chrome as the single accent: it fills primary actions, marks active navigation and tabs, checks checkboxes, and draws every focus ring. One hue spread from the charts into the chrome — never a second palette invented for it.",
+    "keyCharacteristics": [
+      "Graphite Instrument chrome: a single achromatic OKLCH ramp, hairline structure, zero shadows",
+      "Ledger density: compact 32px controls, 14px body, dense tables with accounting-style numerics",
+      "Geist Variable is the only typeface; hierarchy is built purely from size, weight, and greyness",
+      "Saturated color is born in the chart palette; Signal Blue alone spreads into chrome as the accent for action, selection, and wayfinding",
+      "First-class loading, empty, and error states on every data surface"
+    ],
+    "rules": [
+      { "name": "The Spreading Ink Rule", "body": "Chrome stays Graphite Instrument grey except for the one accent. Signal Blue (#2563EB) — chart series one — owns primary actions, active navigation and tabs, checkbox selection, and focus rings; no other chart hue may leak into chrome, and no chrome color outside the signal palette may be invented.", "section": "colors" },
+      { "name": "The Tinted Danger Rule", "body": "Destructive actions use a 10% Ledger Red tint with red text (hover 20%); solid red fills are reserved for nothing and used nowhere.", "section": "colors" },
+      { "name": "The Two Grounds Rule", "body": "Light and dark are composed from one system, not mirrored by inversion: the same graphite ramp, the same series order, the same accent. Only lightness lifts — never a dark-only hue, never a re-ordered palette. Both themes set color-scheme so native surfaces (scrollbars, caret, form controls) follow the ground.", "section": "colors" },
+      { "name": "The Single Family Rule", "body": "Geist Variable is the only typeface. Hierarchy is created exclusively through size, weight, and greyness (muted foreground) — never a second family, never letterspacing tricks.", "section": "typography" },
+      { "name": "The Figure First Rule", "body": "On any surface, the most important number may equal the page title in size (1.5rem/700) but never exceeds it; everything else steps down quietly. Numerals in tables are accounting-formatted and right-aligned.", "section": "typography" },
+      { "name": "The Hairline Rule", "body": "Every boundary is a 1px line or ring. If a design feels like it needs a drop shadow, it needs a hairline or a muted fill instead.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep controls compact — 32px default height for buttons and inputs, 14px body text — the ledger density is the identity.",
+      "Do reach for Signal Blue (#2563EB) for actions, active states, selection, and focus; it is the only hue licensed to live in chrome.",
+      "Do implement all four data states (loading skeleton, empty, error with retry, content) on every data surface.",
+      "Do right-align and accounting-format every numeric column; figures never lie about sign or currency.",
+      "Do use tinted red for danger (10% fill, red text) and hairlines for structure.",
+      "Do check every new surface on both grounds — Instrument Paper and Instrument Void are equals, and charts must hold ≥3:1 on the dark card surface."
+    ],
+    "donts": [
+      "Don't introduce a second typeface or a display serif; hierarchy comes from size, weight, and greyness only.",
+      "Don't add drop shadows to cards, menus, or popovers — hairlines and muted fills carry depth.",
+      "Don't color chrome with hues outside the signal palette, and never reorder the nine chart colors.",
+      "Don't exceed Display size (24px/700) for figures or headings; nothing shouts past the page title.",
+      "Don't loosen density into roomy 44px+ controls outside touch navigation."
+    ]
+  }
+}

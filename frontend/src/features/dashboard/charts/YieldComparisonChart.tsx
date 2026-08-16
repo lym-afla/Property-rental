@@ -6,7 +6,8 @@ import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChart
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
 import { FinancialDefinitions } from '@/components/analytics/FinancialDefinitions'
-import { chartSeriesStyle } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import type { PropertyYieldsResponse } from '@/types/analytics'
 
 import { yieldTooltipRows } from './yieldTooltipRows'
@@ -53,6 +54,7 @@ function unavailableYieldMessage(row: PropertyYieldsResponse['rows'][number]) {
 }
 
 export function YieldComparisonChart(props: Props) {
+  const charts = useChartTheme()
   const { data } = props
   const state = yieldState(props)
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
@@ -93,8 +95,8 @@ export function YieldComparisonChart(props: Props) {
               <ResponsiveChartContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis type="number" dataKey="yield" unit="%" name="Yield" />
-                  <YAxis type="category" dataKey="property_name" name="Property" width={132} />
+                  <XAxis type="number" dataKey="yield" unit="%" name="Yield" {...CHART_AXIS_PROPS} />
+                  <YAxis type="category" dataKey="property_name" name="Property" width={132} {...CHART_AXIS_PROPS} />
                   {average !== null && <ReferenceLine x={average} stroke="currentColor" strokeDasharray="4 4" label="Average displayed yield" />}
                   <Tooltip content={({ active, payload }) => {
                     const propertyName = payload?.find((item) => typeof item.payload?.property_name === 'string')?.payload?.property_name
@@ -103,7 +105,7 @@ export function YieldComparisonChart(props: Props) {
                   }} />
                   {visibleSeries.map((series) => {
                     const key: YieldKey = series.key
-                    return <Scatter key={key} name={series.label} fill={chartSeriesStyle(series.visualToken).color} data={data.rows.flatMap((row) => isFiniteNumber(row[key]) ? [{ property_name: row.property_name, yield: row[key] }] : [])} />
+                    return <Scatter key={key} name={series.label} fill={charts.style(series.visualToken).color} data={data.rows.flatMap((row) => isFiniteNumber(row[key]) ? [{ property_name: row.property_name, yield: row[key] }] : [])} />
                   })}
                 </ScatterChart>
               </ResponsiveChartContainer>

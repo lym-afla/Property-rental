@@ -5,7 +5,8 @@ import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartLegend } from '@/components/analytics/ChartLegend'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartSeriesStyle } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import { cashTable, chartState, compactPeriod, hasSeriesValues, seriesWithVisualTokens, type ChartDataProps, type DrillDown, type PortfolioChartData } from './chartUtils'
 
@@ -21,6 +22,7 @@ function categorySeries(data: PortfolioChartData) {
 }
 
 export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyIds = [], onDrillDown }: Props) {
+  const charts = useChartTheme()
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
   const series = data ? seriesWithVisualTokens(categorySeries(data)) : []
   const state = chartState('Net cash flow', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
@@ -51,18 +53,18 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
           <ResponsiveChartContainer width="100%" height="100%">
             <BarChart data={data.points} stackOffset="sign" margin={{ top: 16, right: 12, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} />
-            <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} />
+            <XAxis dataKey="period_start" tickFormatter={compactPeriod} minTickGap={24} {...CHART_AXIS_PROPS} />
+            <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} {...CHART_AXIS_PROPS} />
             <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
-            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={chartSeriesStyle(item.visualToken).color} stroke={chartSeriesStyle(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
+            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>
           </ResponsiveChartContainer>
         </div>
         <details className="mt-2 rounded-md border px-2 py-1">
           <summary className="min-h-11 cursor-pointer content-center font-medium">Drill down to transactions</summary>
           <div className="grid max-h-28 grid-cols-1 gap-1 overflow-y-auto pb-1 sm:grid-cols-2">
-            {data.points.flatMap((point) => series.map((item) => <button className="min-h-11 rounded-md border px-2 text-left text-sm hover:bg-muted focus-visible:ring-3" key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
+            {data.points.flatMap((point) => series.map((item) => <button className="min-h-11 rounded-md border px-2 text-left text-sm hover:bg-muted outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
           </div>
         </details>
       </div>}

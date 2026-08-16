@@ -3,7 +3,8 @@ import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, Tooltip, XAxis, YAxi
 import { AnalyticsChartCard, type AnalyticsChartState } from '@/components/analytics/AnalyticsChartCard'
 import { ResponsiveChartContainer } from '@/components/analytics/ResponsiveChartContainer'
 import { ChartTooltip } from '@/components/analytics/ChartTooltip'
-import { chartVisualTokens } from '@/components/analytics/chartTheme'
+import { CHART_AXIS_PROPS } from '@/components/analytics/chartTheme'
+import { useChartTheme } from '@/components/analytics/useChartTheme'
 import { formatCurrency, formatCurrencyAxis } from '@/lib/format'
 import type { PropertyContributionResponse } from '@/types/analytics'
 
@@ -22,6 +23,7 @@ function contributionState({ data, isLoading, isError, onRetry }: Props): Analyt
 }
 
 export function PropertyContributionChart(props: Props) {
+  const charts = useChartTheme()
   const { data } = props
   const state = contributionState(props)
   const rows = data ? [...data.rows].sort((left, right) => right.net_income - left.net_income) : []
@@ -53,12 +55,12 @@ export function PropertyContributionChart(props: Props) {
           <ResponsiveChartContainer width="100%" height="100%">
             <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 12, left: 36, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis type="number" tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency)} />
-              <YAxis type="category" dataKey="property_name" width={132} tick={{ fontSize: 12 }} />
+              <XAxis type="number" tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency)} {...CHART_AXIS_PROPS} />
+              <YAxis type="category" dataKey="property_name" width={132} tick={{ ...CHART_AXIS_PROPS.tick, fontSize: 12 }} />
               <ReferenceLine x={0} stroke="currentColor" />
               <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={String(label)} rows={(payload ?? []).map((item) => ({ label: 'Net income', value: formatCurrency(Number(item.value), data.currency) }))} /> : null} />
               <Bar dataKey="net_income" name="Net income">
-                {rows.map((row) => <Cell key={row.property_id} fill={row.net_income < 0 ? chartVisualTokens.tertiary.color : chartVisualTokens.primary.color} />)}
+                {rows.map((row) => <Cell key={row.property_id} fill={row.net_income < 0 ? charts.style('tertiary').color : charts.style('primary').color} />)}
               </Bar>
             </BarChart>
           </ResponsiveChartContainer>

@@ -8,6 +8,8 @@
 // so the primary nav stays focused on the data surfaces (Dashboard,
 // Properties, Tenants, Transactions, FX).
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useTheme } from 'next-themes'
+import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react'
 import { useSession } from '@/context/SessionProvider'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,7 +17,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
@@ -30,6 +37,7 @@ const navItems = [
 export function AppLayout() {
   const { user } = useSession()
   const navigate = useNavigate()
+  const { theme, setTheme } = useTheme()
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -43,7 +51,7 @@ export function AppLayout() {
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) =>
-                    `text-sm transition-colors hover:text-foreground ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`
+                    `text-sm transition-colors hover:text-foreground ${isActive ? 'text-primary font-medium' : 'text-muted-foreground'}`
                   }
                 >
                   {item.label}
@@ -65,6 +73,21 @@ export function AppLayout() {
               <DropdownMenuItem onSelect={() => navigate('/profile')}>
                 Profile
               </DropdownMenuItem>
+              {/* Theme is a local device preference (next-themes storage),
+                  unlike the backend-owned Life OS settings on /profile. */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  {theme === 'dark' ? <MoonIcon aria-hidden="true" /> : theme === 'light' ? <SunIcon aria-hidden="true" /> : <MonitorIcon aria-hidden="true" />}
+                  Theme
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+                    <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem asChild variant="destructive">
                 <a href="/oidc/logout/" role="link">Logout</a>
               </DropdownMenuItem>
@@ -81,9 +104,9 @@ export function AppLayout() {
             key={item.to}
             to={item.to}
             end={item.to === '/'}
-            className={({ isActive }) =>
-              `flex min-h-11 min-w-11 items-center justify-center overflow-hidden px-1 text-center text-[11px] leading-tight transition-colors ${isActive ? 'font-medium text-foreground' : 'text-muted-foreground'}`
-            }
+                  className={({ isActive }) =>
+                    `flex min-h-11 min-w-11 items-center justify-center overflow-hidden px-1 text-center text-[11px] leading-tight transition-colors ${isActive ? 'font-medium text-primary' : 'text-muted-foreground'}`
+                  }
           >
             {item.label}
           </NavLink>

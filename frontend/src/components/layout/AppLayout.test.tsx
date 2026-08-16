@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from 'next-themes'
 import { http, HttpResponse } from 'msw'
 import { AppLayout } from './AppLayout'
 import { SessionProvider } from '@/context/SessionProvider'
@@ -15,15 +16,17 @@ function renderLayout() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <SessionProvider>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route index element={<p>Dashboard</p>} />
-            </Route>
-          </Routes>
-        </SessionProvider>
-      </MemoryRouter>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <MemoryRouter>
+          <SessionProvider>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route index element={<p>Dashboard</p>} />
+              </Route>
+            </Routes>
+          </SessionProvider>
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   )
 }
@@ -51,5 +54,28 @@ describe('AppLayout logout', () => {
     logout.addEventListener('click', event => event.preventDefault(), { once: true })
     await user.click(logout)
     expect(localLogoutPosts).toBe(0)
+  })
+})
+
+describe('AppLayout theme', () => {
+  afterEach(() => {
+    document.documentElement.classList.remove('dark')
+    localStorage.removeItem('theme')
+  })
+
+  it('switches the document to dark mode from the account dropdown', async () => {
+    const user = userEvent.setup()
+
+    renderLayout()
+    await user.click(await screen.findByRole('button', { name: 'alice' }))
+    // Radix submenus do not select via synthetic mouse clicks in jsdom;
+    // open the submenu, focus the item, and confirm with the keyboard.
+    await user.click(screen.getByRole('menuitem', { name: /Theme/ }))
+    const darkItem = await screen.findByRole('menuitemradio', { name: 'Dark' })
+    darkItem.focus()
+    await user.keyboard('[Enter]')
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem('theme')).toBe('dark')
   })
 })

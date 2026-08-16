@@ -380,3 +380,19 @@ test('verifies the financial analytics release contract across dashboard, proper
   await expect(page.getByText('($250)', { exact: true })).toBeVisible()
   await expectReleaseSafeDocument(page)
 })
+
+test('switches dark mode from the account dropdown and persists it across reloads', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'qa-user' }).click()
+  await page.getByRole('menuitem', { name: /Theme/ }).click()
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+
+  // Charts re-render with the lifted dark palette, not the light hexes.
+  await expect(page.locator('.recharts-bar-rectangle path[fill="#3B82F6"]').first()).toBeVisible()
+  await expect(page.locator('.recharts-bar-rectangle path[fill="#2563EB"]')).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  await expectReleaseSafeDocument(page)
+})

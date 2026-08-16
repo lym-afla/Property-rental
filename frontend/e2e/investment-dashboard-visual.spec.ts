@@ -11,8 +11,7 @@ async function hideFixedAppChrome(page: Page) {
   }))
 }
 
-test('populated dashboard visual baseline preserves chart layout and exact values at each required viewport', async ({ page }) => {
-  test.setTimeout(60_000)
+async function mockAnalyticsApi(page: Page) {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
@@ -46,6 +45,11 @@ test('populated dashboard visual baseline preserves chart layout and exact value
     if (path.includes('/analytics/tenants/1/rent-performance/')) return json({ metric: 'tenant_rent_performance', grain: 'month', currency: 'EUR', scale: 1, ...range, opening_arrears: 0, opening_issues: [], status: 'ok', issues: [], series: [{ key: 'expected', label: 'Expected rent', kind: 'expected' }, { key: 'received', label: 'Received rent', kind: 'received' }, { key: 'variance', label: 'Variance', kind: 'variance' }, { key: 'cumulative_arrears', label: 'Cumulative arrears', kind: 'cumulative' }], points: [{ ...january, expected: 1000, received: 900, variance: -100, cumulative_arrears: -100, status: 'ok', issues: [] }, { ...february, expected: 1000, received: 950, variance: -50, cumulative_arrears: -150, status: 'ok', issues: [] }] })
     return json([])
   })
+}
+
+test('populated dashboard visual baseline preserves chart layout and exact values at each required viewport', async ({ page }) => {
+  test.setTimeout(60_000)
+  await mockAnalyticsApi(page)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible()
   await expect(page.getByText('Net cash flow', { exact: true })).toBeVisible()
@@ -140,4 +144,19 @@ test('populated dashboard visual baseline preserves chart layout and exact value
 
   await expect(page.locator('body')).not.toContainText('NaN')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
+test('populated dashboard renders in dark mode with the lifted chart palette', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.addInitScript(() => localStorage.setItem('theme', 'dark'))
+  await mockAnalyticsApi(page)
+  await page.goto('/')
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  await expect(page.getByRole('heading', { name: 'Investment dashboard' })).toBeVisible()
+  await expect(page.getByText('Net cash flow', { exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await hideFixedAppChrome(page)
+  const cashFlowCard = page.getByText('Net cash flow', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"][1]')
+  await expect(cashFlowCard.locator('.recharts-bar-rectangle path[fill="#3B82F6"]').first()).toBeVisible()
+  await expect(cashFlowCard).toHaveScreenshot('investment-dashboard-populated-dark.png', { animations: 'disabled' })
 })
