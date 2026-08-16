@@ -256,9 +256,12 @@ def test_boolean_non_string_and_empty_identifiers_are_rejected(client, signing_k
 
 @pytest.mark.django_db
 def test_future_iat_beyond_clock_skew_is_rejected(client, signing_keys):
+    # The verifier allows 60s of forward clock skew; keep enough margin
+    # beyond it that slow CI runners cannot burn the difference between
+    # token creation and verification.
     response = post_logout(
         client,
-        make_logout_token(signing_keys[0], issued_at=timezone.now() + timedelta(seconds=61)),
+        make_logout_token(signing_keys[0], issued_at=timezone.now() + timedelta(seconds=120)),
     )
 
     assert response.status_code == 400
