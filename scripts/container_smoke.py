@@ -56,11 +56,11 @@ PY
         "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1",
         "DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost",
         "BUSINESS_TIME_ZONE=Europe/Moscow",
-        "OIDC_ISSUER=https://example.invalid/",
+        "OIDC_ISSUER=https://auth.linik.ru/application/o/lifeos-rent/",
         "OIDC_CLIENT_ID=audit",
         "OIDC_CLIENT_SECRET=audit",
-        "OIDC_CALLBACK_URL=http://localhost/oidc/callback/",
-        "OIDC_LOGOUT_URL=https://example.invalid/logout/",
+        "OIDC_CALLBACK_URL=https://rent.linik.ru/oidc/callback/",
+        "OIDC_LOGOUT_URL=https://auth.linik.ru/application/o/lifeos-rent/end-session/",
         "OIDC_POST_LOGOUT_REDIRECT_URL=https://auth.linik.ru/",
     ]
     command = ["run", "--rm", "--entrypoint", "/bin/sh"]
@@ -110,11 +110,11 @@ def smoke_server(image: str) -> None:
         "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1",
         f"DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:{host_port}",
         "BUSINESS_TIME_ZONE=Europe/Moscow",
-        "OIDC_ISSUER=https://example.invalid/",
+        "OIDC_ISSUER=https://auth.linik.ru/application/o/lifeos-rent/",
         "OIDC_CLIENT_ID=audit",
         "OIDC_CLIENT_SECRET=audit",
-        f"OIDC_CALLBACK_URL=http://localhost:{host_port}/oidc/callback/",
-        "OIDC_LOGOUT_URL=https://example.invalid/logout/",
+        "OIDC_CALLBACK_URL=https://rent.linik.ru/oidc/callback/",
+        "OIDC_LOGOUT_URL=https://auth.linik.ru/application/o/lifeos-rent/end-session/",
         "OIDC_POST_LOGOUT_REDIRECT_URL=https://auth.linik.ru/",
     ]
     command = ["run", "-d", "--name", name, "-p", f"{host_port}:8000"]
