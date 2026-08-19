@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-16",
+  "generatedAt": "2026-08-19",
   "title": "Design System: Rent",
   "extensions": {
     "colorMeta": {
@@ -14,7 +14,8 @@
       "graphite-ring": { "role": "neutral", "displayName": "Graphite Ring", "canonical": "oklch(0.708 0 0)" },
       "ledger-red": { "role": "semantic", "displayName": "Ledger Red", "canonical": "oklch(0.577 0.245 27.325)", "tonalRamp": ["oklch(0.25 0.1 27)", "oklch(0.35 0.15 27)", "oklch(0.45 0.2 27)", "oklch(0.577 0.245 27.3)", "oklch(0.67 0.2 27)", "oklch(0.77 0.14 27)", "oklch(0.87 0.08 27)", "oklch(0.95 0.03 27)"] },
       "ledger-red-dark": { "role": "semantic", "displayName": "Ledger Red Dark", "canonical": "oklch(0.704 0.191 22.216)" },
-      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "#2563EB", "darkCanonical": "#3B82F6", "tonalRamp": ["oklch(0.25 0.08 263)", "oklch(0.35 0.13 263)", "oklch(0.45 0.18 263)", "oklch(0.546 0.215 263)", "oklch(0.65 0.17 263)", "oklch(0.75 0.12 263)", "oklch(0.85 0.07 263)", "oklch(0.94 0.03 263)"] },
+      "instrument-steel": { "role": "primary", "displayName": "Instrument Steel", "canonical": "oklch(0.48 0.085 245)", "darkCanonical": "oklch(0.74 0.074 245)", "tonalRamp": ["oklch(0.25 0.03 245)", "oklch(0.33 0.045 245)", "oklch(0.41 0.06 245)", "oklch(0.48 0.085 245)", "oklch(0.58 0.085 245)", "oklch(0.66 0.082 245)", "oklch(0.74 0.074 245)", "oklch(0.86 0.045 245)"] },
+      "signal-blue": { "role": "data", "displayName": "Signal Blue", "canonical": "#2563EB", "darkCanonical": "#3B82F6", "tonalRamp": ["oklch(0.25 0.08 263)", "oklch(0.35 0.13 263)", "oklch(0.45 0.18 263)", "oklch(0.546 0.215 263)", "oklch(0.65 0.17 263)", "oklch(0.75 0.12 263)", "oklch(0.85 0.07 263)", "oklch(0.94 0.03 263)"] },
       "signal-amber": { "role": "data", "displayName": "Signal Amber", "canonical": "#D97706" },
       "signal-green": { "role": "data", "displayName": "Signal Green", "canonical": "#059669" },
       "signal-violet": { "role": "data", "displayName": "Signal Violet", "canonical": "#7C3AED", "darkCanonical": "#8B5CF6" },
@@ -48,7 +49,7 @@
       "refersTo": "button-primary",
       "description": "The one filled control: graphite fill, paper text, for the primary action on a surface.",
       "html": "<button class=\"ds-btn-primary\">Save transaction</button>",
-      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, #2563EB); color: var(--primary-foreground, oklch(0.985 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, #2563EB) 90%, oklch(0.145 0 0)); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, #2563EB) 50%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { pointer-events: none; opacity: 0.5; }"
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: var(--primary, #2563EB); color: var(--primary-foreground, oklch(0.985 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.205 0 0)) 90%, oklch(0.145 0 0)); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.48 0.085 245)) 50%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { pointer-events: none; opacity: 0.5; }"
     },
     {
       "name": "Outline Button",
@@ -104,7 +105,7 @@
       "refersTo": "button-primary",
       "description": "56px ledger bar: wordmark, five data-surface links, account dropdown trigger.",
       "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-brand\">Property Rental</span><div class=\"ds-nav-links\"><a class=\"ds-nav-link is-active\" href=\"#\">Dashboard</a><a class=\"ds-nav-link\" href=\"#\">Properties</a><a class=\"ds-nav-link\" href=\"#\">Tenants</a><a class=\"ds-nav-link\" href=\"#\">Transactions</a><a class=\"ds-nav-link\" href=\"#\">FX</a></div><button class=\"ds-nav-user\">operator</button></nav>",
-      "css": ".ds-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; } .ds-nav-brand { font-weight: 600; font-size: 0.875rem; color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-links { display: flex; gap: 16px; } .ds-nav-link { font-size: 0.875rem; color: var(--muted-foreground, oklch(0.556 0 0)); text-decoration: none; transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-nav-link:hover { color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-link.is-active { color: var(--primary, #2563EB); font-weight: 500; } .ds-nav-user { height: 32px; padding: 0 10px; border: none; border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-family: inherit; font-size: 0.875rem; cursor: pointer; } .ds-nav-user:hover { background: var(--muted, oklch(0.97 0 0)); }"
+      "css": ".ds-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--border, oklch(0.922 0 0)); background: var(--background, oklch(1 0 0)); font-family: 'Geist Variable', system-ui, sans-serif; } .ds-nav-brand { font-weight: 600; font-size: 0.875rem; color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-links { display: flex; gap: 16px; } .ds-nav-link { font-size: 0.875rem; color: var(--muted-foreground, oklch(0.556 0 0)); text-decoration: none; transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-nav-link:hover { color: var(--foreground, oklch(0.145 0 0)); } .ds-nav-link.is-active { color: var(--signal, oklch(0.48 0.085 245)); font-weight: 500; } .ds-nav-user { height: 32px; padding: 0 10px; border: none; border-radius: 10px; background: transparent; color: var(--foreground, oklch(0.145 0 0)); font-family: inherit; font-size: 0.875rem; cursor: pointer; } .ds-nav-user:hover { background: var(--muted, oklch(0.97 0 0)); }"
     },
     {
       "name": "Mobile Tab Bar",
@@ -112,7 +113,7 @@
       "refersTo": "button-primary",
       "description": "Mobile replacement for top links: five equal columns, blurred paper, 44px targets, 11px labels.",
       "html": "<nav class=\"ds-tabbar\"><a class=\"ds-tab is-active\" href=\"#\">Dashboard</a><a class=\"ds-tab\" href=\"#\">Properties</a><a class=\"ds-tab\" href=\"#\">Tenants</a><a class=\"ds-tab\" href=\"#\">Transactions</a><a class=\"ds-tab\" href=\"#\">FX</a></nav>",
-      "css": ".ds-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--border, oklch(0.922 0 0)); background: color-mix(in oklch, var(--background, oklch(1 0 0)) 95%, transparent); backdrop-filter: blur(8px); padding: 4px 4px 8px; font-family: 'Geist Variable', system-ui, sans-serif; } .ds-tab { display: flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 4px; font-size: 11px; line-height: 1.15; text-align: center; text-decoration: none; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-tab.is-active { color: var(--primary, #2563EB); font-weight: 500; }"
+      "css": ".ds-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--border, oklch(0.922 0 0)); background: color-mix(in oklch, var(--background, oklch(1 0 0)) 95%, transparent); backdrop-filter: blur(8px); padding: 4px 4px 8px; font-family: 'Geist Variable', system-ui, sans-serif; } .ds-tab { display: flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 4px; font-size: 11px; line-height: 1.15; text-align: center; text-decoration: none; color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-tab.is-active { color: var(--signal, oklch(0.48 0.085 245)); font-weight: 500; }"
     },
     {
       "name": "Ledger Table",
@@ -125,16 +126,16 @@
   ],
   "narrative": {
     "northStar": "The Quiet Ledger",
-    "overview": "Rent is a bookkeeping instrument, not a marketing surface. The chrome is machined from a single graphite ramp — hairline rules, flat panels, compact controls — so that recorded figures and charts are the loudest things on any screen. Nothing decorative stands between the operator and the numbers; the interface's job is to be legible at a glance during a recurring review pass, then get out of the way.\n\nDensity is deliberate: 32px controls, 14px body text, 16px card interiors, and tables that read like a ledger's ruled lines. Depth is drawn with 1px hairlines and rings rather than shadows, which keeps every surface on one machined plane. Light and dark modes are both first-class: paper-white vs near-black grounds with the same grey ramp inverted.\n\nColor lives in the data layer first. The chart palette mints nine saturated \"signal\" hues, and Signal Blue circulates through the chrome as the single accent: it fills primary actions, marks active navigation and tabs, checks checkboxes, and draws every focus ring. One hue spread from the charts into the chrome — never a second palette invented for it.",
+    "overview": "Rent is a bookkeeping instrument, not a marketing surface. The chrome is machined from a single graphite ramp — hairline rules, flat panels, compact controls — so that recorded figures and charts are the loudest things on any screen. Nothing decorative stands between the operator and the numbers; the interface's job is to be legible at a glance during a recurring review pass, then get out of the way.\n\nDensity is deliberate: 32px controls, 14px body text, 16px card interiors, and tables that read like a ledger's ruled lines. Depth is drawn with 1px hairlines and rings rather than shadows, which keeps every surface on one machined plane. Light and dark modes are both first-class: paper-white vs near-black grounds with the same grey ramp inverted.\n\nColor lives in the data layer: the chart palette mints nine saturated hues, and that is where saturated color stays. Chrome actions are graphite ink; one desaturated hue — Instrument Steel — traces wayfinding only: focus rings, active navigation and tabs, and link text. Steel never fills; buttons, segments, checkboxes, and badges stay graphite.",
     "keyCharacteristics": [
       "Graphite Instrument chrome: a single achromatic OKLCH ramp, hairline structure, zero shadows",
       "Ledger density: compact 32px controls, 14px body, dense tables with accounting-style numerics",
       "Geist Variable is the only typeface; hierarchy is built purely from size, weight, and greyness",
-      "Saturated color is born in the chart palette; Signal Blue alone spreads into chrome as the accent for action, selection, and wayfinding",
+      "Saturated color is born in the chart palette and stays there; Instrument Steel traces chrome wayfinding; actions are graphite",
       "First-class loading, empty, and error states on every data surface"
     ],
     "rules": [
-      { "name": "The Spreading Ink Rule", "body": "Chrome stays Graphite Instrument grey except for the one accent. Signal Blue (#2563EB) — chart series one — owns primary actions, active navigation and tabs, checkbox selection, and focus rings; no other chart hue may leak into chrome, and no chrome color outside the signal palette may be invented.", "section": "colors" },
+      { "name": "The Steel Signal Rule", "body": "Chrome is Graphite Instrument grey. Instrument Steel (oklch(0.48 0.085 245) / dark oklch(0.74 0.074 245)) is the single wayfinding accent — focus rings, active navigation and tabs, and link text — and it never fills: buttons, segments, checkboxes, and badges stay graphite. Saturated color lives only in the chart palette; no chrome color outside the steel and the chart hues may be invented.", "section": "colors" },
       { "name": "The Tinted Danger Rule", "body": "Destructive actions use a 10% Ledger Red tint with red text (hover 20%); solid red fills are reserved for nothing and used nowhere.", "section": "colors" },
       { "name": "The Two Grounds Rule", "body": "Light and dark are composed from one system, not mirrored by inversion: the same graphite ramp, the same series order, the same accent. Only lightness lifts — never a dark-only hue, never a re-ordered palette. Both themes set color-scheme so native surfaces (scrollbars, caret, form controls) follow the ground.", "section": "colors" },
       { "name": "The Single Family Rule", "body": "Geist Variable is the only typeface. Hierarchy is created exclusively through size, weight, and greyness (muted foreground) — never a second family, never letterspacing tricks.", "section": "typography" },
@@ -143,7 +144,7 @@
     ],
     "dos": [
       "Do keep controls compact — 32px default height for buttons and inputs, 14px body text — the ledger density is the identity.",
-      "Do reach for Signal Blue (#2563EB) for actions, active states, selection, and focus; it is the only hue licensed to live in chrome.",
+      "Do use Instrument Steel for wayfinding — focus rings, active navigation and tabs, link text; it never fills, and buttons stay graphite.",
       "Do implement all four data states (loading skeleton, empty, error with retry, content) on every data surface.",
       "Do right-align and accounting-format every numeric column; figures never lie about sign or currency.",
       "Do use tinted red for danger (10% fill, red text) and hairlines for structure.",

@@ -12,6 +12,8 @@ colors:
   graphite-ring: "oklch(0.708 0 0)"
   ledger-red: "oklch(0.577 0.245 27.325)"
   ledger-red-dark: "oklch(0.704 0.191 22.216)"
+  instrument-steel: "oklch(0.48 0.085 245)"
+  instrument-steel-dark: "oklch(0.74 0.074 245)"
   signal-blue: "#2563EB"
   signal-amber: "#D97706"
   signal-green: "#059669"
@@ -55,13 +57,13 @@ spacing:
   lg: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.signal-blue}"
+    backgroundColor: "{colors.graphite-panel}"
     textColor: "{colors.instrument-paper}"
     rounded: "{rounded.lg}"
     padding: "10px"
     height: "32px"
   button-primary-hover:
-    backgroundColor: "#0067CA"
+    backgroundColor: "oklch(0.199 0 0)"
   button-outline:
     backgroundColor: "{colors.instrument-paper}"
     textColor: "{colors.instrument-void}"
@@ -109,13 +111,13 @@ Rent is a bookkeeping instrument, not a marketing surface. The chrome is machine
 
 Density is deliberate: 32px controls, 14px body text, 16px card interiors, and tables that read like a ledger's ruled lines. Depth is drawn with 1px hairlines and rings rather than shadows, which keeps every surface on one machined plane. Light and dark modes are both first-class: paper-white vs near-black grounds with the same grey ramp inverted.
 
-Color lives in the data layer first. The chart palette mints nine saturated "signal" hues, and Signal Blue circulates through the chrome as the single accent: it fills primary actions, marks active navigation and tabs, checks checkboxes, and draws every focus ring. One hue spread from the charts into the chrome — never a second palette invented for it.
+Color lives in the data layer: the chart palette mints nine saturated hues, and that is where saturated color stays. Chrome actions are graphite ink; one desaturated hue — Instrument Steel — traces wayfinding only: focus rings, active navigation and tabs, and link text. Steel never fills; buttons, segments, checkboxes, and badges stay graphite.
 
 **Key Characteristics:**
 - Graphite Instrument chrome: a single achromatic OKLCH ramp, hairline structure, zero shadows
 - Ledger density: compact 32px controls, 14px body, dense tables with accounting-style numerics
 - Geist Variable is the only typeface; hierarchy is built purely from size, weight, and greyness
-- Saturated color is born in the chart palette; Signal Blue alone spreads into chrome as the accent for action, selection, and wayfinding
+- Saturated color is born in the chart palette and stays there; Instrument Steel traces chrome wayfinding; actions are graphite
 - First-class loading, empty, and error states on every data surface
 
 ## Colors
@@ -123,7 +125,8 @@ Color lives in the data layer first. The chart palette mints nine saturated "sig
 A machined graphite ramp carries the whole interface; saturation is minted by the chart palette and spends most of its life inside charts.
 
 ### Primary
-- **Signal Blue** (#2563EB / oklch(0.5461 0.2152 262.88)): The `--primary` action fill and the canonical accent, born as chart series one. Fills primary buttons and default badges, checks checkboxes, and — as text at 5.17:1 on paper — marks active navigation and tab states. Dark theme uses a lifted variant (oklch(0.70 0.154 258.7)) with graphite ink text.
+- **Instrument Steel** (oklch(0.48 0.085 245) / #2F628A; dark oklch(0.74 0.074 245) / #83B0D7): The wayfinding accent (`--signal`, also driving `--ring`). Colors focus rings, active navigation and tabs, and link variants — at 6.49:1 on paper and 7.8–8.6:1 on the dark surfaces. It is never a fill: actions stay graphite.
+- **Graphite Panel** (oklch(0.205 0 0)): The `--primary` action fill restored — primary buttons, the active dashboard segment, checkbox checked state, and default badges. White text on it holds 17.9:1.
 
 ### Secondary
 - **Ledger Red** (oklch(0.577 0.245 27.325)): The single semantic color — destructive actions and invalid states, almost always as a 10–20% tint with red text, never a solid red fill. Dark mode uses Ledger Red Dark (oklch(0.704 0.191 22.216)) under the same doctrine.
@@ -135,15 +138,15 @@ A machined graphite ramp carries the whole interface; saturation is minted by th
 ### Neutral
 - **Instrument Paper** (oklch(1 0 0)): Light-mode ground and card surface.
 - **Instrument Void** (oklch(0.145 0 0)): Dark-mode ground and light-mode ink (body text).
-- **Graphite Panel** (oklch(0.205 0 0)): Dark-mode card surface and primary-button text.
+- **Graphite Panel** (oklch(0.205 0 0)): Dark-mode card surface; light-mode primary action fill.
 - **Graphite Raised** (oklch(0.269 0 0)): Dark-mode secondary and muted fills.
 - **Graphite Rule** (oklch(0.97 0 0)): Light-mode secondary/muted/accent fills — quiet row fills, ghost hovers, table footers.
 - **Graphite Line** (oklch(0.922 0 0)): Light-mode borders and input strokes; dark-mode primary ink.
 - **Graphite Mid** (oklch(0.556 0 0)): Muted foreground — labels, captions, inactive navigation.
-- **Graphite Ring** (oklch(0.708 0 0)): Mid-ramp grey; dark-mode muted text. No longer the focus ring — focus belongs to Signal Blue.
+- **Graphite Ring** (oklch(0.708 0 0)): Mid-ramp grey; dark-mode muted text. Not the focus ring — focus belongs to Instrument Steel.
 
 ### Named Rules
-**The Spreading Ink Rule.** Chrome stays Graphite Instrument grey except for the one accent. Signal Blue (#2563EB) — chart series one — owns primary actions, active navigation and tabs, checkbox selection, and focus rings; no other chart hue may leak into chrome, and no chrome color outside the signal palette may be invented.
+**The Steel Signal Rule.** Chrome is Graphite Instrument grey. Instrument Steel (oklch(0.48 0.085 245) / dark oklch(0.74 0.074 245)) is the single wayfinding accent — focus rings, active navigation and tabs, and link text — and it never fills: buttons, segments, checkboxes, and badges stay graphite. Saturated color lives only in the chart palette; no chrome color outside the steel and the chart hues may be invented.
 
 **The Tinted Danger Rule.** Destructive actions use a 10% Ledger Red tint with red text (hover 20%); solid red fills are reserved for nothing and used nowhere.
 
@@ -170,7 +173,7 @@ A machined graphite ramp carries the whole interface; saturation is minted by th
 
 ## Layout
 
-A top ledger bar (56px, hairline bottom border) holds the wordmark, five data-surface links (Dashboard, Properties, Tenants, Transactions, FX), and an account dropdown under the username. Content sits in a centered container with 16px gutters and 24px vertical padding. Navigation links: active = Signal Blue at medium weight; inactive = Graphite Mid, darkening to ink on hover.
+A top ledger bar (56px, hairline bottom border) holds the wordmark, five data-surface links (Dashboard, Properties, Tenants, Transactions, FX), and an account dropdown under the username. Content sits in a centered container with 16px gutters and 24px vertical padding. Navigation links: active = Instrument Steel at medium weight; inactive = Graphite Mid, darkening to ink on hover.
 
 On mobile the top links are replaced by a fixed bottom tab bar — five equal columns, hairline top border, Instrument Paper at 95% opacity with backdrop blur, safe-area padding, 44px touch targets, 11px labels. Desktop-first density otherwise: controls stay 32px tall; only touch targets in navigation get the 44px minimum.
 
@@ -178,7 +181,7 @@ The dashboard adds a section nav (Overview, Income & Costs, Portfolio, Risk) as 
 
 ## Elevation & Depth
 
-The system is flat by conviction. There are no shadow tokens; structure comes from 1px hairlines — cards wear `ring-1` in foreground at 10% opacity, tables rule their rows with border-b, the navbar and tab bar draw single hairlines. The only spatial effects are the mobile tab bar's backdrop blur and a 1px downward press-translate on active buttons. Focus is visible and physical: a 3px Signal Blue ring at 50% opacity with a matching border shift — the accent doubles as the wayfinding signal.
+The system is flat by conviction. There are no shadow tokens; structure comes from 1px hairlines — cards wear `ring-1` in foreground at 10% opacity, tables rule their rows with border-b, the navbar and tab bar draw single hairlines. The only spatial effects are the mobile tab bar's backdrop blur and a 1px downward press-translate on active buttons. Focus is visible and physical: a 3px Instrument Steel ring at 50% opacity with a matching border shift — the accent doubles as the wayfinding signal.
 
 ### Shadow Vocabulary
 None. Depth is tonal: hover states lift via Graphite Rule fills (muted at 50%), never via shadow.
@@ -194,14 +197,14 @@ One corner family: a 10px base radius (`--radius: 0.625rem`) with a stepped scal
 
 ### Buttons
 - **Shape:** gently rounded (10px radius), compact heights — default 32px, sm 28px, xs 24px, lg 36px; horizontal padding 10px, 6px icon gap
-- **Primary:** Signal Blue fill, Instrument Paper text (5.17:1), 14px/500; hover darkens the fill 10% toward ink (#0067CA, 5.54:1)
+- **Primary:** Graphite Panel fill, Instrument Paper text (17.9:1), 14px/500; hover darkens the fill 10% toward ink (oklch(0.199 0 0))
 - **Hover / Focus:** 150ms transitions; focus-visible draws the 3px/50% ring; active presses down 1px; disabled at 50% opacity
 - **Outline:** hairline Graphite Line border on Instrument Paper, fills Graphite Rule on hover — the workhorse for table row actions and segmented nav
 - **Ghost:** transparent, fills Graphite Rule on hover — navbar and tool usage
 - **Destructive:** 10% Ledger Red tint with red text (20% on hover) per the Tinted Danger Rule
 
 ### Chips
-- **Style:** 20px-tall pills (26px radius), 12px/500 text, 8px horizontal padding; default = Signal Blue fill with paper text, secondary = Graphite Rule fill with panel ink, destructive = red tint, outline = hairline border
+- **Style:** 20px-tall pills (26px radius), 12px/500 text, 8px horizontal padding; default = graphite fill with paper text, secondary = Graphite Rule fill with panel ink, destructive = red tint, outline = hairline border
 - **State:** used for statuses and row tags; interactive chips brighten their fill on hover
 
 ### Cards / Containers
@@ -217,11 +220,11 @@ One corner family: a 10px base radius (`--radius: 0.625rem`) with a stepped scal
 - **Error / Disabled:** invalid states adopt the red border and 20% red ring; disabled fields dim to 50% with a muted fill
 
 ### Navigation
-- **Top bar:** 56px, hairline bottom border; wordmark semibold in ink; links 14px — active in Signal Blue/medium, inactive Graphite Mid; account actions live in a dropdown under the username
+- **Top bar:** 56px, hairline bottom border; wordmark semibold in ink; links 14px — active in Instrument Steel/medium, inactive Graphite Mid; account actions live in a dropdown under the username
 - **Theme control:** a Theme submenu inside the account dropdown (Light / Dark / System radio items, trigger icon follows the active theme). Preference is local to the device (next-themes localStorage); a pre-paint script in both HTML shells applies the class before first render, so there is no flash of the wrong ground
-- **Mobile:** fixed bottom tab bar, five equal columns, blurred paper, 44px targets, 11px labels, safe-area aware; active tab in Signal Blue
-- **Segmented section nav:** grid of outline buttons with the active segment as a primary (Signal Blue) button
-- **Tabs:** active trigger text in Signal Blue over the neutral pill; line-variant underline in Signal Blue
+- **Mobile:** fixed bottom tab bar, five equal columns, blurred paper, 44px targets, 11px labels, safe-area aware; active tab in Instrument Steel
+- **Segmented section nav:** grid of outline buttons with the active segment as a primary (graphite) button
+- **Tabs:** active trigger text in Instrument Steel over the neutral pill; line-variant underline in Instrument Steel
 
 ### KPI Figure Card
 The signature unit: a Card whose title is a 12px-muted label, whose content is one Display-size (24px/700) accounting-formatted figure, and an optional 12px muted description line. Skeletons occupy the figure slot while loading — the value is a ReactNode by design.
@@ -237,7 +240,7 @@ The second signature: a titled Recharts card fed by typed backend series. Series
 
 ### Do:
 - **Do** keep controls compact — 32px default height for buttons and inputs, 14px body text — the ledger density is the identity.
-- **Do** reach for Signal Blue (#2563EB) for actions, active states, selection, and focus; it is the only hue licensed to live in chrome.
+- **Do** use Instrument Steel for wayfinding — focus rings, active navigation and tabs, link text; it never fills, and buttons stay graphite.
 - **Do** implement all four data states (loading skeleton, empty, error with retry, content) on every data surface.
 - **Do** right-align and accounting-format every numeric column; figures never lie about sign or currency.
 - **Do** use tinted red for danger (10% fill, red text) and hairlines for structure.
