@@ -396,3 +396,54 @@ test('switches dark mode from the account dropdown and persists it across reload
   await expect(page.locator('html')).toHaveClass(/dark/)
   await expectReleaseSafeDocument(page)
 })
+
+test('chrome accent contract: graphite actions and steel wayfinding', async ({ page }) => {
+  // Light theme: graphite primary token, steel accent token, wired correctly.
+  await page.goto('/login')
+  await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible()
+  const light = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement)
+    const probe = document.createElement('span')
+    probe.style.color = 'var(--signal)'
+    document.body.appendChild(probe)
+    const accent = getComputedStyle(probe).color
+    probe.remove()
+    return {
+      primary: cs.getPropertyValue('--primary').trim(),
+      ring: cs.getPropertyValue('--ring').trim(),
+      signal: cs.getPropertyValue('--signal').trim(),
+      loginBg: getComputedStyle(document.querySelector('form button')!).backgroundColor,
+      accentComputed: accent,
+    }
+  })
+  expect(light.primary).toBe('oklch(0.205 0 0)')
+  expect(light.signal).toBe('oklch(0.48 0.085 245)')
+  expect(light.ring).toBe('oklch(0.48 0.085 245)')
+
+  // Active nav uses the accent token, not primary.
+  await page.goto('/')
+  await page.getByRole('heading', { name: 'Investment dashboard' }).waitFor()
+  const navWiring = await page.evaluate(() => {
+    const active = document.querySelector('header nav a[aria-current="page"]') as HTMLElement | null
+    if (!active) return { active: 'missing' as const }
+    const probe = document.createElement('span')
+    probe.style.color = 'var(--signal)'
+    document.body.appendChild(probe)
+    const accent = getComputedStyle(probe).color
+    probe.remove()
+    return { active: getComputedStyle(active).color, accent }
+  })
+  expect(navWiring.active).toBe(navWiring.accent)
+
+  // Dark theme: lifted steel accent.
+  await page.evaluate(() => localStorage.setItem('theme', 'dark'))
+  await page.goto('/')
+  await page.getByRole('heading', { name: 'Investment dashboard' }).waitFor()
+  const dark = await page.evaluate(() => ({
+    primary: getComputedStyle(document.documentElement).getPropertyValue('--primary').trim(),
+    signal: getComputedStyle(document.documentElement).getPropertyValue('--signal').trim(),
+  }))
+  expect(dark.primary).toBe('oklch(0.922 0 0)')
+  expect(dark.signal).toBe('oklch(0.74 0.074 245)')
+  await page.evaluate(() => localStorage.setItem('theme', 'light'))
+})

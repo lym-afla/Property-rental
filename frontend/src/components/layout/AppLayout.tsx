@@ -51,7 +51,7 @@ export function AppLayout() {
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) =>
-                    `text-sm transition-colors hover:text-foreground ${isActive ? 'text-primary font-medium' : 'text-muted-foreground'}`
+                    `text-sm transition-colors hover:text-foreground ${isActive ? 'text-signal font-medium' : 'text-muted-foreground'}`
                   }
                 >
                   {item.label}
@@ -105,7 +105,7 @@ export function AppLayout() {
             to={item.to}
             end={item.to === '/'}
                   className={({ isActive }) =>
-                    `flex min-h-11 min-w-11 items-center justify-center overflow-hidden px-1 text-center text-[11px] leading-tight transition-colors ${isActive ? 'font-medium text-primary' : 'text-muted-foreground'}`
+                    `flex min-h-11 min-w-11 items-center justify-center overflow-hidden px-1 text-center text-[11px] leading-tight transition-colors ${isActive ? 'font-medium text-signal' : 'text-muted-foreground'}`
                   }
           >
             {item.label}
