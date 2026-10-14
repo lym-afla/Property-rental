@@ -20,6 +20,8 @@ Mounted under ``api/v1/`` from ``rentals/urls.py``:
 * ``/api/v1/lease-rents/...``              — same shape; backs the tenant
   detail page's "Update rent" dialog (POST creates a new effective-date
   rent entry on the tenant's ``Lease_rent`` history).
+* ``/api/v1/deposit-movements/...``        — same shape, plus
+  ``GET .../balance/?tenant=|property=[&as_of=]`` (security deposits).
 """
 
 from django.conf import settings
@@ -47,6 +49,7 @@ from .analytics_views import (
     TenantRentPerformanceAnalyticsView,
 )
 from .views import (
+    DepositMovementViewSet,
     FXViewSet,
     LeaseRentViewSet,
     PropertyCapitalStructureViewSet,
@@ -66,6 +69,7 @@ router.register(r"transactions", TransactionViewSet, basename="transaction")
 router.register(r"fx", FXViewSet, basename="fx")
 router.register(r"property-valuations", PropertyCapitalStructureViewSet, basename="property-valuation")
 router.register(r"lease-rents", LeaseRentViewSet, basename="lease-rent")
+router.register(r"deposit-movements", DepositMovementViewSet, basename="deposit-movement")
 
 urlpatterns = [
     # Auth (Task 4 / Task 5) — session-cookie endpoints consumed by the

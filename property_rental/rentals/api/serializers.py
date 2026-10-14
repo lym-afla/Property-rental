@@ -18,6 +18,7 @@ from django.conf import settings
 
 from rentals.models import (
     FX,
+    DepositMovement,
     Lease_rent,
     Property,
     Property_capital_structure,
@@ -170,6 +171,33 @@ class LeaseRentSerializer(serializers.ModelSerializer):
             "rent",
             "currency",
         ]
+
+
+class DepositMovementSerializer(serializers.ModelSerializer):
+    """Serializer for ``DepositMovement`` (``/api/v1/deposit-movements/``).
+
+    Plain field validation only: ``kind`` / ``applied_to`` are restricted
+    to their model choices so bad values are 400s. Business rules and
+    ownership checks live in ``services.deposits`` and the ViewSet.
+    ``owns_transaction`` is read-only (set by the service).
+    """
+
+    class Meta:
+        model = DepositMovement
+        fields = [
+            "id",
+            "tenant",
+            "date",
+            "kind",
+            "currency",
+            "amount",
+            "applied_to",
+            "transaction",
+            "owns_transaction",
+            "comment",
+        ]
+        read_only_fields = ["owns_transaction"]
+        extra_kwargs = {"applied_to": {"allow_blank": False}}
 
 
 class UserSerializer(serializers.ModelSerializer):
