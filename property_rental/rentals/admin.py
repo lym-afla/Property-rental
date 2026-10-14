@@ -3,7 +3,7 @@ from django.conf import settings
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import PermissionDenied
 
-from .models import User, Landlord, Tenant, Property
+from .models import DepositMovement, User, Landlord, Tenant, Property
 from .oidc import ADMIN_GROUP
 
 
@@ -74,3 +74,21 @@ admin.site.register(User, RentalUserAdmin)
 admin.site.register(Landlord)
 admin.site.register(Tenant)
 admin.site.register(Property)
+
+
+class DepositMovementAdmin(admin.ModelAdmin):
+    """Read-only: deposit writes go through the deposits service only."""
+
+    list_display = ("tenant", "date", "kind", "currency", "amount", "applied_to")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register(DepositMovement, DepositMovementAdmin)
