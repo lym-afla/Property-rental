@@ -1,16 +1,57 @@
 """User-scoped, calendar-bucketed portfolio cash-flow analytics."""
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
+
+from django.db.models import Exists
 
 from rentals.analytics.contracts import SeriesDefinition, TimeSeriesResponse
 from rentals.constants import INCOME_CATEGORIES, TRANSACTION_CATEGORIES
+from rentals.financial_semantics import deposit_signed_amount
 from rentals.models import Transaction
+from rentals.services.deposits import movements_for_user
 from rentals.services.financials import convert_transactions
 from rentals.services.fx import preload_converter
 
 
 _CATEGORY_LABELS = dict(TRANSACTION_CATEGORIES)
+
+
+@dataclass(frozen=True)
+class _ConvertibleAmount:
+    amount: object
+    currency: str
+    date: date
+
+
+def _scoped_deposit_movements(user, filters):
+    return movements_for_user(
+        user,
+        start=filters.start,
+        end=filters.end,
+        property_ids=filters.property_ids,
+    )
+
+
+def _signed_deposit_amounts(user, filters, transactions):
+    """Signed deposit movements in scope, shaped for the FX converter.
+
+    The transaction query carries a ``has_deposits`` flag so the common case
+    (rows exist, no movements in scope) costs no extra query.
+    """
+    if transactions and not any(t.has_deposits for t in transactions):
+        return []
+    return [
+        _ConvertibleAmount(
+            deposit_signed_amount(movement.kind, movement.amount),
+            movement.currency,
+            movement.date,
+        )
+        for movement in _scoped_deposit_movements(user, filters).order_by(
+            "date", "id"
+        )
+    ]
 
 
 def _period_start(value: date, grain: str) -> date:
@@ -52,11 +93,15 @@ def _calendar_periods(filters):
     return tuple(periods)
 
 
-def _scoped_transactions(user, filters):
+def _scoped_transactions(user, filters, flag_deposits=False):
     queryset = Transaction.objects.filter(
         property__owned_by__user=user,
         date__range=(filters.start, filters.end),
     )
+    if flag_deposits:
+        queryset = queryset.annotate(
+            has_deposits=Exists(_scoped_deposit_movements(user, filters))
+        )
     if filters.property_ids:
         queryset = queryset.filter(property_id__in=filters.property_ids)
     return list(queryset.order_by("date", "id"))
@@ -121,10 +166,18 @@ def portfolio_cash_flow(user, filters):
     before it is materialized; all subsequent category and calendar work is
     in memory.  FX conversion stays in the established financial service.
     """
-    transactions = _scoped_transactions(user, filters)
-    converter = preload_converter(transactions, filters.currency)
+    transactions = _scoped_transactions(user, filters, flag_deposits=True)
+    deposit_amounts = _signed_deposit_amounts(user, filters, transactions)
+    converter = preload_converter(
+        transactions + deposit_amounts, filters.currency
+    )
     category_keys = _category_keys(transactions, include_income=False)
     bucketed_transactions = _bucket_transactions(transactions, filters)
+    bucketed_deposits = defaultdict(list)
+    for amount in deposit_amounts:
+        bucketed_deposits[_period_start(amount.date, filters.grain)].append(
+            amount
+        )
     periods = _calendar_periods(filters)
     points = []
     cumulative_net_income = 0.0
@@ -157,8 +210,28 @@ def portfolio_cash_flow(user, filters):
             net_income=net_income,
             cumulative_net_income=cumulative_net_income,
         )
+        if deposit_amounts:
+            deposits = float(
+                convert_transactions(
+                    bucketed_deposits[period_start],
+                    filters.currency,
+                    period_end,
+                    converter=converter,
+                )
+            )
+            point.update(deposits=deposits, net_cash_flow=net_income + deposits)
         points.append(point)
 
+    deposit_series = (
+        (
+            SeriesDefinition(
+                "deposits", "Security deposits", "deposit_movement"
+            ),
+            SeriesDefinition("net_cash_flow", "Net cash flow", "net_cash"),
+        )
+        if deposit_amounts
+        else ()
+    )
     return TimeSeriesResponse(
         metric="portfolio_cash_flow",
         grain=filters.grain.value,
@@ -174,7 +247,8 @@ def portfolio_cash_flow(user, filters):
             SeriesDefinition(
                 "cumulative_net_income", "Cumulative net income", "cumulative"
             ),
-        ),
+        )
+        + deposit_series,
         points=tuple(points),
     )
 
