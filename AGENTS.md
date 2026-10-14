@@ -16,4 +16,4 @@ Keep the version identical in all of these:
 2. `frontend/package.json`. Use `npm version X.Y.Z --no-git-tag-version` so `package-lock.json` follows.
 3. `CHANGELOG.md`: add a new top entry `## X.Y.Z — YYYY-MM-DD` with one line per change.
 
-`property_rental/rentals/tests/test_version.py` fails if `pyproject.toml`, `package.json` and the top `CHANGELOG.md` entry disagree. After merging, tag the commit `vX.Y.Z`.
+`property_rental/rentals/tests/test_version.py` fails if `pyproject.toml`, `package.json` and the top `CHANGELOG.md` entry disagree. The UI shows the `package.json` version at the bottom of the account menu, on both desktop and mobile. Vite injects it at build time as `__APP_VERSION__`. After merging, tag the commit `vX.Y.Z`.
