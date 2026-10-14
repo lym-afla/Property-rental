@@ -36,7 +36,7 @@ jobs:
       OIDC_POST_LOGOUT_REDIRECT_URL: https://auth.linik.ru/
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11"]  # matches the Dockerfile; single entry keeps the "backend-test (3.11)" check name
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
