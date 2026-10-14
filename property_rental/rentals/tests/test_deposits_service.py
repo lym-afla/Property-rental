@@ -92,6 +92,32 @@ def test_same_day_receipt_and_application_allowed(tenant):
     assert deposit_held(tenant=tenant, as_of=date(2025, 1, 1)) == {"GBP": Decimal("0")}
 
 
+def test_same_day_receipt_orders_before_outflow_regardless_of_id(tenant):
+    r1 = rcv(tenant, "1000")
+    out(tenant, "applied", "1000", "2025-01-01", applied_to="rent")
+    rcv(tenant, "1000")  # larger id than the application, same date
+    update_movement(r1, date=D("2025-02-01"))
+    r1.refresh_from_db()
+    assert r1.date == date(2025, 2, 1)
+
+
+def test_received_returned_kind_change_allowed_when_balance_permits(tenant):
+    rcv(tenant, "1000")
+    later = rcv(tenant, "500", "2025-02-01")
+    update_movement(later, kind="returned")
+    later.refresh_from_db()
+    assert later.kind == "returned"
+    assert deposit_held(tenant=tenant, as_of=date(2025, 3, 1)) == {"GBP": Decimal("500")}
+
+
+def test_kind_change_rejected_when_it_would_overdraw(tenant):
+    first = rcv(tenant, "1000")
+    with pytest.raises(DepositRuleError) as e:
+        update_movement(first, kind="returned")
+    assert e.value.field == "amount"
+    assert DepositMovement.objects.get(pk=first.pk).kind == "received"
+
+
 def test_shrinking_receipt_below_applied_rejected(tenant):
     receipt = rcv(tenant, "1000")
     out(tenant, "applied", "800", "2025-02-01", applied_to="rent")

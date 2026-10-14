@@ -120,9 +120,8 @@ def update_movement(movement, **fields):
     unknown = set(fields) - _UPDATABLE
     if unknown:
         raise TypeError(f"Unknown fields: {sorted(unknown)}")
-    if "kind" in fields and fields["kind"] != movement.kind:
+    if "kind" in fields and fields["kind"] != movement.kind and "applied" in (fields["kind"], movement.kind):
         raise DepositRuleError("kind", "Cannot change a movement to or from 'applied'; delete and re-add instead.")
-    fields.pop("kind", None)
 
     with db_transaction.atomic():
         tenant = _lock_tenant(movement.tenant)
