@@ -28,7 +28,7 @@
 //     invalidates the tenants cache so `rent_rate` refetches.
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, LogOut } from 'lucide-react'
+import { ArrowLeft, Pencil, LogOut, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -41,6 +41,7 @@ import { useTransactions } from '@/api/transactions'
 import { useTenantRentPerformance } from '@/api/analytics'
 import { useSession } from '@/context/SessionProvider'
 import { RentPerformanceChart } from '@/features/tenant/RentPerformanceChart'
+import { SecurityDepositCard } from '@/features/tenant/SecurityDepositCard'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
 import { VacateTenantDialog } from '@/components/modals/VacateTenantDialog'
 import { UpdateRentDialog } from '@/components/modals/UpdateRentDialog'
@@ -49,6 +50,12 @@ import { ErrorState } from '@/components/states/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Card,
   CardAction,
@@ -320,6 +327,17 @@ export function TenantDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Security deposit. `transactions` is the tenant's full
+              (server-filtered, uncapped) list — not the sliced recent
+              rows — so attach candidates and owned rows are always
+              present. */}
+          <SecurityDepositCard
+            tenantId={tenantId}
+            propertyCurrency={currency}
+            asOf={user?.effective_date ?? new Date().toISOString().slice(0, 10)}
+            transactions={transactionsQuery.data ?? []}
+          />
+
           <RentPerformanceChart
             data={rentPerformanceQuery.data}
             isLoading={rentPerformanceQuery.isLoading}
@@ -355,6 +373,9 @@ export function TenantDetailPage() {
                       <TableHead>Category</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Amount</TableHead>
+                      <TableHead>
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -369,9 +390,40 @@ export function TenantDetailPage() {
                           >
                             {t.type}
                           </Badge>
+                          {t.deposit_movement !== null && (
+                            <Badge variant="outline" className="ml-2">
+                              From deposit
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           {formatAccounting(t.amount, t.currency)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {t.deposit_movement !== null && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  {/* A disabled button swallows pointer
+                                      events, so the span is the trigger. */}
+                                  <span className="inline-block" tabIndex={0}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled
+                                      aria-label="Delete transaction"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Funded by the security deposit — edit the
+                                  deposit movement instead.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
