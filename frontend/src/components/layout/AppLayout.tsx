@@ -91,6 +91,10 @@ export function AppLayout() {
               <DropdownMenuItem asChild variant="destructive">
                 <a href="/oidc/logout/" role="link">Logout</a>
               </DropdownMenuItem>
+              {/* Build version, here so it is reachable on desktop and
+                  mobile alike without taking space in the chrome. */}
+              <DropdownMenuSeparator />
+              <p className="px-2 py-1 text-xs text-muted-foreground">Version {__APP_VERSION__}</p>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

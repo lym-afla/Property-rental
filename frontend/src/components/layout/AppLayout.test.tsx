@@ -79,3 +79,17 @@ describe('AppLayout theme', () => {
     expect(localStorage.getItem('theme')).toBe('dark')
   })
 })
+
+describe('AppLayout version', () => {
+  it('shows the build version in the account dropdown', async () => {
+    // Break caught: dropping the version line, or the build no longer
+    // injecting package.json's version, leaves no way to see what is deployed.
+    const user = userEvent.setup()
+
+    renderLayout()
+    await user.click(await screen.findByRole('button', { name: 'alice' }))
+
+    expect(__APP_VERSION__).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(screen.getByText(`Version ${__APP_VERSION__}`)).toBeInTheDocument()
+  })
+})

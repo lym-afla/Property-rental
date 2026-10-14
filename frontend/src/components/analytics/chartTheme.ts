@@ -50,17 +50,25 @@ export type SeriesVisualToken =
   | 'septenary'
   | 'octonary'
   | 'nonary'
+  | 'deposit'
 
 const visualTokenKeys: readonly SeriesVisualToken[] = [
   'primary', 'secondary', 'tertiary', 'quaternary', 'quinary',
   'senary', 'septenary', 'octonary', 'nonary',
 ]
 
+// Security deposits are liabilities, not income or expense categories, so they
+// get a hue outside the category palette (pink; no category uses it in either mode).
+const depositColors: Record<ChartThemeMode, string> = { light: '#BE185D', dark: '#EC4899' }
+
 function buildVisualTokens(mode: ChartThemeMode): Record<SeriesVisualToken, ChartSeriesStyle> {
   const palette = seriesColors[mode]
-  return Object.fromEntries(
-    visualTokenKeys.map((token, index) => [token, { color: palette[index], strokeWidth: 2.5 }]),
-  ) as Record<SeriesVisualToken, ChartSeriesStyle>
+  return {
+    ...Object.fromEntries(
+      visualTokenKeys.map((token, index) => [token, { color: palette[index], strokeWidth: 2.5 }]),
+    ),
+    deposit: { color: depositColors[mode], strokeWidth: 2.5 },
+  } as Record<SeriesVisualToken, ChartSeriesStyle>
 }
 
 const visualTokensByMode: Record<ChartThemeMode, Record<SeriesVisualToken, ChartSeriesStyle>> = {

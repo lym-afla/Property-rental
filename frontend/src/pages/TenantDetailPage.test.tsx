@@ -126,4 +126,34 @@ describe('TenantDetailPage (smoke)', () => {
     expect(await screen.findByText('Газимагомед')).toBeInTheDocument()
     expect(screen.queryByText('Газимагомед null')).not.toBeInTheDocument()
   })
+
+  it('marks deposit-funded transactions and disables their delete', async () => {
+    server.use(
+      http.get('/api/v1/transactions/', () =>
+        HttpResponse.json([
+          {
+            id: 1, property: 1, tenant: 1, date: '2024-01-10', category: 'rent',
+            period: '2024-01-01', currency: 'EUR', amount: '800.00', type: 'income',
+            comment: null, deposit_movement: 5,
+          },
+          {
+            id: 2, property: 1, tenant: 1, date: '2024-01-05', category: 'rent',
+            period: '2024-01-01', currency: 'EUR', amount: '700.00', type: 'income',
+            comment: null, deposit_movement: null,
+          },
+        ]),
+      ),
+      http.get('/api/v1/deposit-movements/', () => HttpResponse.json([])),
+      http.get('/api/v1/deposit-movements/balance/', () =>
+        HttpResponse.json({ as_of: '2024-01-31', balances: [] }),
+      ),
+    )
+    renderPage()
+    expect(await screen.findByText('From deposit')).toBeInTheDocument()
+    expect(screen.getAllByText('From deposit')).toHaveLength(1)
+    const deleteButtons = screen.getAllByRole('button', { name: /delete transaction/i })
+    expect(deleteButtons).toHaveLength(1)
+    expect(deleteButtons[0]).toBeDisabled()
+    expect(await screen.findByText('Security deposit')).toBeInTheDocument()
+  })
 })

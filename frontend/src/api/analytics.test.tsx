@@ -343,6 +343,22 @@ describe('analytics runtime schemas', () => {
     )
   })
 
+  it('accepts cash-flow payloads with deposit and net-cash series', () => {
+    const parsed = portfolioCashFlowSchema.parse({
+      ...cashFlowFixture,
+      series: [
+        ...cashFlowFixture.series,
+        { key: 'deposits', label: 'Security deposits', kind: 'deposit_movement' },
+        { key: 'net_cash_flow', label: 'Net cash flow', kind: 'net_cash' },
+      ],
+      points: [
+        { ...cashFlowFixture.points[0], deposits: 500, net_cash_flow: 2000 },
+      ],
+    })
+    expect(parsed.series.map((s) => s.kind)).toContain('net_cash')
+    expect(parsed.points[0].deposits).toBe(500)
+  })
+
   it('rejects scaled monetary responses', () => {
     expect(() =>
       timeSeriesSchema.parse({ ...cashFlowFixture, scale: 1000 }),

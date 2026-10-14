@@ -12,4 +12,5 @@ export type Transaction = {
   amount: string  // Decimal as string
   type: string    // read-only
   comment: string | null
+  deposit_movement: number | null  // read-only link to a deposit movement
 }

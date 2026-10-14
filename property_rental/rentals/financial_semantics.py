@@ -52,3 +52,17 @@ def revenue_cost_deltas(
     if kind == "income":
         return signed, 0.0
     return 0.0, -signed
+
+
+def deposit_signed_amount(kind: str, amount: Decimal) -> Decimal:
+    """Signed effect of a deposit movement on the deposit liability.
+
+    Balance-sheet only: deposits are not transactions and never reach
+    ``category_kind()``. received raises the liability; returned and applied
+    lower it.
+    """
+    if kind == "received":
+        return amount
+    if kind in ("returned", "applied"):
+        return -amount
+    raise ValueError(f"Unknown deposit movement kind: {kind!r}")

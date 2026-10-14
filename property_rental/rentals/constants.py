@@ -20,3 +20,11 @@ TRANSACTION_CATEGORIES = (
 INCOME_CATEGORIES = (
     'rent',
 )
+
+DEPOSIT_MOVEMENT_KINDS = (
+    ("received", "Received"),
+    ("returned", "Returned"),
+    ("applied", "Applied"),
+)
+
+DEPOSIT_APPLICATION_CATEGORIES = ("rent", "cost_reimbursement")

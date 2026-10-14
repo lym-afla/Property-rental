@@ -11,6 +11,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Server-provided reason for a failed request (`detail`, else the first
+ * field message), or `fallback` when the error carries none. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError) || !error.body || typeof error.body !== 'object') return fallback
+  const body = error.body as Record<string, unknown>
+  if (typeof body.detail === 'string' && body.detail) return body.detail
+  for (const value of Object.values(body)) {
+    const first = Array.isArray(value) ? value[0] : value
+    if (typeof first === 'string' && first) return first
+  }
+  return fallback
+}
+
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>

@@ -20,6 +20,13 @@ type TransactionFilters = {
   currency?: string
 }
 
+type DepositBalanceParams = {
+  tenantId?: number
+  propertyId?: number
+  // ISO date `YYYY-MM-DD`.
+  asOf?: string
+}
+
 type AnalyticsFilters = {
   start?: string
   end?: string
@@ -107,6 +114,14 @@ export const queryKeys = {
     detail: (id: number) => ['lease-rents', 'detail', id] as const,
   },
 
+  deposits: {
+    all: ['deposits'] as const,
+    byTenant: (tenantId: number) =>
+      ['deposits', 'by-tenant', tenantId] as const,
+    balance: ({ tenantId, propertyId, asOf }: DepositBalanceParams) =>
+      ['deposits', 'balance', { tenantId, propertyId, asOf }] as const,
+  },
+
   analytics: {
     all: ['analytics'] as const,
     portfolio: {
@@ -192,4 +207,4 @@ export const queryKeys = {
 }
 
 export { normalizePropertyIds }
-export type { AnalyticsFilters, PropertyBreakdownFilters, TransactionFilters }
+export type { AnalyticsFilters, DepositBalanceParams, PropertyBreakdownFilters, TransactionFilters }

@@ -58,7 +58,10 @@ export function seriesWithVisualTokens(
     'octonary',
     'nonary',
   ] as const
-  return series.map((item, index) => ({ ...item, visualToken: tokens[index % tokens.length] }))
+  let categoryIndex = 0
+  return series.map((item) => item.kind === 'deposit_movement'
+    ? { ...item, visualToken: 'deposit' as const }
+    : { ...item, visualToken: tokens[categoryIndex++ % tokens.length] })
 }
 
 export function cashTable(

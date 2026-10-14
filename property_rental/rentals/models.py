@@ -17,7 +17,13 @@ from django.db.models import Q
 # discoverable.
 from django.core.validators import MaxValueValidator
 
-from .constants import CURRENCY_CHOICES, TRANSACTION_CATEGORIES, INCOME_CATEGORIES
+from .constants import (
+    CURRENCY_CHOICES,
+    DEPOSIT_APPLICATION_CATEGORIES,
+    DEPOSIT_MOVEMENT_KINDS,
+    INCOME_CATEGORIES,
+    TRANSACTION_CATEGORIES,
+)
 from .financial_semantics import category_kind, normalize_transaction_amount
 # ``update_FX_database`` was imported here for ``FX.update_fx_rates``.
 # Task 10 moved that body into ``rentals.services.fx``; the yfinance
@@ -371,6 +377,45 @@ class Transaction(models.Model):
         self.comment = '–' if not self.comment else self.comment
         super(Transaction, self).save(*args, **kwargs)
         
+class DepositMovement(models.Model):
+    """Security-deposit ledger entry; amount is positive, sign comes from kind."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='deposit_movements')
+    date = models.DateField()
+    kind = models.CharField(max_length=20, choices=DEPOSIT_MOVEMENT_KINDS)
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    applied_to = models.CharField(
+        max_length=20,
+        choices=[(key, label) for key, label in TRANSACTION_CATEGORIES if key in DEPOSIT_APPLICATION_CATEGORIES],
+        null=True,
+        blank=True,
+    )
+    transaction = models.OneToOneField(
+        Transaction,
+        null=True,
+        blank=True,
+        on_delete=models.RESTRICT,
+        related_name='deposit_movement',
+    )
+    owns_transaction = models.BooleanField(default=False)
+    comment = models.TextField(max_length=250, blank=True, null=True)
+
+    class Meta:
+        ordering = ('date', 'id')
+        constraints = [
+            models.CheckConstraint(check=Q(amount__gt=0), name='deposit_amount_positive'),
+            models.CheckConstraint(
+                check=Q(kind='applied', applied_to__isnull=False)
+                | (~Q(kind='applied') & Q(applied_to__isnull=True)),
+                name='deposit_applied_to_iff_applied',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.tenant_id}: {self.kind} {self.amount} {self.currency}"
+
+
 # Table with FX data
 class FXManager(models.Manager):
     """Custom manager for ``FX`` whose ``bulk_create`` emits

@@ -18,6 +18,7 @@ from django.conf import settings
 
 from rentals.models import (
     FX,
+    DepositMovement,
     Lease_rent,
     Property,
     Property_capital_structure,
@@ -84,6 +85,9 @@ class TransactionSerializer(serializers.ModelSerializer):
     """
 
     type = serializers.ReadOnlyField()
+    # Reverse one-to-one from ``DepositMovement.transaction``: the movement
+    # PK, or ``null`` for a transaction not linked to a security deposit.
+    deposit_movement = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
 
     class Meta:
         model = Transaction
@@ -98,6 +102,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "amount",
             "type",
             "comment",
+            "deposit_movement",
         ]
 
 
@@ -166,6 +171,40 @@ class LeaseRentSerializer(serializers.ModelSerializer):
             "rent",
             "currency",
         ]
+
+
+class DepositMovementSerializer(serializers.ModelSerializer):
+    """Serializer for ``DepositMovement`` (``/api/v1/deposit-movements/``).
+
+    Plain field validation only: ``kind`` / ``applied_to`` are restricted
+    to their model choices so bad values are 400s. Business rules and
+    ownership checks live in ``services.deposits`` and the ViewSet.
+    ``owns_transaction`` is read-only (set by the service).
+    """
+
+    class Meta:
+        model = DepositMovement
+        fields = [
+            "id",
+            "tenant",
+            "date",
+            "kind",
+            "currency",
+            "amount",
+            "applied_to",
+            "transaction",
+            "owns_transaction",
+            "comment",
+        ]
+        read_only_fields = ["owns_transaction"]
+        # Drop the auto OneToOne UniqueValidator on ``transaction``: it runs
+        # before the ownership check and would reveal whether another
+        # landlord's transaction is deposit-linked. The service rejects
+        # double-linking on field ``transaction``.
+        extra_kwargs = {
+            "applied_to": {"allow_blank": False},
+            "transaction": {"validators": []},
+        }
 
 
 class UserSerializer(serializers.ModelSerializer):

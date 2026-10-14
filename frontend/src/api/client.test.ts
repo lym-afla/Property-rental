@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { apiFetch, startAuthorizationRefresh } from './client'
+import { ApiError, apiErrorMessage, apiFetch, startAuthorizationRefresh } from './client'
 
 describe('apiFetch', () => {
   beforeEach(() => {
@@ -133,5 +133,22 @@ describe('apiFetch', () => {
     startAuthorizationRefresh('/oidc/authenticate/?next=%2Fprofile')
     expect(assign).toHaveBeenCalledWith('/oidc/authenticate/?next=%2Fprofile')
     vi.unstubAllGlobals()
+  })
+})
+
+describe('apiErrorMessage', () => {
+  it('prefers the body detail', () => {
+    expect(apiErrorMessage(new ApiError(409, { detail: 'Edit the movement instead.' }), 'Failed')).toBe('Edit the movement instead.')
+  })
+
+  it('falls back to the first field message', () => {
+    expect(apiErrorMessage(new ApiError(400, { amount: ['Balance cannot go below zero.'] }), 'Failed')).toBe('Balance cannot go below zero.')
+    expect(apiErrorMessage(new ApiError(400, { amount: 'Too small.' }), 'Failed')).toBe('Too small.')
+  })
+
+  it('uses the fallback for other errors and bodies', () => {
+    expect(apiErrorMessage(new ApiError(500, 'Server Error'), 'Failed')).toBe('Failed')
+    expect(apiErrorMessage(new ApiError(400, {}), 'Failed')).toBe('Failed')
+    expect(apiErrorMessage(new Error('x'), 'Failed')).toBe('Failed')
   })
 })

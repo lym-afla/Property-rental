@@ -33,19 +33,30 @@ change widens a field.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from dateutil.parser import parse as parse_date
 
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from rentals.models import FX, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
+from rentals.services.deposits import (
+    DepositRuleError,
+    create_movement,
+    delete_movement,
+    deposit_held,
+    deposit_held_by_tenant,
+    movements_for_user,
+    update_movement,
+)
+from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
+    DepositMovementSerializer,
     FXSerializer,
     LeaseRentSerializer,
     PropertyCapitalStructureSerializer,
@@ -481,6 +492,12 @@ class TenantViewSet(viewsets.ModelViewSet):
         return Response(TenantSerializer(tenant).data, status=200)
 
 
+class DepositLinkedTransaction(APIException):
+    status_code = 409
+    default_detail = "Edit the security deposit movement instead."
+    default_code = "deposit_linked_transaction"
+
+
 class TransactionViewSet(viewsets.ModelViewSet):
     """CRUD for Transaction scoped via ``property.owned_by.user``.
 
@@ -500,11 +517,26 @@ class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = _OWNER_PERMS
 
+    # Fields that a deposit-linked transaction may not change directly; the
+    # security deposit movement is the source of truth for them.
+    _DEPOSIT_GUARDED_FIELDS = ("date", "amount", "category", "currency", "tenant", "property")
+
+    @staticmethod
+    def _has_deposit_movement(transaction_obj):
+        try:
+            transaction_obj.deposit_movement
+        except DepositMovement.DoesNotExist:
+            return False
+        return True
+
     def get_queryset(self):
         # Base scope: only transactions whose ``property`` is owned by the
         # requesting user (the per-user scoping invariant every ViewSet
-        # enforces).
-        qs = Transaction.objects.filter(property__owned_by__user=self.request.user)
+        # enforces). ``deposit_movement`` is selected up front so the list
+        # serializer does not issue one query per row.
+        qs = Transaction.objects.filter(
+            property__owned_by__user=self.request.user
+        ).select_related("deposit_movement")
         # Honor an optional ``?property=<id>`` query param so callers can
         # narrow to one property (the property detail page does this for
         # its Recent Transactions panel). The param is scoped to the
@@ -595,7 +627,21 @@ class TransactionViewSet(viewsets.ModelViewSet):
         self._validate_and_save(serializer)
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        if self._has_deposit_movement(instance) and any(
+            name in serializer.validated_data
+            and serializer.validated_data[name] != getattr(instance, name)
+            for name in self._DEPOSIT_GUARDED_FIELDS
+        ):
+            raise DepositLinkedTransaction()
         self._validate_and_save(serializer)
+
+    def perform_destroy(self, instance):
+        if self._has_deposit_movement(instance):
+            raise DepositLinkedTransaction()
+        super().perform_destroy(instance)
+
+
 class FXViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only access to FX rows.
 
@@ -738,3 +784,110 @@ class LeaseRentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
+
+
+def _money(amount):
+    """Format a Decimal as a 2-dp string, e.g. ``"1500.00"``."""
+    return format(amount.quantize(Decimal("0.01")), "f")
+
+
+def _int_param(query_params, name):
+    raw = query_params.get(name)
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValidationError({name: "Must be an integer id."})
+
+
+class DepositMovementViewSet(viewsets.ModelViewSet):
+    """CRUD for ``DepositMovement`` scoped via ``tenant.property.owned_by.user``.
+
+    All writes delegate to ``services.deposits`` (the only write path);
+    a ``DepositRuleError`` becomes a 400 keyed by the offending field.
+    ``tenant`` / ``transaction`` must belong to the requester (400, as in
+    ``LeaseRentViewSet``). Moving a movement to another tenant is not
+    supported. The queryset is owner-scoped, so foreign rows are 404.
+    """
+
+    serializer_class = DepositMovementSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        property_id = _int_param(self.request.query_params, "property")
+        tenant_id = _int_param(self.request.query_params, "tenant")
+        return movements_for_user(
+            self.request.user,
+            property_ids=(property_id,) if property_id is not None else (),
+            tenant_id=tenant_id,
+        )
+
+    def _validated_fields(self, serializer):
+        data = dict(serializer.validated_data)
+        tenant = data.get("tenant")
+        if tenant is not None and not Tenant.objects.filter(
+            id=tenant.id, property__owned_by__user=self.request.user
+        ).exists():
+            raise ValidationError({"tenant": "Tenant does not belong to a property you own."})
+        tx = data.get("transaction")
+        if tx is not None and not Transaction.objects.filter(
+            id=tx.id, property__owned_by__user=self.request.user
+        ).exists():
+            raise ValidationError({"transaction": "Transaction does not belong to a property you own."})
+        return data
+
+    def perform_create(self, serializer):
+        data = self._validated_fields(serializer)
+        try:
+            serializer.instance = create_movement(data.pop("tenant"), **data)
+        except DepositRuleError as exc:
+            raise ValidationError({exc.field: [exc.message]})
+
+    def perform_update(self, serializer):
+        data = self._validated_fields(serializer)
+        tenant = data.pop("tenant", None)
+        if tenant is not None and tenant.id != serializer.instance.tenant_id:
+            raise ValidationError({"tenant": "Changing the tenant of a movement is not supported."})
+        try:
+            update_movement(serializer.instance, **data)
+        except DepositRuleError as exc:
+            raise ValidationError({exc.field: [exc.message]})
+
+    def perform_destroy(self, instance):
+        try:
+            delete_movement(instance)
+        except DepositRuleError as exc:
+            raise ValidationError({exc.field: [exc.message]})
+
+    @action(detail=False, methods=["get"])
+    def balance(self, request):
+        """Deposit held for one tenant or one property as of a date."""
+        tenant_id = _int_param(request.query_params, "tenant")
+        property_id = _int_param(request.query_params, "property")
+        if (tenant_id is None) == (property_id is None):
+            raise ValidationError("Pass exactly one of tenant or property.")
+        as_of = _parse_as_of(request.query_params)
+        by_tenant = None
+        if tenant_id is not None:
+            tenant = get_object_or_404(
+                Tenant, id=tenant_id, property__owned_by__user=request.user
+            )
+            balances = deposit_held(as_of=as_of, tenant=tenant)
+        else:
+            prop = _validate_property_owned_by(property_id, request.user)
+            balances = deposit_held(as_of=as_of, property=prop)
+            by_tenant = [
+                {"tenant": t.id, "currency": currency, "amount": _money(amount)}
+                for t, currency, amount in deposit_held_by_tenant(property=prop, as_of=as_of)
+            ]
+        body = {
+            "as_of": as_of.isoformat(),
+            "balances": [
+                {"currency": currency, "amount": _money(amount)}
+                for currency, amount in sorted(balances.items())
+            ],
+        }
+        if by_tenant is not None:
+            body["by_tenant"] = by_tenant
+        return Response(body)
