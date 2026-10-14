@@ -108,6 +108,11 @@ const defaultHandlers = [
   }),
   http.delete(`${API}/properties/:id/`, () => new HttpResponse(null, { status: 204 })),
 
+  // ---- Deposits ---------------------------------------------------------
+  http.get(`${API}/deposit-movements/balance/`, () =>
+    HttpResponse.json({ as_of: '2026-07-29', balances: [], by_tenant: [] }),
+  ),
+
   // ---- Tenants ----------------------------------------------------------
   http.get(`${API}/tenants/`, () => HttpResponse.json(fixtureTenants)),
   http.get(`${API}/tenants/with_stats/`, () =>

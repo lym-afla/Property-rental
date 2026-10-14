@@ -41,10 +41,12 @@ import {
   usePropertyValuations,
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
+import { useTenants } from '@/api/tenants'
 import { useTransactions } from '@/api/transactions'
 import { useProfitLoss, usePropertyValuationAnalytics } from '@/api/analytics'
 import { useSession } from '@/context/SessionProvider'
 import { ProfitLossTable } from '@/components/analytics/ProfitLossTable'
+import { DepositsHeldSummary } from '@/features/property/DepositsHeldSummary'
 import { ValuationChart } from '@/features/property/ValuationChart'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
@@ -94,6 +96,7 @@ export function PropertyDetailPage() {
   const { user } = useSession()
   const valuationsQuery = usePropertyValuations(propertyId)
   const transactionsQuery = useTransactions({ property: propertyId })
+  const tenantsQuery = useTenants()
 
   // The valuation endpoint returns complete record history. Deliberately do
   // not pass an end date or derive a client-side five-year cutoff.
@@ -135,6 +138,15 @@ export function PropertyDetailPage() {
     const value = Number(latest.capital_structure_value)
     return Number.isFinite(value) ? value : null
   }, [valuationsQuery.data])
+
+  // Names for the deposits summary; unknown ids fall back inside the summary.
+  const propertyTenants = useMemo(
+    () =>
+      (tenantsQuery.data ?? [])
+        .filter((t) => t.property === propertyId)
+        .map((t) => ({ id: t.id, name: `${t.first_name} ${t.last_name}`.trim() })),
+    [tenantsQuery.data, propertyId],
+  )
 
   // Most-recent first; the API may or may not pre-sort, so we sort here to
   // make the preview deterministic regardless of backend ordering. Capped
@@ -339,6 +351,12 @@ export function PropertyDetailPage() {
             isError={valuationAnalyticsQuery.isError}
             onRetry={() => valuationAnalyticsQuery.refetch()}
             onViewHistory={() => setActiveTab('valuations')}
+          />
+
+          <DepositsHeldSummary
+            propertyId={property.id}
+            asOf={performanceEnd}
+            tenants={propertyTenants}
           />
 
           <div className="space-y-2">

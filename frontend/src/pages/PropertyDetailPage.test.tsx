@@ -264,6 +264,27 @@ describe('PropertyDetailPage', () => {
     expect(screen.getByRole('button', { name: /new valuation/i })).toBeInTheDocument()
   })
 
+  it('shows deposits held for the property as of the effective date', async () => {
+    let search = ''
+    server.use(
+      http.get('/api/v1/deposit-movements/balance/', ({ request }) => {
+        search = new URL(request.url).searchParams.toString()
+        return HttpResponse.json({
+          as_of: '2026-07-29',
+          balances: [{ currency: 'EUR', amount: '800.00' }],
+          by_tenant: [{ tenant: 1, currency: 'EUR', amount: '800.00' }],
+        })
+      }),
+    )
+    renderPage()
+    expect(await screen.findByText('Deposits held')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Bob Jones' })).toHaveAttribute(
+      'href',
+      '/tenants/1',
+    )
+    expect(search).toBe('property=1&as_of=2026-07-29')
+  })
+
   it('renders ErrorState when the property request fails', async () => {
     server.use(
       http.get('/api/v1/properties/:id/', () =>
