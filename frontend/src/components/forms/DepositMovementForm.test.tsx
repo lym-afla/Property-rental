@@ -129,6 +129,13 @@ describe('DepositMovementForm', () => {
     expect(onSubmit.mock.calls[0][0]).toMatchObject({ transaction: 42, applied_to: 'rent' })
   })
 
+  it('keeps the date editable and the transaction fixed for an owned movement', () => {
+    setup({ initial: { ...initialApplied, owns_transaction: true } })
+    expect(screen.getByLabelText('Date')).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: 'Transaction' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Transaction' })).toHaveTextContent('2026-05-01')
+  })
+
   it('choosing a candidate sets and disables the date', async () => {
     const { user, onSubmit } = setup()
     await choose(user, 'Kind', 'Applied')

@@ -133,14 +133,17 @@ export function DepositMovementForm({
       (t.deposit_movement === null || t.deposit_movement === initial?.id),
   )
   const selected = candidates.find((t) => t.id === transaction)
+  // A movement that created its own transaction stays tied to it (the server
+  // rejects relinking) but its date remains editable and is synced server-side.
+  const ownsTransaction = initial?.owns_transaction === true
 
   // Drop a selection that stopped being a candidate (category/currency/kind
   // changed) so we never submit a mismatched link.
   useEffect(() => {
-    if (transaction !== null && !selected) {
+    if (!ownsTransaction && transaction !== null && !selected) {
       form.setValue('transaction', null)
     }
-  }, [transaction, selected, form])
+  }, [transaction, selected, ownsTransaction, form])
 
   async function submit(values: FormValues) {
     const applied = values.kind === 'applied'
@@ -187,7 +190,7 @@ export function DepositMovementForm({
                   <Input
                     type="date"
                     {...field}
-                    disabled={isApplied && selected !== undefined}
+                    disabled={isApplied && selected !== undefined && !ownsTransaction}
                   />
                 </FormControl>
                 <FormMessage />
@@ -293,6 +296,7 @@ export function DepositMovementForm({
                 <FormItem>
                   <FormLabel>Transaction</FormLabel>
                   <Select
+                    disabled={ownsTransaction}
                     onValueChange={(v) => {
                       if (v === NEW_TRANSACTION) {
                         field.onChange(null)
