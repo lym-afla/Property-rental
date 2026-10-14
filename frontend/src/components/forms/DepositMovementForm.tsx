@@ -7,7 +7,7 @@
 // - `kind` is Received / Returned / Applied. Only Applied shows "Applies to"
 //   and "Transaction"; for the other kinds both are submitted as `null`.
 // - `currency` is read-only when the tenant already holds a deposit in a
-//   currency (`lockedCurrency`), editable otherwise.
+//   currency (`lockedCurrency`), a select of the supported currencies otherwise.
 // - "Transaction" defaults to "Create new transaction" (`transaction: null`)
 //   or attaches the movement to one of `candidateTransactions` with matching
 //   category and currency that is not linked to another movement. Choosing
@@ -29,6 +29,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { CURRENCY_OPTIONS } from './PropertyForm'
 import {
   Select,
   SelectContent,
@@ -250,9 +251,24 @@ export function DepositMovementForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Currency</FormLabel>
-                <FormControl>
-                  <Input {...field} readOnly={lockedCurrency !== null} />
-                </FormControl>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={lockedCurrency !== null}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select currency" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

@@ -412,3 +412,18 @@ def test_attaching_other_landlords_linked_transaction_gives_ownership_error(
     )
     assert response.status_code == 400
     assert response.json() == {"transaction": "Transaction does not belong to a property you own."}
+
+
+def test_lease_rent_detail_is_owner_scoped(auth_client, tenant, other_landlord_user):
+    from django.test import Client
+
+    from rentals.tests.factories import LeaseRentFactory
+
+    rent = LeaseRentFactory(tenant=tenant)
+    url = f"/api/v1/lease-rents/{rent.pk}/"
+
+    assert auth_client.get(url).status_code == 200
+
+    other = Client()
+    other.force_login(other_landlord_user)
+    assert other.get(url).status_code == 404

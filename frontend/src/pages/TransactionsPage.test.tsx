@@ -11,8 +11,9 @@
 // we can assert that an inbound `?property=1&category=rent` pre-populates
 // the filter UI, and that the page writes back to the URL when a filter
 // changes.
-import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { toast } from 'sonner'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -21,6 +22,8 @@ import { http, HttpResponse } from 'msw'
 import { TransactionsPage } from './TransactionsPage'
 import { server } from '@/test/handlers'
 import { fixtureTransactionIncome } from '@/__fixtures__/transaction'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 function renderPage(initialEntry = '/transactions') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -64,6 +67,21 @@ describe('TransactionsPage', () => {
     )
     renderPage()
     expect(await screen.findByText(/failed to load transactions/i)).toBeInTheDocument()
+  })
+
+  it('shows the server reason when a delete is blocked', async () => {
+    server.use(
+      http.delete('/api/v1/transactions/:id/', () =>
+        HttpResponse.json({ detail: 'Edit the security deposit movement instead.' }, { status: 409 }),
+      ),
+    )
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Delete transaction 1' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Edit the security deposit movement instead.'),
+    )
   })
 
   it('renders EmptyState when the list is empty', async () => {

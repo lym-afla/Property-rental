@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
+import { toast } from 'sonner'
+
+import { ApiError } from '@/api/client'
 import { SecurityDepositCard } from './SecurityDepositCard'
 import type { DepositMovement } from '@/types/deposit'
 
@@ -16,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
 }))
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 vi.mock('@/api/deposits', () => ({
   useDepositMovements: () => mocks.movements,
@@ -114,5 +119,19 @@ describe('SecurityDepositCard', () => {
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith(7))
+  })
+
+  it('shows the server field message when a delete is rejected', async () => {
+    const user = userEvent.setup()
+    mocks.remove.mockRejectedValue(
+      new ApiError(400, { amount: ['Deposit balance cannot go below zero.'] }),
+    )
+    renderCard()
+    await user.click(screen.getAllByRole('button', { name: 'Delete' })[0])
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Deposit balance cannot go below zero.'),
+    )
   })
 })

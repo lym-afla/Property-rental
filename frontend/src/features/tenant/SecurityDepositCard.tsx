@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { apiErrorMessage } from '@/api/client'
 
 import {
   useCreateDepositMovement,
@@ -103,8 +104,8 @@ export function SecurityDepositCard({
       await deleteMovement.mutateAsync(deleting.id)
       toast.success('Deposit movement deleted')
       setDeleting(null)
-    } catch {
-      toast.error('Failed to delete deposit movement')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Failed to delete deposit movement'))
     }
   }
 

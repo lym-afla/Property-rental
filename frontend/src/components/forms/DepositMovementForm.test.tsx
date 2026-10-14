@@ -84,18 +84,24 @@ describe('DepositMovementForm', () => {
     expect(screen.queryByText('Applies to')).not.toBeInTheDocument()
   })
 
-  it('locks the currency input when a deposit currency exists', () => {
+  it('locks the currency select when a deposit currency exists', () => {
     setup({ lockedCurrency: 'EUR' })
-    const input = screen.getByLabelText('Currency')
-    expect(input).toHaveValue('EUR')
-    expect(input).toHaveAttribute('readonly')
+    const select = screen.getByRole('combobox', { name: 'Currency' })
+    expect(select).toHaveTextContent('EUR')
+    expect(select).toBeDisabled()
   })
 
-  it('lets the user edit the currency when nothing is locked', () => {
-    setup()
-    const input = screen.getByLabelText('Currency')
-    expect(input).toHaveValue('USD')
-    expect(input).not.toHaveAttribute('readonly')
+  it('offers the supported currencies when nothing is locked', async () => {
+    const { user } = setup()
+    const select = screen.getByRole('combobox', { name: 'Currency' })
+    expect(select).toHaveTextContent('USD')
+    expect(select).toBeEnabled()
+    await user.click(select)
+    expect(
+      screen.getAllByRole('option').map((o) => o.textContent),
+    ).toEqual(['USD', 'EUR', 'GBP', 'RUB'])
+    await user.click(screen.getByRole('option', { name: 'GBP' }))
+    expect(select).toHaveTextContent('GBP')
   })
 
   it('filters candidates by category, currency and existing links', async () => {

@@ -36,6 +36,7 @@ import {
   useUpdateTransaction,
   useDeleteTransaction,
 } from '@/api/transactions'
+import { apiErrorMessage } from '@/api/client'
 import { useProperties } from '@/api/properties'
 import { useTenants } from '@/api/tenants'
 import { DataTable } from '@/components/table/DataTable'
@@ -351,7 +352,7 @@ export function TransactionsPage() {
                     toast.success('Transaction updated')
                     setEditTarget(null)
                   },
-                  onError: () => toast.error('Failed to update transaction'),
+                  onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update transaction')),
                 },
               )
             }
@@ -440,7 +441,7 @@ export function TransactionsPage() {
                     toast.success('Transaction updated')
                     setEditTarget(null)
                   },
-                  onError: () => toast.error('Failed to update transaction'),
+                  onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update transaction')),
                 },
               )
             }
@@ -467,7 +468,7 @@ export function TransactionsPage() {
                 toast.success('Transaction deleted')
                 setDeleteTarget(null)
               },
-              onError: () => toast.error('Failed to delete transaction'),
+              onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete transaction')),
             })
           }}
         />

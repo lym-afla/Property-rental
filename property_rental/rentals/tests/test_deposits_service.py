@@ -303,6 +303,15 @@ def test_tenant_delete_cascades_movements_and_owned_transactions(tenant):
     assert Transaction.objects.count() == 0
 
 
+def test_property_delete_cascades_movements_and_owned_transactions(tenant, sample_property):
+    rcv(tenant, "2000")
+    out(tenant, "applied", "1500", "2025-12-01", applied_to="rent")
+    assert Transaction.objects.count() == 1
+    sample_property.delete()
+    assert DepositMovement.objects.count() == 0
+    assert Transaction.objects.count() == 0
+
+
 def test_property_balance_groups_currencies(tenant, sample_property):
     other = TenantFactory(property=sample_property, lease_start=date(2025, 1, 1))
     rcv(tenant, "1500")

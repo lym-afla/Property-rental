@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { NetCashFlowChart } from './NetCashFlowChart'
@@ -9,7 +9,7 @@ vi.mock('recharts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('recharts')>()),
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children, stackOffset }: { children: React.ReactNode; stackOffset?: string }) => <div data-testid="cash-flow-plot" data-stack-offset={stackOffset}>{children}</div>,
-  Bar: ({ name, fill, stackId }: { name: string; fill: string; stackId?: string }) => <span data-testid="cash-bar" aria-label={name} data-fill={fill} data-stack-id={stackId} />,
+  Bar: ({ name, fill, stackId, onClick }: { name: string; fill: string; stackId?: string; onClick?: (entry: unknown) => void }) => <span data-testid="cash-bar" aria-label={name} data-fill={fill} data-stack-id={stackId} onClick={() => onClick?.({ period_start: '2026-01-01', period_end: '2026-01-28' })} />,
   Tooltip: ({ content }: { content: (props: { active: boolean; label: string; payload: Array<{ name: string; value: unknown }> }) => React.ReactNode }) => content({ active: true, label: '2026-01-01', payload: [{ name: 'Missing', value: null }, { name: 'Invalid', value: Number.NaN }] }),
 }))
 
@@ -45,7 +45,7 @@ const depositData = {
 describe('NetCashFlowChart', () => {
   it('keeps signed category values and exposes a zero baseline and exact-value table', async () => {
     const user = userEvent.setup()
-    render(<NetCashFlowChart data={data} />)
+    render(<MemoryRouter><NetCashFlowChart data={data} /></MemoryRouter>)
 
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
@@ -70,11 +70,11 @@ describe('NetCashFlowChart', () => {
     ]
     const categoryPoint = Object.fromEntries(categories.map(({ key }, index) => [key, index === 0 ? 1000 : -(index * 10)]))
 
-    render(<NetCashFlowChart data={{
+    render(<MemoryRouter><NetCashFlowChart data={{
       ...data,
       series: [...categories, ...data.series.slice(2)],
       points: [{ ...data.points[0], ...categoryPoint }],
-    }} />)
+    }} /></MemoryRouter>)
 
     const fills = screen.getAllByTestId('cash-bar').map((bar) => bar.getAttribute('data-fill'))
     expect(fills).toHaveLength(categories.length)
@@ -84,7 +84,7 @@ describe('NetCashFlowChart', () => {
   it('uses a visible drill-down disclosure for pointer and keyboard activation', async () => {
     const user = userEvent.setup()
     const onDrillDown = vi.fn()
-    render(<NetCashFlowChart data={data} propertyIds={[3, 1]} onDrillDown={onDrillDown} />)
+    render(<MemoryRouter><NetCashFlowChart data={data} propertyIds={[3, 1]} onDrillDown={onDrillDown} /></MemoryRouter>)
 
     const disclosure = screen.getByText('Drill down to transactions')
     expect(disclosure).not.toHaveClass('sr-only')
@@ -100,12 +100,12 @@ describe('NetCashFlowChart', () => {
   })
 
   it('shows an empty state when a response has periods but no income or expense series', () => {
-    render(<NetCashFlowChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', net_income: 750 }] }} />)
+    render(<MemoryRouter><NetCashFlowChart data={{ ...data, series: [{ key: 'net_income', label: 'Net income', kind: 'net' }], points: [{ period_start: '2026-01-01', period_end: '2026-01-31', net_income: 750 }] }} /></MemoryRouter>)
     expect(screen.getByText('No net cash flow data for this selection.')).toBeInTheDocument()
   })
 
   it('renders missing and invalid tooltip values as em dashes', () => {
-    render(<NetCashFlowChart data={data} />)
+    render(<MemoryRouter><NetCashFlowChart data={data} /></MemoryRouter>)
 
     expect(screen.getAllByText('—')).toHaveLength(2)
   })
@@ -141,6 +141,22 @@ describe('NetCashFlowChart', () => {
       expect(within(table).getByRole('columnheader', { name: 'Net cash flow' })).toBeInTheDocument()
       expect(table).toHaveTextContent('($200)')
       expect(table).toHaveTextContent('$1,250')
+    })
+
+    it('navigates to tenants when the deposit bar is clicked, without calling onDrillDown', async () => {
+      const user = userEvent.setup()
+      const onDrillDown = vi.fn()
+      render(
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route path="/dashboard" element={<NetCashFlowChart data={depositData} onDrillDown={onDrillDown} />} />
+            <Route path="/tenants" element={<div>Tenants page</div>} />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await user.click(screen.getByRole('generic', { name: 'Security deposits' }))
+      expect(await screen.findByText('Tenants page')).toBeInTheDocument()
+      expect(onDrillDown).not.toHaveBeenCalled()
     })
 
     it('links deposit drill-down to tenants without calling onDrillDown', async () => {

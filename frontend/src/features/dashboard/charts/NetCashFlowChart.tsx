@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
@@ -27,6 +27,7 @@ function categorySeries(data: PortfolioChartData) {
 
 export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyIds = [], onDrillDown }: Props) {
   const charts = useChartTheme()
+  const navigate = useNavigate()
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set())
   const series = data ? seriesWithVisualTokens(categorySeries(data)) : []
   const state = chartState('Net cash flow', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
@@ -61,7 +62,7 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
             <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} {...CHART_AXIS_PROPS} />
             <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
-            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId={item.kind === DEPOSIT_KIND ? 'deposits' : 'cash-flow'} fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
+            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId={item.kind === DEPOSIT_KIND ? 'deposits' : 'cash-flow'} fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} onClick={item.kind === DEPOSIT_KIND ? () => navigate('/tenants') : (entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>
           </ResponsiveChartContainer>
         </div>
