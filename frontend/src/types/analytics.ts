@@ -147,6 +147,8 @@ const cashFlowSeriesDefinitionSchema = z
       'expense_total',
       'net',
       'cumulative',
+      'deposit_movement',
+      'net_cash',
     ]),
   })
   .strict()

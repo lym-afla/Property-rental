@@ -11,6 +11,7 @@ export const fixtureTransactionIncome: Transaction = {
   amount: '800.00',
   type: 'income',
   comment: 'January rent',
+  deposit_movement: null,
 }
 
 export const fixtureTransactionExpense: Transaction = {
@@ -24,4 +25,5 @@ export const fixtureTransactionExpense: Transaction = {
   amount: '-150.00',
   type: 'expense',
   comment: 'Leaking tap fix',
+  deposit_movement: null,
 }

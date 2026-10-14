@@ -43,6 +43,7 @@ export function useCreateTransaction() {
       apiFetch<Transaction>('/transactions/', { method: 'POST', body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
+      qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
@@ -58,6 +59,7 @@ export function useUpdateTransaction() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
+      qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
@@ -70,6 +72,7 @@ export function useDeleteTransaction() {
       apiFetch(`/transactions/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
+      qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
   })
