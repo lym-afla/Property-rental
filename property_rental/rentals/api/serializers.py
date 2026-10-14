@@ -197,7 +197,14 @@ class DepositMovementSerializer(serializers.ModelSerializer):
             "comment",
         ]
         read_only_fields = ["owns_transaction"]
-        extra_kwargs = {"applied_to": {"allow_blank": False}}
+        # Drop the auto OneToOne UniqueValidator on ``transaction``: it runs
+        # before the ownership check and would reveal whether another
+        # landlord's transaction is deposit-linked. The service rejects
+        # double-linking on field ``transaction``.
+        extra_kwargs = {
+            "applied_to": {"allow_blank": False},
+            "transaction": {"validators": []},
+        }
 
 
 class UserSerializer(serializers.ModelSerializer):

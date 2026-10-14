@@ -364,3 +364,51 @@ def test_balance_respects_as_of(auth_client, tenant):
     assert body["balances"] == [{"currency": "GBP", "amount": "1500.00"}]
     body = auth_client.get(f"{URL}balance/?tenant={tenant.id}&as_of=2026-06-01").json()
     assert body["balances"] == [{"currency": "GBP", "amount": "1800.00"}]
+
+
+@pytest.mark.django_db
+def test_detail_get_patch_delete_of_owned_movement(auth_client, tenant):
+    movement = _received(tenant)
+    assert auth_client.get(f"{URL}{movement.id}/").status_code == 200
+    patched = auth_client.patch(
+        f"{URL}{movement.id}/", json.dumps({"comment": "note"}), content_type="application/json"
+    )
+    assert patched.status_code == 200
+    assert auth_client.delete(f"{URL}{movement.id}/").status_code == 204
+
+
+@pytest.mark.django_db
+def test_owner_permission_resolves_owner_via_tenant(tenant, landlord_user, other_landlord_user):
+    from rentals.api.permissions import IsOwnerOrReadOnly
+
+    movement = _received(tenant)
+    assert IsOwnerOrReadOnly._owner_user(movement) == landlord_user
+    assert IsOwnerOrReadOnly._owner_user(movement) != other_landlord_user
+
+
+@pytest.mark.django_db
+def test_other_landlords_movement_patch_is_404(auth_client, other_tenant):
+    theirs = _received(other_tenant)
+    response = auth_client.patch(
+        f"{URL}{theirs.id}/", json.dumps({"comment": "x"}), content_type="application/json"
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_attaching_other_landlords_linked_transaction_gives_ownership_error(
+    auth_client, tenant, other_tenant
+):
+    _received(other_tenant, amount="1000.00")
+    theirs = create_movement(
+        other_tenant, date=date(2026, 2, 1), kind="applied", currency="GBP",
+        amount=Decimal("100.00"), applied_to="rent",
+    )
+    _received(tenant)
+    response = _post(
+        auth_client,
+        {"tenant": tenant.id, "date": "2026-02-01", "kind": "applied", "currency": "GBP",
+         "amount": "100.00", "applied_to": "rent", "transaction": theirs.transaction_id},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"transaction": "Transaction does not belong to a property you own."}

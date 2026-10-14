@@ -38,6 +38,10 @@ class IsOwnerOrReadOnly(BasePermission):
         owned_by = getattr(obj, "owned_by", None)
         if owned_by is not None:
             return getattr(owned_by, "user", None)
+        # Tenant sub-resource (e.g. DepositMovement): ``obj.tenant.property.owned_by.user``
+        tenant = getattr(obj, "tenant", None)
+        if tenant is not None and getattr(obj, "property", None) is None:
+            return getattr(getattr(getattr(tenant, "property", None), "owned_by", None), "user", None)
         # Sub-resource: ``obj.property.owned_by.user``
         property_obj = getattr(obj, "property", None)
         if property_obj is not None:

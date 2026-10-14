@@ -808,12 +808,11 @@ class DepositMovementViewSet(viewsets.ModelViewSet):
     a ``DepositRuleError`` becomes a 400 keyed by the offending field.
     ``tenant`` / ``transaction`` must belong to the requester (400, as in
     ``LeaseRentViewSet``). Moving a movement to another tenant is not
-    supported. Object-level ``IsOwnerOrReadOnly`` is not used: the
-    queryset is already owner-scoped, so foreign rows are 404.
+    supported. The queryset is owner-scoped, so foreign rows are 404.
     """
 
     serializer_class = DepositMovementSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = _OWNER_PERMS
 
     def get_queryset(self):
         property_id = _int_param(self.request.query_params, "property")
