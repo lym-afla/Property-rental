@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { AnalyticsChartCard } from '@/components/analytics/AnalyticsChartCard'
@@ -15,7 +16,10 @@ type Props = ChartDataProps & {
   onDrillDown?: (drillDown: DrillDown) => void
 }
 
-const CASH_FLOW_CATEGORY_KINDS = new Set(['income_category', 'expense_category'])
+const CASH_FLOW_CATEGORY_KINDS = new Set(['income_category', 'expense_category', 'deposit_movement'])
+
+const DEPOSIT_KIND = 'deposit_movement'
+const NET_CASH_KIND = 'net_cash'
 
 function categorySeries(data: PortfolioChartData) {
   return data.series.filter((item) => CASH_FLOW_CATEGORY_KINDS.has(item.kind))
@@ -45,7 +49,7 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
         }
         return next
       })} />}
-      table={state.status === 'success' && data ? cashTable(data, series) : undefined}
+      table={state.status === 'success' && data ? cashTable(data, [...series, ...data.series.filter((item) => item.kind === NET_CASH_KIND)]) : undefined}
     >
       {state.status === 'success' && data && <div className="flex h-full min-h-0 flex-col">
         <span className="sr-only" aria-label="Net cash flow zero baseline">Zero baseline shown on the chart.</span>
@@ -57,14 +61,16 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
             <YAxis tickFormatter={(value) => formatCurrencyAxis(Number(value), data.currency ?? '')} {...CHART_AXIS_PROPS} />
             <Tooltip content={({ active, label, payload }) => active ? <ChartTooltip label={compactPeriod(String(label))} rows={(payload ?? []).map((item) => ({ label: String(item.name), value: formatCurrency(typeof item.value === 'number' ? item.value : null, data.currency ?? '') }))} /> : null} />
             <ReferenceLine y={0} stroke="currentColor" aria-label="Net cash flow zero baseline" />
-            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId="cash-flow" fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
+            {visibleSeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} stackId={item.kind === DEPOSIT_KIND ? 'deposits' : 'cash-flow'} fill={charts.style(item.visualToken).color} stroke={charts.style(item.visualToken).color} onClick={(entry) => drill(entry as unknown as PortfolioChartData['points'][number], item.key)} />)}
             </BarChart>
           </ResponsiveChartContainer>
         </div>
         <details className="mt-2 rounded-md border px-2 py-1">
           <summary className="min-h-11 cursor-pointer content-center font-medium">Drill down to transactions</summary>
           <div className="grid max-h-28 grid-cols-1 gap-1 overflow-y-auto pb-1 sm:grid-cols-2">
-            {data.points.flatMap((point) => series.map((item) => <button className="min-h-11 rounded-md border px-2 text-left text-sm hover:bg-muted outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
+            {data.points.flatMap((point) => series.map((item) => item.kind === DEPOSIT_KIND
+              ? <Link className="flex min-h-11 items-center rounded-md border px-2 text-left text-sm hover:bg-muted outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" key={`${point.period_start}-${item.key}`} to="/tenants">View deposit movements for {compactPeriod(point.period_start)}</Link>
+              : <button className="min-h-11 rounded-md border px-2 text-left text-sm hover:bg-muted outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" key={`${point.period_start}-${item.key}`} type="button" onClick={() => drill(point, item.key)}>View {item.label} transactions for {compactPeriod(point.period_start)}</button>))}
           </div>
         </details>
       </div>}
