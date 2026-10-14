@@ -39,11 +39,11 @@ from dateutil.parser import parse as parse_date
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from rentals.models import FX, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
+from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     FXSerializer,
@@ -481,6 +481,12 @@ class TenantViewSet(viewsets.ModelViewSet):
         return Response(TenantSerializer(tenant).data, status=200)
 
 
+class DepositLinkedTransaction(APIException):
+    status_code = 409
+    default_detail = "Edit the security deposit movement instead."
+    default_code = "deposit_linked_transaction"
+
+
 class TransactionViewSet(viewsets.ModelViewSet):
     """CRUD for Transaction scoped via ``property.owned_by.user``.
 
@@ -500,11 +506,26 @@ class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = _OWNER_PERMS
 
+    # Fields that a deposit-linked transaction may not change directly; the
+    # security deposit movement is the source of truth for them.
+    _DEPOSIT_GUARDED_FIELDS = ("date", "amount", "category", "currency", "tenant", "property")
+
+    @staticmethod
+    def _has_deposit_movement(transaction_obj):
+        try:
+            transaction_obj.deposit_movement
+        except DepositMovement.DoesNotExist:
+            return False
+        return True
+
     def get_queryset(self):
         # Base scope: only transactions whose ``property`` is owned by the
         # requesting user (the per-user scoping invariant every ViewSet
-        # enforces).
-        qs = Transaction.objects.filter(property__owned_by__user=self.request.user)
+        # enforces). ``deposit_movement`` is selected up front so the list
+        # serializer does not issue one query per row.
+        qs = Transaction.objects.filter(
+            property__owned_by__user=self.request.user
+        ).select_related("deposit_movement")
         # Honor an optional ``?property=<id>`` query param so callers can
         # narrow to one property (the property detail page does this for
         # its Recent Transactions panel). The param is scoped to the
@@ -595,7 +616,21 @@ class TransactionViewSet(viewsets.ModelViewSet):
         self._validate_and_save(serializer)
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        if self._has_deposit_movement(instance) and any(
+            name in serializer.validated_data
+            and serializer.validated_data[name] != getattr(instance, name)
+            for name in self._DEPOSIT_GUARDED_FIELDS
+        ):
+            raise DepositLinkedTransaction()
         self._validate_and_save(serializer)
+
+    def perform_destroy(self, instance):
+        if self._has_deposit_movement(instance):
+            raise DepositLinkedTransaction()
+        super().perform_destroy(instance)
+
+
 class FXViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only access to FX rows.
 

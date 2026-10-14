@@ -84,6 +84,9 @@ class TransactionSerializer(serializers.ModelSerializer):
     """
 
     type = serializers.ReadOnlyField()
+    # Reverse one-to-one from ``DepositMovement.transaction``: the movement
+    # PK, or ``null`` for a transaction not linked to a security deposit.
+    deposit_movement = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
 
     class Meta:
         model = Transaction
@@ -98,6 +101,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "amount",
             "type",
             "comment",
+            "deposit_movement",
         ]
 
 
