@@ -182,14 +182,13 @@ export function TransactionsPage() {
     {
       accessorKey: 'date',
       header: 'Date',
-      // `sortingFn: 'datetime'` so TanStack compares the rows as dates
-      // rather than lexical strings — correct ordering across year
-      // boundaries even when the field is a `YYYY-MM-DD` string.
-      sortingFn: 'datetime',
+      sortingFn: 'basic',
       cell: ({ row }) => formatDate(row.original.date),
     },
     {
       id: 'property',
+      accessorFn: (transaction) => propertyById.get(transaction.property)?.name ?? `#${transaction.property}`,
+      sortingFn: 'text',
       header: 'Property',
       cell: ({ row }) => {
         const p = propertyById.get(row.original.property)
@@ -198,6 +197,12 @@ export function TransactionsPage() {
     },
     {
       id: 'tenant',
+      accessorFn: (transaction) => {
+        if (transaction.tenant == null) return ''
+        const tenant = tenantById.get(transaction.tenant)
+        return tenant ? `${tenant.first_name ?? ''} ${tenant.last_name ?? ''}`.trim() : `#${transaction.tenant}`
+      },
+      sortingFn: 'text',
       header: 'Tenant',
       // Tenant names come from the lookup map; if the FK is null (a
       // property-level transaction with no tenant assigned) we render an
@@ -212,12 +217,16 @@ export function TransactionsPage() {
       },
     },
     {
-      accessorKey: 'category',
+      id: 'category',
+      accessorFn: (transaction) => transactionCategoryLabel(transaction.category),
+      sortingFn: 'text',
       header: 'Category',
       cell: ({ row }) => transactionCategoryLabel(row.original.category),
     },
     {
-      accessorKey: 'amount',
+      id: 'amount',
+      accessorFn: (transaction) => Number(transaction.amount),
+      sortingFn: 'basic',
       header: 'Amount',
       // Accounting format: negatives render as `€(150)` (matching the
       // old Django template's treatment of expenses); positives use the
@@ -227,16 +236,21 @@ export function TransactionsPage() {
         formatAccounting(row.original.amount, row.original.currency),
     },
     {
-      accessorKey: 'period',
+      id: 'period',
+      accessorFn: (transaction) => transaction.period ?? '',
+      sortingFn: 'basic',
       header: 'Period',
     },
     {
-      accessorKey: 'comment',
+      id: 'comment',
+      accessorFn: (transaction) => transaction.comment ?? '',
+      sortingFn: 'text',
       header: 'Comment',
       cell: ({ row }) => row.original.comment ?? '—',
     },
     {
       id: 'actions',
+      enableSorting: false,
       header: 'Actions',
       cell: ({ row }) => (
         <div className="flex items-center gap-1">
@@ -382,6 +396,7 @@ export function TransactionsPage() {
       />
 
       <DataTable
+        sortableHeaders
         columns={columns}
         data={visibleTransactions}
         initialSorting={[{ id: 'date', desc: true }]}

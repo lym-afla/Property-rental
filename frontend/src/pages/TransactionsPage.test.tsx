@@ -39,6 +39,64 @@ function renderPage(initialEntry = '/transactions') {
 }
 
 describe('TransactionsPage', () => {
+  function rowIds() {
+    return within(screen.getByRole('table')).getAllByRole('button', { name: /^Edit transaction/ })
+      .map((button) => Number(button.getAttribute('aria-label')!.split(' ').at(-1)))
+  }
+
+  it('sorts dates chronologically with accessible keyboard controls', async () => {
+    renderPage()
+    const date = await screen.findByRole('button', { name: 'Date' })
+    expect(date.closest('th')).toHaveAttribute('aria-sort', 'descending')
+    expect(rowIds()).toEqual([1, 2])
+    const user = userEvent.setup()
+    date.focus()
+    await user.keyboard('{Enter}')
+    expect(rowIds()).toEqual([2, 1])
+    expect(date.closest('th')).toHaveAttribute('aria-sort', 'ascending')
+    await user.click(date)
+    expect(rowIds()).toEqual([1, 2])
+    expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument()
+  })
+
+  it('sorts numeric amounts across all pages and resets to the first page', async () => {
+    const amounts = ['9', '80', '1000', '-150', '2', '30', '400', '500', '600', '700', '-200', '0']
+    server.use(http.get('/api/v1/transactions/', () => HttpResponse.json(
+      amounts.map((amount, i) => ({ ...fixtureTransactionIncome, id: i + 1, amount })),
+    )))
+    renderPage()
+    const amount = await screen.findByRole('button', { name: 'Amount' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(rowIds()).toEqual([11, 12])
+    await user.click(amount)
+    await waitFor(() => expect(rowIds()).toEqual([11, 4, 12, 5, 1, 6, 2, 7, 8, 9]))
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    await user.click(amount)
+    expect(rowIds()).toEqual([3, 10, 9, 8, 7, 2, 6, 1, 5, 12])
+  })
+
+  it('sorts displayed names, category labels and nullable fields deterministically', async () => {
+    server.use(http.get('/api/v1/transactions/', () => HttpResponse.json([
+      { ...fixtureTransactionIncome, id: 1, property: 1, tenant: 2, category: 'other_income', period: null, comment: '' },
+      { ...fixtureTransactionIncome, id: 2, property: 2, tenant: 1, category: 'other_expenses', period: '2026-02', comment: 'Zulu' },
+      { ...fixtureTransactionIncome, id: 3, property: 2, tenant: null, category: 'rent', period: '2025-12', comment: 'Alpha' },
+    ])))
+    renderPage()
+    const property = await screen.findByRole('button', { name: 'Property' })
+    const user = userEvent.setup()
+    await user.click(property)
+    expect(rowIds()).toEqual([2, 3, 1])
+    await user.click(screen.getByRole('button', { name: 'Tenant' }))
+    expect(rowIds()).toEqual([3, 2, 1])
+    await user.click(screen.getByRole('button', { name: 'Category' }))
+    expect(rowIds()).toEqual([2, 1, 3])
+    await user.click(screen.getByRole('button', { name: 'Period' }))
+    expect(rowIds()).toEqual([1, 3, 2])
+    await user.click(screen.getByRole('button', { name: 'Comment' }))
+    expect(rowIds()).toEqual([1, 3, 2])
+  })
+
   it('renders the page title', async () => {
     renderPage()
     expect(
