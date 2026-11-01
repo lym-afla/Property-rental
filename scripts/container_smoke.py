@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -128,6 +129,13 @@ def smoke_server(image: str) -> None:
         assert b"<html" in spa.lower()
         asset_path = spa.decode().split('src="/static/frontend/')[1].split('"')[0]
         assert wait_for(base + "/static/frontend/" + asset_path)
+        nested_spa = wait_for(base + "/transactions/").decode()
+        icon_path = re.search(r'<link rel="icon"[^>]+href="([^"]+)"', nested_spa).group(1)
+        assert icon_path.startswith('/static/frontend/')
+        request = urllib.request.Request(base + icon_path, headers={"X-Forwarded-Proto": "https"})
+        with urllib.request.urlopen(request, timeout=2) as response:
+            assert response.headers.get_content_type() == 'image/svg+xml'
+            assert b'<svg' in response.read()
         backchannel_url = base + "/oidc/backchannel-logout/"
         assert request_status(backchannel_url, "POST") == 400
         assert request_status(backchannel_url, "GET") == 405

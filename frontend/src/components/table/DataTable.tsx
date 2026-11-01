@@ -18,6 +18,7 @@
 // entity shape we serialize from the backend (Property, Tenant,
 // Transaction, PropertyValuation) — they all carry a numeric `id`.
 import { useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import {
   type ColumnDef,
   flexRender,
@@ -61,6 +62,7 @@ type Props<T> = {
   // to default to latest-first). The state is still controlled — the user
   // can toggle it via the headers from there.
   initialSorting?: SortingState
+  sortableHeaders?: boolean
 }
 
 export function DataTable<T extends { id: number }>({
@@ -70,13 +72,18 @@ export function DataTable<T extends { id: number }>({
   pageSize = 10,
   getRowClassName,
   initialSorting = [],
+  sortableHeaders = false,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
   const table = useReactTable({
     data,
     columns,
     state: { sorting },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting(updater)
+      if (sortableHeaders) table.setPageIndex(0)
+    },
+    ...(sortableHeaders ? { sortDescFirst: false, enableSortingRemoval: false, enableMultiSort: false } : {}),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -91,8 +98,25 @@ export function DataTable<T extends { id: number }>({
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>
                 {hg.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {flexRender(
+                  <TableHead
+                    key={header.id}
+                    aria-sort={sortableHeaders && header.column.getCanSort()
+                      ? header.column.getIsSorted() === 'asc' ? 'ascending'
+                        : header.column.getIsSorted() === 'desc' ? 'descending' : 'none'
+                      : undefined}
+                  >
+                    {sortableHeaders && header.column.getCanSort() ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-sm py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getIsSorted() === 'asc' ? <ArrowUp aria-hidden="true" className="size-3.5" />
+                          : header.column.getIsSorted() === 'desc' ? <ArrowDown aria-hidden="true" className="size-3.5" />
+                            : <ArrowUpDown aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+                      </button>
+                    ) : flexRender(
                       header.column.columnDef.header,
                       header.getContext(),
                     )}

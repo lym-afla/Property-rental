@@ -48,6 +48,14 @@ def test_unknown_route_serves_spa_shell(db):
         f"SpaView should return 200; got {response.status_code}"
     )
     body = response.content.decode('utf-8')
+    from bs4 import BeautifulSoup
+    from django.templatetags.static import static
+
+    document = BeautifulSoup(body, 'html.parser')
+    icon = document.find('link', rel='icon')
+    assert icon is not None, 'Nested SPA routes must advertise the browser icon'
+    assert icon['href'] == static('frontend/favicon.svg')
+    assert document.title.string == 'Rent'
     assert '<div id="root"></div>' in body, (
         "spa_index.html should render the React mount point div#root"
     )
