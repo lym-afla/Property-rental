@@ -1,6 +1,6 @@
 # Rent transaction usability and browser identity
 
-Status: proposed for user approval after builder review.
+Status: approved by the user after builder review on 2026-11-01.
 
 ## Intent and scope
 
