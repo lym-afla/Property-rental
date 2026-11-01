@@ -167,7 +167,8 @@ export function TransactionsPage() {
   // raw query against category + comment so users can find e.g. "rent" or
   // "leak" quickly. Case-insensitive; empty query passes everything.
   const visibleTransactions = useMemo(() => {
-    const rows = transactionsQuery.data ?? []
+    // Lookup updates must invalidate TanStack's cached accessor values.
+    const rows = [...(transactionsQuery.data ?? [])]
     const q = filters.search?.trim().toLowerCase()
     if (!q) return rows
     return rows.filter((t) => {
@@ -176,7 +177,7 @@ export function TransactionsPage() {
       const categoryLabel = transactionCategoryLabel(t.category).toLowerCase()
       return comment.includes(q) || category.includes(q) || categoryLabel.includes(q)
     })
-  }, [transactionsQuery.data, filters.search])
+  }, [transactionsQuery.data, filters.search, propertyById, tenantById])
 
   const columns: ColumnDef<Transaction>[] = [
     {

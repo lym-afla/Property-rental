@@ -1,0 +1,25 @@
+name: Capture Rent transaction visual baselines
+on:
+  push:
+    branches: [codex/rent-transactions-implementation]
+    paths: [.github/workflows/rent-visual-refresh.yml]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: windows-latest
+    env:
+      PW_CHANNEL: chrome
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run test:e2e -- investment-dashboard-visual.spec.ts --update-snapshots --workers=1
+        working-directory: frontend
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rent-transaction-windows-baselines
+          path: frontend/e2e/investment-dashboard-visual.spec.ts-snapshots/investment-transaction-*.png

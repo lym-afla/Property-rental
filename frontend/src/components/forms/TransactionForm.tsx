@@ -107,7 +107,9 @@ export function TransactionForm({
   })
 
   const selectedProperty = useWatch({ control: form.control, name: 'property' })
+  const selectedTenant = useWatch({ control: form.control, name: 'tenant' })
   const initializedCurrency = useRef(mode === 'edit')
+  const currencyChosen = useRef(false)
   const [showFormerOverride, setShowFormerOverride] = useState<boolean | null>(null)
   const assignedTenant = tenants.find((tenant) => tenant.id === Number(defaultValues?.tenant))
   const showFormer = showFormerOverride ?? (mode === 'edit' && tenantStatus(assignedTenant?.lease_end) === 'vacated')
@@ -116,7 +118,7 @@ export function TransactionForm({
     if (initializedCurrency.current) return
     const property = properties.find((item) => item.id === Number(selectedProperty))
     if (!property) return
-    if (!form.getFieldState('currency').isDirty) {
+    if (!currencyChosen.current) {
       form.setValue('currency', property.currency as Output['currency'])
     }
     initializedCurrency.current = true
@@ -158,6 +160,7 @@ export function TransactionForm({
                   onValueChange={(v) => {
                     const num = Number(v)
                     if (num !== Number(field.value)) {
+                      currencyChosen.current = false
                       const property = properties.find((item) => item.id === num)
                       if (property) {
                         form.setValue('currency', property.currency as Output['currency'], { shouldDirty: true })
@@ -250,6 +253,7 @@ export function TransactionForm({
           <input
             type="checkbox"
             checked={showFormer}
+            disabled={selectedTenant != null && !tenants.some((tenant) => tenant.id === Number(selectedTenant))}
             onChange={(event) => {
               const checked = event.target.checked
               setShowFormerOverride(checked)
@@ -295,7 +299,10 @@ export function TransactionForm({
               <FormItem>
                 <FormLabel>Currency</FormLabel>
                 <Select onValueChange={(value) => {
-                  if (value) field.onChange(value)
+                  if (value) {
+                    currencyChosen.current = true
+                    field.onChange(value)
+                  }
                 }} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">

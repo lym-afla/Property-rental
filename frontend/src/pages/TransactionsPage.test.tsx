@@ -22,6 +22,7 @@ import { http, HttpResponse } from 'msw'
 import { TransactionsPage } from './TransactionsPage'
 import { server } from '@/test/handlers'
 import { fixtureTransactionIncome } from '@/__fixtures__/transaction'
+import { fixtureProperty, fixturePropertyAlt } from '@/__fixtures__/property'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -74,6 +75,26 @@ describe('TransactionsPage', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
     await user.click(amount)
     expect(rowIds()).toEqual([3, 10, 9, 8, 7, 2, 6, 1, 5, 12])
+  })
+
+  it('refreshes name sorting when lookup data arrives after the sort was selected', async () => {
+    let resolveProperties!: (properties: typeof fixtureProperty[]) => void
+    const properties = new Promise<typeof fixtureProperty[]>((resolve) => { resolveProperties = resolve })
+    server.use(
+      http.get('/api/v1/properties/', async () => HttpResponse.json(await properties)),
+      http.get('/api/v1/transactions/', () => HttpResponse.json([
+        { ...fixtureTransactionIncome, id: 1, property: 1 },
+        { ...fixtureTransactionIncome, id: 2, property: 2 },
+      ])),
+    )
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Property' }))
+    expect(rowIds()).toEqual([1, 2])
+    resolveProperties([{ ...fixtureProperty, name: 'Zulu' }, { ...fixturePropertyAlt, name: 'Alpha' }])
+    await waitFor(() => expect(rowIds()).toEqual([2, 1]))
+    await user.click(screen.getByRole('button', { name: 'Property' }))
+    expect(rowIds()).toEqual([1, 2])
   })
 
   it('sorts displayed names, category labels and nullable fields deterministically', async () => {

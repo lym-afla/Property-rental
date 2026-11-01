@@ -60,6 +60,25 @@ describe('TransactionForm', () => {
     expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('GBP')
   })
 
+  it('retains an explicit return to USD before property data arrives', async () => {
+    const props = { tenants, defaultValues: values, onSubmit: vi.fn() }
+    const { rerender } = render(<TransactionForm {...props} properties={[]} />)
+    await select('Currency', 'GBP')
+    await select('Currency', 'USD')
+    rerender(<TransactionForm {...props} properties={properties} />)
+    expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('USD')
+  })
+
+  it('waits for an assigned tenant before allowing it to be hidden', () => {
+    const props = { mode: 'edit' as const, properties, defaultValues: { ...values, tenant: 1 }, onSubmit: vi.fn() }
+    const { rerender } = render(<TransactionForm {...props} tenants={[]} />)
+    expect(screen.getByRole('checkbox', { name: 'Show former tenants' })).toBeDisabled()
+    rerender(<TransactionForm {...props} tenants={tenants} />)
+    expect(screen.getByRole('checkbox', { name: 'Show former tenants' })).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Show former tenants' })).toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Tenant (optional)' })).toHaveTextContent('Former Jones')
+  })
+
   it('shows non-vacated tenants by default regardless of transaction date', async () => {
     render(<TransactionForm properties={properties} tenants={tenants} defaultValues={values} onSubmit={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2024-01-01' } })
