@@ -1,23 +1,4 @@
-// frontend/src/components/forms/TransactionForm.tsx
-//
-// Form for creating/editing a Transaction. The tenant Select cascades:
-// `useWatch` tracks the selected `property`, and the tenant list is
-// filtered to those whose `property` matches. When the property
-// changes, the previously-selected tenant is cleared if it no longer
-// belongs to the new property.
-//
-// `category` mirrors `TRANSACTION_CATEGORIES` and `currency` mirrors
-// `CURRENCY_CHOICES` from `rentals/constants.py`.
-//
-// `period` (format "YYYY-MM") is auto-derived from `date` whenever the
-// user changes the date — picking `2026-03-14` fills `period` with
-// `2026-03`. The user can still type a custom value (e.g. for back-dated
-// postings that span two months), and on edit an existing `period` is
-// preserved until the date is changed. The field is optional because the
-// backend `Transaction.period` column is nullable/blank.
-//
-// Field names mirror `TransactionSerializer` (`rentals/api/serializers.py`).
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -42,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import type { Property } from '@/types/property'
 import type { Tenant } from '@/types/tenant'
 import { TRANSACTION_CATEGORIES } from '@/lib/transactionCategories'
+import { tenantStatus } from '@/lib/tenantStatus'
 import { CURRENCY_OPTIONS } from './PropertyForm'
 
 export const TRANSACTION_CATEGORY_OPTIONS = TRANSACTION_CATEGORIES.map(
@@ -81,6 +63,7 @@ type Input = z.input<typeof schema>
 type Output = z.output<typeof schema>
 
 type Props = {
+  mode?: 'create' | 'edit'
   properties: Property[]
   tenants: Tenant[]
   defaultValues?: Partial<Input>
@@ -101,6 +84,7 @@ function derivePeriod(dateStr: string | undefined | null): string {
 }
 
 export function TransactionForm({
+  mode = 'create',
   properties,
   tenants,
   defaultValues,
@@ -115,51 +99,33 @@ export function TransactionForm({
       tenant: null,
       category: 'rent',
       amount: '',
-      currency: 'USD',
-      period: '',
+      currency: (properties.find((property) => property.id === Number(defaultValues?.property))?.currency ?? 'USD') as Output['currency'],
+      period: derivePeriod(defaultValues?.date),
       comment: '',
       ...defaultValues,
     },
   })
 
-  // Cascade: watch the selected property and narrow the tenant list.
-  // If the selected property changes and the previously-selected tenant
-  // no longer belongs to it, clear the tenant field so we never submit
-  // a property/tenant mismatch.
-  const selectedProperty = useWatch({
-    control: form.control,
-    name: 'property',
-  })
+  const selectedProperty = useWatch({ control: form.control, name: 'property' })
+  const initializedCurrency = useRef(mode === 'edit')
+  const [showFormerOverride, setShowFormerOverride] = useState<boolean | null>(null)
+  const assignedTenant = tenants.find((tenant) => tenant.id === Number(defaultValues?.tenant))
+  const showFormer = showFormerOverride ?? (mode === 'edit' && tenantStatus(assignedTenant?.lease_end) === 'vacated')
 
-  // Watch `date` so we can auto-derive `period` whenever it changes.
-  // This keeps the two fields consistent without forcing the user to
-  // type the period manually. We deliberately do NOT overwrite a
-  // user-edited period on subsequent date edits if the user has
-  // intentionally diverged — but since this is a controlled form, the
-  // simplest correct behavior is: any date change re-derives period.
-  // The user can re-edit period after changing the date if they need a
-  // different month.
-  const watchedDate = useWatch({ control: form.control, name: 'date' })
-
-  // Re-derive period when `date` changes. `form.setValue` triggers a
-  // state update; we keep this in a `useEffect` (rather than inline in
-  // the field's onChange) so it also fires on programmatic date changes
-  // (e.g. when defaultValues hydrate). `shouldValidate: false` keeps
-  // this from flashing a validation error before the user submits.
   useEffect(() => {
-    const derived = derivePeriod(watchedDate)
-    if (derived) {
-      const current = form.getValues('period')
-      if (current !== derived) {
-        form.setValue('period', derived, { shouldDirty: false })
-      }
+    if (initializedCurrency.current) return
+    const property = properties.find((item) => item.id === Number(selectedProperty))
+    if (!property) return
+    if (!form.getFieldState('currency').isDirty) {
+      form.setValue('currency', property.currency as Output['currency'])
     }
-  }, [watchedDate, form])
+    initializedCurrency.current = true
+  }, [selectedProperty, properties, form])
 
-  const filteredTenants =
-    selectedProperty !== undefined && selectedProperty !== null
-      ? tenants.filter((t) => t.property === Number(selectedProperty))
-      : tenants
+  const filteredTenants = tenants
+    .filter((tenant) => tenant.property === Number(selectedProperty)
+      && (showFormer || tenantStatus(tenant.lease_end) !== 'vacated'))
+    .sort((a, b) => Number(tenantStatus(a.lease_end) === 'vacated') - Number(tenantStatus(b.lease_end) === 'vacated'))
 
   return (
     <Form {...form}>
@@ -172,7 +138,10 @@ export function TransactionForm({
               <FormItem>
                 <FormLabel>Date</FormLabel>
                 <FormControl>
-                  <Input type="date" {...field} />
+                  <Input type="date" {...field} onChange={(event) => {
+                    field.onChange(event)
+                    form.setValue('period', derivePeriod(event.target.value), { shouldDirty: true })
+                  }} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -188,6 +157,13 @@ export function TransactionForm({
                 <Select
                   onValueChange={(v) => {
                     const num = Number(v)
+                    if (num !== Number(field.value)) {
+                      const property = properties.find((item) => item.id === num)
+                      if (property) {
+                        form.setValue('currency', property.currency as Output['currency'], { shouldDirty: true })
+                        initializedCurrency.current = true
+                      }
+                    }
                     field.onChange(num)
                     // Clear the tenant if it doesn't belong to the new property.
                     const currentTenant = form.getValues('tenant')
@@ -200,7 +176,7 @@ export function TransactionForm({
                           t.property === num,
                       )
                     ) {
-                      form.setValue('tenant', null)
+                      form.setValue('tenant', null, { shouldDirty: true })
                     }
                   }}
                   value={field.value !== undefined ? String(field.value) : undefined}
@@ -231,11 +207,12 @@ export function TransactionForm({
             <FormItem>
               <FormLabel>Tenant (optional)</FormLabel>
               <Select
-                onValueChange={(v) => field.onChange(Number(v))}
+                disabled={!selectedProperty}
+                onValueChange={(v) => field.onChange(v === '__unassigned__' ? null : Number(v))}
                 value={
                   field.value !== null && field.value !== undefined
                     ? String(field.value)
-                    : undefined
+                    : '__unassigned__'
                 }
               >
                 <FormControl>
@@ -250,14 +227,15 @@ export function TransactionForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
+                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
                   {filteredTenants.length === 0 ? (
                     <SelectItem value="__none__" disabled>
-                      No tenants for this property
+                      {showFormer ? 'No tenants for this property' : 'No current tenants for this property'}
                     </SelectItem>
                   ) : (
                     filteredTenants.map((t) => (
                       <SelectItem key={t.id} value={String(t.id)}>
-                        {t.first_name} {t.last_name}
+                        {t.first_name} {t.last_name}{tenantStatus(t.lease_end) === 'vacated' ? ' · Former tenant' : ''}
                       </SelectItem>
                     ))
                   )}
@@ -267,6 +245,22 @@ export function TransactionForm({
             </FormItem>
           )}
         />
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showFormer}
+            onChange={(event) => {
+              const checked = event.target.checked
+              setShowFormerOverride(checked)
+              const tenant = tenants.find((item) => item.id === Number(form.getValues('tenant')))
+              if (!checked && tenantStatus(tenant?.lease_end) === 'vacated') {
+                form.setValue('tenant', null, { shouldDirty: true })
+              }
+            }}
+          />
+          Show former tenants
+        </label>
 
         <div className="grid grid-cols-2 gap-4">
           <FormField
@@ -300,7 +294,9 @@ export function TransactionForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Currency</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={(value) => {
+                  if (value) field.onChange(value)
+                }} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select currency" />

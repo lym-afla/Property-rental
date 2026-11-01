@@ -39,6 +39,7 @@
 //     mixing them caused the revenue column to show e.g. `£7,200` for a
 //     USD-converted amount. Vacated tenants get a greyed-out row + the
 //     vacate date surfaced in the Status column.
+import { tenantStatus, type TenantStatus } from '@/lib/tenantStatus'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -76,19 +77,6 @@ function formatTenantName(
   if (!l) return f
   if (!f) return l
   return `${f} ${l}`
-}
-
-// Status bucketing — see the file header for the rules. We treat
-// `lease_end` as a date string `YYYY-MM-DD` (the serializer format); a
-// plain lexical comparison against today's ISO date is correct for that
-// representation and avoids timezone pitfalls.
-type TenantStatus = 'active' | 'will-vacate' | 'vacated'
-
-function tenantStatus(leaseEnd: string | null | undefined): TenantStatus {
-  if (!leaseEnd) return 'active'
-  const today = new Date().toISOString().slice(0, 10)
-  if (leaseEnd < today) return 'vacated'
-  return 'will-vacate'
 }
 
 const STATUS_LABEL: Record<TenantStatus, string> = {

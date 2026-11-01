@@ -346,6 +346,7 @@ export function TransactionsPage() {
           <TransactionForm
             properties={propertiesQuery.data ?? []}
             tenants={tenantsQuery.data ?? []}
+            mode="edit"
             defaultValues={{
               date: editTarget.date,
               property: editTarget.property,
@@ -436,6 +437,7 @@ export function TransactionsPage() {
             <TransactionForm
               properties={propertiesQuery.data ?? []}
               tenants={tenantsQuery.data ?? []}
+              mode="edit"
               defaultValues={{
                 date: editTarget.date,
                 property: editTarget.property,
