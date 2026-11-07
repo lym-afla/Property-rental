@@ -40,8 +40,10 @@ not "improve" any of them — ``test_fx_char.py`` and
 """
 
 import logging
+from decimal import Context, ROUND_HALF_UP, localcontext
 
 import networkx as nx
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
 
@@ -167,6 +169,10 @@ def get_rate(from_currency, to_currency, as_of):
     Pinned by ``test_fx_char.py`` and ``test_fx_migration.py`` — any
     drift in the output will fail those tests.
     """
+    if getattr(settings, "FX_BACKEND", "legacy") == "mirror":
+        from rentals.services.fx_mirror import get_rate as mirror_rate
+        return mirror_rate(from_currency, to_currency, as_of)
+
     from rentals.models import FX
 
     source = from_currency
@@ -255,13 +261,20 @@ def convert(amount, from_currency, to_currency, as_of):
     (skips the graph entirely). Otherwise multiplies by
     ``get_rate(...)['FX']``.
     """
-    if from_currency == to_currency:
+    if from_currency == to_currency and getattr(settings, "FX_BACKEND", "legacy") != "mirror":
         return amount
+    if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+        with localcontext(Context(prec=38, rounding=ROUND_HALF_UP)):
+            return amount * get_rate(from_currency, to_currency, as_of)['FX']
     return amount * get_rate(from_currency, to_currency, as_of)['FX']
 
 
 class MissingFXRate(ValueError):
     """Raised when analytics cannot convert a value at the requested date."""
+
+    def __init__(self, message, code='missing_rate'):
+        super().__init__(message)
+        self.code = code
 
 
 class PreloadedConverter:
@@ -275,6 +288,9 @@ class PreloadedConverter:
 
     def __init__(self, transactions, target_currency):
         self.target_currency = target_currency
+        self._mirror = getattr(settings, "FX_BACKEND", "legacy") == "mirror"
+        if self._mirror:
+            return
         cross_currency_dates = [
             transaction.date
             for transaction in transactions
@@ -320,6 +336,8 @@ class PreloadedConverter:
         return max(matches, key=lambda fx: fx.date)
 
     def convert(self, amount, from_currency, to_currency, as_of):
+        if self._mirror:
+            return convert(amount, from_currency, to_currency, as_of)
         if from_currency == to_currency:
             return amount
 

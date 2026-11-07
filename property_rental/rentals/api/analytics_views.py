@@ -92,6 +92,38 @@ class _TenantRentPerformanceFilterSerializer(serializers.Serializer):
 class _PortfolioAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def dispatch(self, request, *args, **kwargs):
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+            return super().dispatch(request, *args, **kwargs)
+        from rentals.models import FXSyncState
+        from rentals.services.fx_mirror import report_provisional
+
+        for attempt in range(2):
+            before = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch', 'synced_at').first()
+            provisional = set()
+            token = report_provisional.set(provisional)
+            try:
+                response = super().dispatch(request, *args, **kwargs)
+            finally:
+                report_provisional.reset(token)
+            after = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch', 'synced_at').first()
+            if before == after:
+                if 200 <= response.status_code < 300 and isinstance(response.data, dict):
+                    response.data = dict(response.data)
+                    response.data['fx'] = {
+                        'release_id': before['release_id'] if before else None,
+                        'history_epoch': before['history_epoch'] if before else None,
+                        'synced_at': before['synced_at'].isoformat() if before else None,
+                        'provisional': bool(provisional),
+                        'effective_dates': sorted(provisional),
+                        'cacheable': not bool(provisional),
+                    }
+                    if provisional:
+                        response['Cache-Control'] = 'no-store'
+                return response
+        return self.finalize_response(self.request, Response({'code': 'fx_release_changed', 'detail': 'FX release changed during calculation.'}, status=503), *args, **kwargs)
+
     def handle_exception(self, exc):
         if isinstance(exc, MissingFXRate):
             return Response(

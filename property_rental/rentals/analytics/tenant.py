@@ -93,6 +93,9 @@ def _converted(converter, amount, currency, target_currency, as_of):
             None,
         )
     except (ValueError, LookupError, NetworkXException):
+        from django.conf import settings
+        if getattr(settings, "FX_BACKEND", "legacy") == "mirror":
+            raise
         return None, "missing_fx"
 
 

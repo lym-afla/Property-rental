@@ -1,0 +1,167 @@
+{
+  "description": "Offline CBR R01235 and ECB CSV boundary rates. Requests contain currency/date data only; supply the seeded explicit release ID. Inverted ECB USD/EUR uses precision 38 before deriving anchors; all multipliers ROUND_HALF_UP to 18 places.",
+  "cases": [
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "1998-01-01"
+      },
+      "multiplier": "5.960000000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "1998-01-01"
+      },
+      "multiplier": "0.167785234899328859"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "1999-01-04"
+      },
+      "multiplier": "20.650000000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "1999-01-04"
+      },
+      "multiplier": "0.048426150121065375"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "1999-01-04"
+      },
+      "multiplier": "0.848248367121893290"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "1999-01-04"
+      },
+      "multiplier": "1.178900000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "1999-01-04"
+      },
+      "multiplier": "34.234685698214034594"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2000-01-12"
+      },
+      "multiplier": "28.440000000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2000-01-12"
+      },
+      "multiplier": "0.035161744022503516"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2000-01-12"
+      },
+      "multiplier": "0.970120294916569655"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2000-01-12"
+      },
+      "multiplier": "1.030800000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2000-01-12"
+      },
+      "multiplier": "46.883019350711658404"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2000-01-13"
+      },
+      "multiplier": "28.850000000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2000-01-13"
+      },
+      "multiplier": "0.034662045060658579"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2000-01-13"
+      },
+      "multiplier": "0.973141300116776956"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2000-01-13"
+      },
+      "multiplier": "1.027600000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2000-01-13"
+      },
+      "multiplier": "47.396099120703437250"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2000-01-13"
+      },
+      "multiplier": "0.073541514802360853"
+    }
+  ],
+  "change_item_contract": {
+    "description": "Change pages omit observations; snapshot detail retains full observations. Canonical hashes and mirror fields are identical.",
+    "fields": [
+      "date",
+      "policy_id",
+      "policy_hash",
+      "values",
+      "observation_ids",
+      "coverage",
+      "observation_dates",
+      "snapshot_id",
+      "content_hash",
+      "sources"
+    ],
+    "detail_only_fields": [
+      "observations"
+    ]
+  }
+}

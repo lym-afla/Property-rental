@@ -1,0 +1,1482 @@
+{
+  "contract_version": "usd_anchor_ratio_v1",
+  "policy_file": "../policies/initial.json",
+  "policy_hash": "dc402fff8264f862325f6ad33bf34ff2a8d3d02ef82f5f66ec1ee6351a2eefd5",
+  "direction": "quote currency units per one base currency unit",
+  "formula": "v(quote) / v(base); v(currency) is currency units per USD",
+  "significant_digits": 38,
+  "fractional_digits": 18,
+  "rounding": "ROUND_HALF_UP",
+  "tolerance": {
+    "relative": "0.000000000000001",
+    "fixture_anchor_range": [
+      "0.72",
+      "90"
+    ],
+    "applies_to": "quantized reciprocal and triangle agreement; exact equality is not required"
+  },
+  "inputs": "Caller supplies anchors and required currency observation_dates for effective_date from one pinned release. Observation dates are oldest observed dates over full applicable paths; absent currency means no age limit. Requested and effective dates must both satisfy applicability. Provisional freshness uses requested date minus each requested fiat path observation date. Pegs and identity do not expire; completed snapshots are already validated at publication. Provisional results cannot enter persisted caches. No observation lookup occurs in this contract.",
+  "edge_rate_example": {
+    "USD/RUB": "90",
+    "USD/EUR": "0.9",
+    "EUR/GBP": "0.8"
+  },
+  "cases": [
+    {
+      "name": "eur_to_rub_via_usd",
+      "base": "EUR",
+      "quote": "RUB",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "100.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "usd_to_gbp_via_eur",
+      "base": "USD",
+      "quote": "GBP",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "0.720000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "rub_to_gbp_via_usd_eur",
+      "base": "RUB",
+      "quote": "GBP",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "0.008000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "gbp_to_cny_via_eur",
+      "base": "GBP",
+      "quote": "CNY",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "10.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "inverse_repeating",
+      "base": "RUB",
+      "quote": "USD",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "0.011111111111111111",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "identity",
+      "base": "USD",
+      "quote": "USD",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "fixed_peg",
+      "base": "USDT",
+      "quote": "USDC",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "peg_to_fiat",
+      "base": "USDC",
+      "quote": "RUB",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "90.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "round_half_up",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "EUR": "1.2345678901234567895"
+      },
+      "multiplier": "1.234567890123456790",
+      "effective_date": "2026-11-05",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "EUR": "2026-11-05"
+      }
+    },
+    {
+      "name": "same_day_provisional",
+      "base": "EUR",
+      "quote": "RUB",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "100.000000000000000000",
+      "effective_date": "2026-11-05",
+      "provisional": true,
+      "cacheable": false,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "held_day_provisional",
+      "base": "USD",
+      "quote": "GBP",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-04",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "0.720000000000000000",
+      "effective_date": "2026-11-04",
+      "provisional": true,
+      "cacheable": false,
+      "observation_dates": {
+        "RUB": "2026-11-04",
+        "EUR": "2026-11-04",
+        "GBP": "2026-11-04",
+        "CHF": "2026-11-04",
+        "PLN": "2026-11-04",
+        "CNY": "2026-11-04"
+      }
+    },
+    {
+      "name": "provisional_age_14",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-23",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "0.900000000000000000",
+      "effective_date": "2026-10-23",
+      "provisional": true,
+      "cacheable": false,
+      "observation_dates": {
+        "RUB": "2026-10-23",
+        "EUR": "2026-10-23",
+        "GBP": "2026-10-23",
+        "CHF": "2026-10-23",
+        "PLN": "2026-10-23",
+        "CNY": "2026-10-23"
+      }
+    },
+    {
+      "name": "provisional_age_15",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-22",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "error": "stale",
+      "observation_dates": {
+        "RUB": "2026-10-22",
+        "EUR": "2026-10-22",
+        "GBP": "2026-10-22",
+        "CHF": "2026-10-22",
+        "PLN": "2026-10-22",
+        "CNY": "2026-10-22"
+      }
+    },
+    {
+      "name": "future_request",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-07",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "error": "future_date",
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "before_eur_coverage",
+      "base": "EUR",
+      "quote": "RUB",
+      "requested_date": "1999-01-03",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "error": "before_coverage",
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "before_cny_coverage",
+      "base": "USD",
+      "quote": "CNY",
+      "requested_date": "2000-01-12",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "error": "before_coverage",
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "before_rub_coverage_identity",
+      "base": "RUB",
+      "quote": "RUB",
+      "requested_date": "1997-12-31",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "error": "before_coverage",
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "peg_first_date",
+      "base": "USDT",
+      "quote": "USDC",
+      "requested_date": "1998-01-01",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "1998-01-01",
+      "provisional": false,
+      "cacheable": true,
+      "observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-11-05",
+        "GBP": "2026-11-05",
+        "CHF": "2026-11-05",
+        "PLN": "2026-11-05",
+        "CNY": "2026-11-05"
+      }
+    },
+    {
+      "name": "missing_anchor",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1"
+      },
+      "error": "missing_rate",
+      "observation_dates": {}
+    },
+    {
+      "name": "quantized_zero",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "EUR": "0.0000000000000000001"
+      },
+      "error": "invalid_rate",
+      "observation_dates": {
+        "EUR": "2026-11-05"
+      }
+    },
+    {
+      "name": "unsupported_identity",
+      "base": "XYZ",
+      "quote": "XYZ",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "XYZ": "1"
+      },
+      "error": "unsupported_currency",
+      "observation_dates": {
+        "XYZ": "2026-11-05"
+      }
+    },
+    {
+      "name": "observation_age_14_in_5_day_snapshot",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-23"
+      },
+      "multiplier": "0.900000000000000000",
+      "effective_date": "2026-11-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "observation_age_15_in_5_day_snapshot",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-22"
+      },
+      "error": "stale"
+    },
+    {
+      "name": "stale_base_observation",
+      "base": "EUR",
+      "quote": "USD",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-22"
+      },
+      "error": "stale"
+    },
+    {
+      "name": "stale_quote_observation",
+      "base": "EUR",
+      "quote": "GBP",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-11-01",
+        "GBP": "2026-10-22"
+      },
+      "error": "stale"
+    },
+    {
+      "name": "unrelated_stale_observation_ignored",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-11-01",
+        "GBP": "2026-10-01"
+      },
+      "multiplier": "0.900000000000000000",
+      "effective_date": "2026-11-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "absent_fiat_observation_fails_closed",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {},
+      "error": "missing_rate"
+    },
+    {
+      "name": "usd_peg_36_days",
+      "base": "USD",
+      "quote": "USDT",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-01"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "cross_peg_36_days",
+      "base": "USDT",
+      "quote": "USDC",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-01"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "usd_identity_36_days",
+      "base": "USD",
+      "quote": "USD",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-01"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "fiat_identity_36_days",
+      "base": "EUR",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-01"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": true,
+      "cacheable": false
+    },
+    {
+      "name": "peg_fiat_stale_observation",
+      "base": "USDT",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-10-22"
+      },
+      "error": "stale"
+    },
+    {
+      "name": "completed_snapshot_old_observation",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-10-01",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "1999-01-04"
+      },
+      "multiplier": "0.900000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": false,
+      "cacheable": true
+    },
+    {
+      "name": "future_observation_rejected",
+      "base": "USD",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-11-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "EUR": "2026-11-02"
+      },
+      "error": "future_observation"
+    },
+    {
+      "name": "fiat_identity_requires_anchor",
+      "base": "EUR",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1"
+      },
+      "observation_dates": {},
+      "error": "missing_rate"
+    },
+    {
+      "name": "fiat_identity_requires_valid_anchor",
+      "base": "EUR",
+      "quote": "EUR",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "EUR": "NaN"
+      },
+      "observation_dates": {},
+      "error": "invalid_rate"
+    },
+    {
+      "name": "peg_supplied_age_cannot_add_expiry",
+      "base": "USD",
+      "quote": "USDT",
+      "requested_date": "2026-11-06",
+      "latest_completed_date": "2026-10-01",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      },
+      "observation_dates": {
+        "USD": "2026-10-01",
+        "USDT": "2026-10-01"
+      },
+      "multiplier": "1.000000000000000000",
+      "effective_date": "2026-10-01",
+      "provisional": true,
+      "cacheable": false
+    }
+  ],
+  "decimal_context": {
+    "algorithm_version": "usd_anchor_ratio_v1",
+    "Emin": -999999,
+    "Emax": 999999,
+    "capitals": 1,
+    "clamp": 0,
+    "initial_flags": [],
+    "trapped_signals": [
+      "InvalidOperation",
+      "DivisionByZero",
+      "Overflow",
+      "Underflow"
+    ],
+    "other_traps": false
+  },
+  "anchor_cases": [
+    {
+      "name": "initial_1998_usd_rub_and_pegs",
+      "on": "1998-06-01",
+      "edge_rates": {
+        "USD/RUB": "90"
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "initial_1999_no_cny",
+      "on": "1999-06-01",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4"
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "cny_start_minus_one",
+      "on": "2000-01-12",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4"
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "cny_start_inclusive",
+      "on": "2000-01-13",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "reversed_topology_start",
+      "on": "2000-01-13",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "reverse_edges": true,
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "gap_outside_2026-11-03",
+      "on": "2026-11-03",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "gap_outside_2026-11-06",
+      "on": "2026-11-06",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "gap_inclusive_2026-11-04",
+      "on": "2026-11-04",
+      "edge_rates": {
+        "USD/RUB": "90"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "reverse_edges": true,
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "gap_inclusive_2026-11-05",
+      "on": "2026-11-05",
+      "edge_rates": {
+        "USD/RUB": "90"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "reverse_edges": true,
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "gap_supplied_parent",
+      "on": "2026-11-04",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "before_start_supplied_parent",
+      "on": "1998-06-01",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9"
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "gap_supplied_descendant",
+      "on": "2026-11-04",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "EUR/GBP": "0.8"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "before_start_supplied_descendant",
+      "on": "1998-06-01",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "EUR/GBP": "0.8"
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "end_inclusive",
+      "on": "2026-11-05",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/GBP": "0.8",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "coverage_end": "2026-11-05"
+        }
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "EUR": "0.9",
+        "GBP": "0.72",
+        "CHF": "0.81",
+        "PLN": "3.6",
+        "CNY": "7.2",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "after_end_subtree_skipped",
+      "on": "2026-11-06",
+      "edge_rates": {
+        "USD/RUB": "90"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "coverage_end": "2026-11-05"
+        }
+      },
+      "anchor_values": {
+        "USD": "1",
+        "RUB": "90",
+        "USDT": "1",
+        "USDC": "1"
+      }
+    },
+    {
+      "name": "after_end_supplied_parent",
+      "on": "2026-11-06",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "1"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "coverage_end": "2026-11-05"
+        }
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "after_end_supplied_descendant",
+      "on": "2026-11-06",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "EUR/GBP": "1"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "coverage_end": "2026-11-05"
+        }
+      },
+      "error": "invalid_rate"
+    },
+    {
+      "name": "missing_applicable_edge",
+      "on": "2026-11-06",
+      "edge_rates": {
+        "USD/RUB": "90",
+        "USD/EUR": "0.9",
+        "EUR/CHF": "0.9",
+        "EUR/PLN": "4",
+        "EUR/CNY": "8"
+      },
+      "error": "missing_rate"
+    }
+  ],
+  "observation_date_cases": [
+    {
+      "name": "oldest_parent_propagates",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05",
+        "USD/EUR": "2026-10-22",
+        "EUR/GBP": "2026-11-01",
+        "EUR/CHF": "2026-11-01",
+        "EUR/PLN": "2026-11-01",
+        "EUR/CNY": "2026-11-01"
+      },
+      "anchor_observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-10-22",
+        "GBP": "2026-10-22",
+        "CHF": "2026-10-22",
+        "PLN": "2026-10-22",
+        "CNY": "2026-10-22"
+      }
+    },
+    {
+      "name": "oldest_parent_reversed_topology",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05",
+        "USD/EUR": "2026-10-22",
+        "EUR/GBP": "2026-11-01",
+        "EUR/CHF": "2026-11-01",
+        "EUR/PLN": "2026-11-01",
+        "EUR/CNY": "2026-11-01"
+      },
+      "reverse_edges": true,
+      "anchor_observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-10-22",
+        "GBP": "2026-10-22",
+        "CHF": "2026-10-22",
+        "PLN": "2026-10-22",
+        "CNY": "2026-10-22"
+      }
+    },
+    {
+      "name": "oldest_child_is_retained",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05",
+        "USD/EUR": "2026-10-22",
+        "EUR/GBP": "2026-10-21",
+        "EUR/CHF": "2026-11-01",
+        "EUR/PLN": "2026-11-01",
+        "EUR/CNY": "2026-11-01"
+      },
+      "anchor_observation_dates": {
+        "RUB": "2026-11-05",
+        "EUR": "2026-10-22",
+        "GBP": "2026-10-21",
+        "CHF": "2026-10-22",
+        "PLN": "2026-10-22",
+        "CNY": "2026-10-22"
+      }
+    },
+    {
+      "name": "historical_root_pegs_and_subtree_omitted",
+      "on": "1998-06-01",
+      "edge_observation_dates": {
+        "USD/RUB": "1998-05-29"
+      },
+      "anchor_observation_dates": {
+        "RUB": "1998-05-29"
+      }
+    },
+    {
+      "name": "excluded_subtree_omitted",
+      "on": "2026-11-04",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-03"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "excluded_intervals": [
+            [
+              "2026-11-04",
+              "2026-11-05"
+            ]
+          ]
+        }
+      },
+      "anchor_observation_dates": {
+        "RUB": "2026-11-03"
+      }
+    },
+    {
+      "name": "ended_subtree_omitted",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05"
+      },
+      "edge_overrides": {
+        "EUR": {
+          "coverage_end": "2026-11-05"
+        }
+      },
+      "anchor_observation_dates": {
+        "RUB": "2026-11-05"
+      }
+    },
+    {
+      "name": "missing_applicable_date",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05",
+        "EUR/GBP": "2026-11-01",
+        "EUR/CHF": "2026-11-01",
+        "EUR/PLN": "2026-11-01",
+        "EUR/CNY": "2026-11-01"
+      },
+      "error": "missing_rate"
+    },
+    {
+      "name": "future_date_rejected",
+      "on": "2026-11-06",
+      "edge_observation_dates": {
+        "USD/RUB": "2026-11-05",
+        "USD/EUR": "2026-11-07",
+        "EUR/GBP": "2026-11-01",
+        "EUR/CHF": "2026-11-01",
+        "EUR/PLN": "2026-11-01",
+        "EUR/CNY": "2026-11-01"
+      },
+      "error": "future_observation"
+    }
+  ]
+}

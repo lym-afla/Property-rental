@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0 — 2026-11-07
+
+- Add an opt-in shared FX mirror for rental calculations.
+
 ## 2.2.0 — 2026-11-01
 
 - Sort transactions using accessible column headers, including numeric amounts and property/tenant names.

@@ -34,6 +34,7 @@ change widens a field.
 
 from datetime import date
 from decimal import Decimal
+from functools import wraps
 
 from dateutil.parser import parse as parse_date
 
@@ -146,6 +147,39 @@ def _native_sum(prop, window, transaction_type):
 # ---------------------------------------------------------------------------
 
 
+def _consistent_fx_report(fn):
+    @wraps(fn)
+    def wrapped(self, request, *args, **kwargs):
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+            return fn(self, request, *args, **kwargs)
+        from rentals.models import FXSyncState
+        from rentals.services.fx import MissingFXRate
+        from rentals.services.fx_mirror import report_provisional
+
+        for attempt in range(2):
+            before = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
+            provisional = set()
+            token = report_provisional.set(provisional)
+            try:
+                try:
+                    response = fn(self, request, *args, **kwargs)
+                except MissingFXRate as exc:
+                    response = Response({'code': 'missing_fx', 'detail': str(exc)}, status=422)
+            finally:
+                report_provisional.reset(token)
+            after = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
+            if before == after:
+                if before:
+                    response['X-FX-Release-ID'] = before['release_id']
+                    response['X-FX-History-Epoch'] = str(before['history_epoch'])
+                response['X-FX-Provisional'] = str(bool(provisional)).lower()
+                response['Cache-Control'] = 'no-store' if provisional else 'private, no-cache'
+                return response
+        return Response({'code': 'fx_release_changed'}, status=503)
+    return wrapped
+
+
 class PropertyViewSet(viewsets.ModelViewSet):
     """CRUD for Property scoped to ``request.user.landlord``.
 
@@ -182,6 +216,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
         self._force_owner(serializer)
 
     @action(detail=False, methods=["get"])
+    @_consistent_fx_report
     def with_stats(self, request):
         """GET /api/v1/properties/with_stats/?as_of=YYYY-MM-DD&currency=USD
 
@@ -249,7 +284,8 @@ class PropertyViewSet(viewsets.ModelViewSet):
             # path it's the requested target currency.
             stats_currency = prop.currency if use_native else requested_currency
 
-            if use_native:
+            from django.conf import settings
+            if use_native and getattr(settings, "FX_BACKEND", "legacy") != "mirror":
                 # Raw face-value sums filtered to this property. The
                 # ``rentals.services.financials.aggregate`` helper requires
                 # a non-None target currency (it raises ValueError
@@ -363,6 +399,7 @@ class TenantViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
     @action(detail=False, methods=["get"])
+    @_consistent_fx_report
     def with_stats(self, request):
         """GET /api/v1/tenants/with_stats/?as_of=YYYY-MM-DD&currency=USD
 

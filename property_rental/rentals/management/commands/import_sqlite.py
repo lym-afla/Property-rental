@@ -253,6 +253,9 @@ class Command(BaseCommand):
         rows, selection, selected_user_ids, selection_errors = select_rows(
             source_rows, options["include_username"]
         )
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+            rows[FX] = []
         if any(selection_errors.values()):
             report = build_report(
                 rows,

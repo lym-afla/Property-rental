@@ -16,6 +16,27 @@ from rentals.tests.factories import (
 )
 
 
+
+@pytest.fixture
+def no_fx_mirror():
+    """Leave the mirror empty for explicit missing-rate tests."""
+
+
+@pytest.fixture(autouse=True)
+def seed_native_mirror(request, settings):
+    if settings.FX_BACKEND != 'mirror' or 'no_fx_mirror' in request.fixturenames:
+        return
+    request.getfixturevalue('db')
+    from datetime import timedelta
+    from rentals.models import FXAnchor, FXSyncState
+
+    FXSyncState.objects.create(pk=1, release_id='api-test', seq=1, history_epoch=1)
+    first = date(2026, 1, 1)
+    FXAnchor.objects.bulk_create([
+        FXAnchor(date=first + timedelta(days=day), currency=currency, value='1', snapshot_id='api-test')
+        for day in range(31) for currency in ('USD', 'EUR')
+    ])
+
 def valid_yield_row():
     return {
         "property_id": 1,
@@ -348,7 +369,7 @@ def test_property_breakdown_api_removes_currency_exposure_route(auth_client):
     ],
 )
 def test_portfolio_endpoints_return_typed_non_500_when_fx_is_missing(
-    auth_client, landlord_user, path, extra_params
+    auth_client, landlord_user, path, extra_params, no_fx_mirror
 ):
     """An absent conversion rate must be actionable API data, never a server error."""
     property_eur = PropertyFactory(

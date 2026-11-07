@@ -283,7 +283,8 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
             date__range=(current_year_start, as_of)
         )
         queryset_all_time = cf_queryset.filter(date__lte=as_of)
-        if not default_currency_for_all_data:
+        from django.conf import settings
+        if not default_currency_for_all_data and getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
             cf_ytd = queryset_ytd.aggregate(Sum('amount'))['amount__sum'] or 0
             cf_all_time = (
                 queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0
