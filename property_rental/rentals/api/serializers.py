@@ -28,6 +28,14 @@ from rentals.models import (
 )
 
 
+class FXBrowseSerializer(serializers.Serializer):
+    base = serializers.ChoiceField(choices=['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC'], default='USD')
+    quote = serializers.ChoiceField(choices=['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC'], default='EUR')
+    start = serializers.DateField(required=False)
+    end = serializers.DateField(required=False)
+    page_size = serializers.IntegerField(min_value=1, max_value=31, default=10)
+
+
 class PropertySerializer(serializers.ModelSerializer):
     """Serializer for the ``Property`` model.
 

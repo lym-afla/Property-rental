@@ -89,10 +89,9 @@ def test_report_retries_when_release_changes_during_calculation(landlord_user):
 @override_settings(FX_BACKEND='mirror')
 def test_tenant_missing_conversion_is_not_silently_skipped():
     from rentals.analytics.tenant import _converted
-    from rentals.services.fx import MissingFXRate, PreloadedConverter
+    from rentals.services.fx import PreloadedConverter
 
-    with pytest.raises(MissingFXRate):
-        _converted(PreloadedConverter([], 'USD'), Decimal('10'), 'EUR', 'USD', date(2026, 1, 1))
+    assert _converted(PreloadedConverter([], 'USD'), Decimal('10'), 'EUR', 'USD', date(2026, 1, 1)) == (None, 'missing_fx')
 
 
 @pytest.mark.django_db

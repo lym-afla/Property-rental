@@ -12,6 +12,15 @@ function isCalendarDate(value: string): boolean {
 export const isoDateSchema = z.string().refine(isCalendarDate, {
   message: 'Expected a valid ISO date in YYYY-MM-DD format',
 })
+const reportFXSchema = z.object({
+  release_id: z.string().nullable(),
+  history_epoch: z.number().int().nonnegative().nullable(),
+  synced_at: z.iso.datetime({ offset: true }).nullable(),
+  provisional: z.boolean(),
+  effective_dates: z.array(isoDateSchema),
+  cacheable: z.boolean(),
+}).strict()
+
 export const analyticsGrainSchema = z.enum(['month', 'quarter', 'year'])
 export const analyticsCurrencySchema = z.string().regex(/^[A-Z]{3}$/)
 export const propertyBreakdownMeasureSchema = z.enum([
@@ -72,6 +81,7 @@ const profitLossRowSchema = z.discriminatedUnion('kind', [
 
 export const profitLossSchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('profit_and_loss'),
     currency: analyticsCurrencySchema,
     scale: z.literal(1),
@@ -202,6 +212,7 @@ const occupancyPointSchema = z
   })
 
 const timeSeriesBaseShape = {
+  fx: reportFXSchema.optional(),
   metric: z.string().trim().min(1),
   grain: analyticsGrainSchema,
   currency: analyticsCurrencySchema.nullable(),
@@ -296,6 +307,7 @@ function makeTimeSeriesSchema<T extends z.ZodRawShape>(overrides: T) {
 
 export const timeSeriesSchema = makeTimeSeriesSchema({})
 export const portfolioCashFlowSchema = makeTimeSeriesSchema({
+  fx: reportFXSchema.optional(),
   metric: z.literal('portfolio_cash_flow'),
   currency: analyticsCurrencySchema,
   series: z.array(cashFlowSeriesDefinitionSchema),
@@ -318,6 +330,7 @@ export const portfolioCashFlowSchema = makeTimeSeriesSchema({
   }
 })
 export const expenseDriversSchema = makeTimeSeriesSchema({
+  fx: reportFXSchema.optional(),
   metric: z.literal('expense_drivers'),
   currency: analyticsCurrencySchema,
   series: z.array(
@@ -330,6 +343,7 @@ export const expenseDriversSchema = makeTimeSeriesSchema({
 })
 export const portfolioOccupancySchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('portfolio_occupancy'),
     grain: analyticsGrainSchema,
     currency: z.null(),
@@ -367,6 +381,7 @@ const independentValuationStatusSchema = z.enum([
 
 export const portfolioSummarySchema = z
   .object({
+    fx: reportFXSchema.optional(),
     currency: analyticsCurrencySchema,
     scale: z.literal(1),
     start: isoDateSchema,
@@ -393,6 +408,7 @@ export const portfolioSummarySchema = z
 
 export const propertyContributionSchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('property_contribution'),
     currency: analyticsCurrencySchema,
     scale: z.literal(1),
@@ -431,6 +447,7 @@ const yieldStatusSchema = z.enum([
 
 export const propertyYieldsSchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('property_yields'),
     currency: analyticsCurrencySchema,
     scale: z.literal(1),
@@ -480,6 +497,7 @@ const propertyBreakdownCoverageSchema = z
 
 export const propertyBreakdownSchema = z.object({
   ...timeSeriesBaseShape,
+  fx: reportFXSchema.optional(),
   metric: z.literal('property_breakdown'),
   currency: analyticsCurrencySchema,
   measure: propertyBreakdownMeasureSchema,
@@ -537,6 +555,7 @@ const propertyValuationSeriesSchema = z.tuple([
 
 export const propertyValuationSchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('property_valuation'),
     grain: z.literal('record'),
     currency: analyticsCurrencySchema.nullable(),
@@ -624,6 +643,7 @@ const tenantRentSeriesSchema = z.tuple([
 
 export const tenantRentPerformanceSchema = z
   .object({
+    fx: reportFXSchema.optional(),
     metric: z.literal('tenant_rent_performance'),
     grain: analyticsGrainSchema,
     currency: analyticsCurrencySchema,

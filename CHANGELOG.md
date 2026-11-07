@@ -3,6 +3,8 @@
 ## 2.3.0 — 2026-11-07
 
 - Add an opt-in shared FX mirror for rental calculations.
+- Browse shared reference rates by pair and date range with pinned pagination and read-only provenance details.
+- Preserve typed incomplete tenant analytics and document named mirror financial differences in comparison exports.
 
 ## 2.2.0 — 2026-11-01
 

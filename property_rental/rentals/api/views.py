@@ -696,6 +696,29 @@ class FXViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FX.objects.all()
     lookup_value_regex = r"\d+"
 
+    def list(self, request, *args, **kwargs):
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+            from rentals.api.fx_browsing import browse
+            return browse(request)
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Use the pinned row details link for shared FX.')
+        return super().retrieve(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'], url_path='details')
+    def details(self, request):
+        from django.conf import settings
+        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+            from rest_framework.exceptions import NotFound
+            raise NotFound()
+        from rentals.api.fx_browsing import details
+        return details(request)
+
 class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
     """CRUD for ``Property_capital_structure`` scoped via
     ``property.owned_by.user`` (Task 5).
