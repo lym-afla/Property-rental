@@ -1,20 +1,22 @@
 import hashlib
 import json
-from datetime import datetime
+import os
+from datetime import date, datetime, timezone
 from decimal import Context, Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
-from django.test import override_settings
+from django.db import connection, transaction
 import networkx as nx
 
 from rentals.analytics.tenant import _due_dates, _effective_rate
 from rentals.constants import CURRENCY_CHOICES
-from rentals.models import DepositMovement, FXSyncState, Lease_rent, Property_capital_structure, Tenant, Transaction
+from rentals.models import DepositMovement, FXSyncState, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.fx import get_rate
+from rentals.services.fx_context import calculation_context, backend
+from rentals.services.fx_comparison import build_reports, report_scope, FAMILIES
 
 
 BEHAVIORAL_DIFFERENCES = [
@@ -66,7 +68,7 @@ def multiplier_difference_cause(legacy, mirror):
     return 'canonical_reference_policy'
 
 
-def comparison_rows():
+def comparison_rows(as_of):
     for model, kind, date_field, currency_field in (
         (Transaction, 'transaction', 'date', 'currency'),
         (DepositMovement, 'deposit', 'date', 'currency'),
@@ -76,7 +78,7 @@ def comparison_rows():
         for obj in model.objects.order_by('pk').iterator():
             currency = obj.property.currency if currency_field == 'property.currency' else getattr(obj, currency_field)
             yield kind, obj, getattr(obj, date_field), currency
-    today = datetime.now(ZoneInfo(settings.BUSINESS_TIME_ZONE)).date()
+    today = as_of
     for tenant in Tenant.objects.order_by('pk').iterator():
         rates = tuple(tenant.rent_history.order_by('date_rent_set', 'pk'))
         for due in _due_dates(tenant, tenant.lease_start, today):
@@ -85,40 +87,77 @@ def comparison_rows():
                 yield 'lease_due', rate, due, rate.currency
 
 
+def read_only(execute, sql, params, many, context):
+    if sql.strip().upper() == 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY':
+        return execute(sql, params, many, context)
+    if sql.lstrip().split(None, 1)[0].upper() not in {'SELECT', 'BEGIN', 'SAVEPOINT', 'RELEASE', 'ROLLBACK'}:
+        raise CommandError('comparison_write_forbidden')
+    return execute(sql, params, many, context)
+
+
 class Command(BaseCommand):
-    help = 'Export hashed business facts and both FX multipliers.'
+    help = 'Export private business evidence and measured live report counterfactuals.'
 
     def add_arguments(self, parser):
         parser.add_argument('--output', required=True)
+        parser.add_argument('--source-commit', default=os.environ.get('FX_EXPORT_SOURCE_COMMIT'))
+        parser.add_argument('--image-digest', default=os.environ.get('FX_EXPORT_IMAGE_DIGEST'))
+        parser.add_argument('--as-of', type=date.fromisoformat)
+        parser.add_argument('--report-start', type=date.fromisoformat)
+        parser.add_argument('--report-currency', choices=[c for c, _ in CURRENCY_CHOICES], default='USD')
 
     def handle(self, *args, **options):
-        for attempt in range(2):
-            with transaction.atomic():
-                before_state = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
-                records = []
-                for kind, obj, as_of, currency in comparison_rows():
-                    before = business_hash(obj)
-                    for target, _ in CURRENCY_CHOICES:
-                        result = {'kind': kind, 'business_hash': before, 'date': as_of.isoformat(), 'currency': currency, 'target_currency': target}
-                        for backend in ('legacy', 'mirror'):
-                            try:
-                                with override_settings(FX_BACKEND=backend):
-                                    multiplier = get_rate(currency, target, as_of)['FX']
-                                result[f'{backend}_multiplier'] = str(multiplier)
-                            except (ValueError, LookupError, nx.NetworkXException):
-                                result[f'{backend}_multiplier'] = None
-                        legacy, mirror = result['legacy_multiplier'], result['mirror_multiplier']
-                        result['multiplier_difference_cause'] = multiplier_difference_cause(legacy, mirror)
-                        result['applicable_behavioral_causes'] = behavioral_causes(kind, obj, currency, target)
-                        records.append(result)
-                    obj.refresh_from_db()
-                    if business_hash(obj) != before:
-                        raise CommandError('Business data changed during comparison')
-                after_state = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
-                if before_state == after_state:
-                    output = {'release': before_state, 'behavioral_differences': BEHAVIORAL_DIFFERENCES, 'records': records}
-                    break
-        else:
-            raise CommandError('FX release changed during comparison')
-        Path(options['output']).write_text(json.dumps(output, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+        as_of = options['as_of'] or datetime.now(ZoneInfo(settings.BUSINESS_TIME_ZONE)).date()
+        start = options['report_start'] or as_of.replace(month=1, day=1)
+        if start > as_of:
+            raise CommandError('invalid_report_horizon')
+        if connection.vendor == 'postgresql' and connection.in_atomic_block:
+            raise CommandError('comparison_requires_top_level_transaction')
+        with connection.execute_wrapper(read_only), transaction.atomic():
+            if connection.vendor == 'postgresql':
+                with connection.cursor() as cursor:
+                    cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            before_state = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
+            business = [{'kind': model._meta.model_name, 'record_id': str(obj.pk), 'business_hash': business_hash(obj)}
+                        for model in (Property, Tenant, Transaction, DepositMovement, Property_capital_structure, Lease_rent)
+                        for obj in model.objects.order_by('pk')]
+            records = []
+            for kind, obj, valued_on, currency in comparison_rows(as_of):
+                for target, _ in CURRENCY_CHOICES:
+                    result = {'kind': kind, 'record_id': str(obj.pk), 'business_hash': business_hash(obj),
+                              'date': valued_on.isoformat(), 'currency': currency, 'target_currency': target}
+                    for resolver in ('legacy', 'mirror'):
+                        try:
+                            with calculation_context(resolver):
+                                multiplier = get_rate(currency, target, valued_on)['FX']
+                            result[f'{resolver}_multiplier'] = str(multiplier)
+                            result[f'{resolver}_error'] = None
+                        except (ValueError, LookupError, nx.NetworkXException):
+                            result[f'{resolver}_multiplier'] = None
+                            result[f'{resolver}_error'] = 'missing_fx'
+                    result['multiplier_difference_cause'] = multiplier_difference_cause(result['legacy_multiplier'], result['mirror_multiplier'])
+                    result['applicable_behavioral_causes'] = behavioral_causes(kind, obj, currency, target)
+                    records.append(result)
+            reports, coverage = build_reports(as_of, start, options['report_currency'])
+            after_business = [{'kind': model._meta.model_name, 'record_id': str(obj.pk), 'business_hash': business_hash(obj)}
+                              for model in (Property, Tenant, Transaction, DepositMovement, Property_capital_structure, Lease_rent)
+                              for obj in model.objects.order_by('pk')]
+            if business != after_business:
+                raise CommandError('business_changed_during_comparison')
+            after_state = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
+            if before_state != after_state:
+                raise CommandError('fx_release_changed_during_comparison')
+            output = {'schema_version': 2, 'header': {'generated_at': datetime.now(timezone.utc).isoformat()},
+                      'provenance': {'source_commit': options['source_commit'] or None, 'image_digest': options['image_digest'] or None},
+                      'horizon': {'as_of': as_of.isoformat(), 'report_start': start.isoformat(), 'report_currency': options['report_currency']},
+                      'backend_settings': {'configured_backend': backend(), 'business_time_zone': settings.BUSINESS_TIME_ZONE,
+                                           'resolvers': ['legacy', 'mirror'], 'counterfactual_order': ['canonical_reference_policy', 'rent_total_face_value', 'scheduler_rent_denomination', 'scheduler_rent_selection', 'native_stats_and_pnl']},
+                      'release': before_state, 'business_records': business,
+                      'behavioral_differences': BEHAVIORAL_DIFFERENCES, 'records': records,
+                      'report_scope': report_scope(), 'report_families': list(FAMILIES), 'report_coverage': coverage, 'reports': reports}
+        # O_NOFOLLOW prevents an output symlink from redirecting private evidence.
+        fd = os.open(options['output'], os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(json.dumps(output, sort_keys=True, separators=(',', ':'), allow_nan=False) + '\n')
         self.stdout.write('FX comparison exported')

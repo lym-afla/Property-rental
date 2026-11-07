@@ -2,6 +2,10 @@
 
 ## 2.3.0 — 2026-11-07
 
+- Include original lease calendars and deposit/capital/rent facts so comparison consumers can require complete dated currency-pair coverage.
+
+- Export private, provenance-pinned live legacy/mirror report comparisons with context-local counterfactual attribution, deterministic horizons, and read-only snapshot protection.
+
 - Add an opt-in shared FX mirror for rental calculations.
 - Browse shared reference rates by pair and date range with pinned pagination and read-only provenance details.
 - Preserve typed incomplete tenant analytics and document named mirror financial differences in comparison exports.

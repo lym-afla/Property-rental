@@ -64,6 +64,7 @@ Known latent bugs pinned by Task 3 char tests (NOT fixed here):
 
 from datetime import date
 
+from rentals.services.fx_context import behavior as fx_behavior
 from django.db.models import Sum
 
 # ``Transaction``, ``FX``, ``get_category_name`` are imported lazily
@@ -284,7 +285,7 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
         )
         queryset_all_time = cf_queryset.filter(date__lte=as_of)
         from django.conf import settings
-        if not default_currency_for_all_data and getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+        if not default_currency_for_all_data and not fx_behavior("native_stats_and_pnl"):
             cf_ytd = queryset_ytd.aggregate(Sum('amount'))['amount__sum'] or 0
             cf_all_time = (
                 queryset_all_time.aggregate(Sum('amount'))['amount__sum'] or 0

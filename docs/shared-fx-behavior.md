@@ -23,17 +23,62 @@ preserves business facts but skips legacy reference rows
 (`rentals/management/commands/import_sqlite.py`). This is reference ownership,
 not a change to the business transaction.
 
-`export_fx_comparison` exports this cause catalog as `behavioral_differences`.
-Each row's `applicable_behavioral_causes` identifies the affected calculation
-paths, including mixed-currency rent and native P&L; applicability is not a claim
-that an aggregate changed numerically. `multiplier_difference_cause` separately
-identifies `reference_coverage` when only one resolver has a rate,
-`decimal_precision` when the difference disappears at the declared 18-place
-ROUND_HALF_UP precision, or `canonical_reference_policy` for remaining numeric
-differences. Equal numbers with different trailing zeros have no delta cause. A
-multiplier comparison alone cannot quantify face-value/scheduler changes.
-Business hashes and original currency/date fields remain in the export so those
-changes can be investigated without attributing every delta to rate source.
+`export_fx_comparison` schema 2 contains stable private primary keys, original
+business hashes and dated currency evidence, source commit/image digest supplied
+by the operator (null when absent), release ID/sequence/history epoch, explicit
+report horizon, and allowlisted backend settings. Only `header.generated_at`
+varies for identical inputs. Output files are mode 0600. Never commit exports.
+
+```sh
+python manage.py export_fx_comparison --output /private/comparison.json \
+  --source-commit "$RENT_SOURCE_COMMIT" --image-digest "$RENT_IMAGE_DIGEST" \
+  --as-of 2026-11-05 --report-start 2026-01-01 --report-currency USD
+```
+
+`FX_EXPORT_SOURCE_COMMIT` and `FX_EXPORT_IMAGE_DIGEST` are equivalent argument
+defaults. Missing provenance is deliberately retained, not inferred from checkout
+HEAD or a fabricated digest. The consumer blocks it. These are supplied claims;
+operators must independently verify the deployment attestation.
+
+The command calls live tenant rent/debt (standard and advance), native property
+stats, native and converted property P&L, portfolio transaction totals, tenant
+rent performance, and annual P&L analytics paths. The `report_coverage` inventory
+lists each family/entity/currency. Required `report_scope` records the original property-to-owner and tenant-to-property relationships plus dated transaction scope and live category labels. It also includes tenant lease start/end/payday, deposits (tenant/date/currency), capital (property/date), and lease rents (tenant/effective date/currency). Its IDs must exactly cover the business inventory. The consumer derives every required owner/entity/currency, fixed metric, monthly tenant point and annual P&L year from these facts and the horizon; the metric manifest cannot waive them. Independently derived raw and contractual due-date rows must each contain exactly USD/EUR/GBP/RUB target conversions, with original inventory hashes; omissions, extras, duplicates and contradictions block. Due dates use the tenant analytics month-end payday clamp and lease boundaries, selecting the latest effective rent by date then numeric primary key. The report start bounds tenant performance and
+selected-period analytics; debt includes lease history, P&L includes all-time and
+YTD, annual P&L includes historical annual columns. Native property stats retain
+the live endpoint's full-calendar-year YTD window. Independently review these
+scopes against the operational reports, including future-dated transactions.
+Portfolio valuation completeness remains a separate capital/inventory review;
+portfolio receipts here measure revenue, costs and net income.
+
+Each numeric metric is evaluated in this fixed order on one business snapshot:
+legacy resolver/behavior; mirror resolver with legacy behavior; then enable
+`rent_total_face_value`, `scheduler_rent_denomination`,
+`scheduler_rent_selection`, and `native_stats_and_pnl` one at a time. Adjacent
+stage subtraction supplies each cause's signed amount. Native rent/debt/stats/P&L reference-only stages must remain equal: with all behavior flags off, those live paths sum face values and never call the resolver. Successful numeric rates and reports require an explicit null error field; missing and all non-null values, including falsy values, block. This quantifies mixed
+payments and tied effective rents using the real algorithms; interaction effects
+belong to the later stage, so ordering is part of the contract. The final stage
+is the live mirror behavior. Resolver changes are named
+`canonical_reference_policy` in reports; exact row multipliers distinguish that
+policy from 18-place `decimal_precision`, and canonical rate changes still need
+independent dated source receipts. Applicability labels alone cannot waive a
+difference. Missing rates/report values and calculation failures use typed codes,
+never private exception messages, and block cutover. Unproven residuals must be
+reported as unexplained, never absorbed into a behavior label.
+
+`ContextVar` selection isolates concurrent requests and nested calculations.
+Production code never changes global `FX_BACKEND`. PostgreSQL exports require
+a top-level repeatable-read/read-only transaction; nested transactions fail
+explicitly. SQLite uses its transaction snapshot. An SQL guard rejects writes
+rather than relying on rollback. Both business inventory and release are checked
+within the snapshot. No reference sync or business writes occur during export.
+
+LifeOS verifies stage order, arithmetic, allowed causes per report family,
+required entity coverage, provenance and release pins. Its stdout includes only
+aggregate count, changed count, signed/absolute/max movement, grouped by family,
+currency and cause. Metrics overlap (components, totals, YTD and all-time), so
+these sums measure report movement, not net portfolio economic impact. Review
+private per-metric receipts for each of the four deliberate-change sign-offs.
 
 ## Browsing contract and compatibility
 

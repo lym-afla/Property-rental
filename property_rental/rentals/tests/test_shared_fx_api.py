@@ -33,6 +33,7 @@ def test_tenant_missing_fx_is_typed_and_never_a_complete_total(auth_client, samp
     assert point['cumulative_arrears'] is None
 
 
+@pytest.mark.django_db(transaction=True)
 def test_comparison_attributes_financial_behavior_separately_from_rates(tmp_path, sample_property):
     sample_property.currency = 'USD'
     sample_property.save()
@@ -248,6 +249,7 @@ def test_tenant_partial_periods_preserve_valid_rows_but_not_cumulative(auth_clie
     assert 'incomplete_cumulative_history' in march['issues']
 
 
+@pytest.mark.django_db(transaction=True)
 def test_comparison_does_not_attribute_decimal_formatting_as_a_rate_change(tmp_path, sample_property):
     from rentals.models import FX
     sample_property.currency = 'USD'
@@ -268,6 +270,7 @@ def test_comparison_does_not_attribute_decimal_formatting_as_a_rate_change(tmp_p
     assert 'native_stats_and_pnl' not in gbp['applicable_behavioral_causes']
 
 
+@pytest.mark.django_db(transaction=True)
 def test_comparison_names_precision_only_differences(tmp_path, sample_property):
     from rentals.models import FX
     sample_property.currency = 'USD'
@@ -295,6 +298,7 @@ def test_first_page_link_reconstructs_same_release_after_promotion(auth_client, 
     assert restored['results'][0]['snapshot_id'] == 'snapshot-6'
 
 
+@pytest.mark.django_db(transaction=True)
 def test_comparison_attributes_unassigned_foreign_rent_in_native_totals(tmp_path, sample_property):
     from django.test import override_settings
     sample_property.currency = 'USD'
@@ -315,6 +319,7 @@ def test_comparison_attributes_unassigned_foreign_rent_in_native_totals(tmp_path
     assert 'rent_total_face_value' not in other['applicable_behavioral_causes']
 
 
+@pytest.mark.django_db(transaction=True)
 def test_comparison_attributes_same_currency_effective_rent_ties(tmp_path, sample_property):
     from django.test import override_settings
     sample_property.currency = 'USD'

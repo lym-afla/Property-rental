@@ -161,7 +161,7 @@ def test_completed_golden_rates_match_both_resolvers():
         assert PreloadedConverter([], case['quote']).convert(Decimal(1), case['base'], case['quote'], target_date) == expected, case['name']
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror')
 def test_comparison_export_covers_native_transaction_without_writing_it(tmp_path):
     import json
@@ -314,7 +314,7 @@ def test_legacy_pnl_native_mode_does_not_sum_foreign_currency():
         pnl_calc([prop], 'USD', False, 2, as_of=date(2026, 1, 31))
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize('backend', ['legacy', 'mirror'])
 def test_native_save_and_sqlite_import_do_not_use_network(tmp_path, monkeypatch, settings, backend):
     from django.core.management import call_command
@@ -430,8 +430,8 @@ def test_characterized_rates_and_transaction_aggregate_across_backends(settings,
     assert convert_transactions([row], 'RUB', as_of) == Decimal('200')
 
 
-@pytest.mark.django_db
-def test_comparison_export_retries_after_release_change(tmp_path, monkeypatch):
+@pytest.mark.django_db(transaction=True)
+def test_comparison_export_rejects_release_write_inside_calculation(tmp_path, monkeypatch):
     import json
     from django.core.management import call_command
     from rentals.management.commands import export_fx_comparison
@@ -450,9 +450,11 @@ def test_comparison_export_retries_after_release_change(tmp_path, monkeypatch):
         return real_hash(obj)
     monkeypatch.setattr(export_fx_comparison, 'business_hash', changing_hash)
     path = tmp_path / 'comparison.json'
-    call_command('export_fx_comparison', output=str(path))
-    assert len(calls) == 4
-    assert json.loads(path.read_text())['release']['release_id'] == 'new'
+    from django.core.management.base import CommandError
+    with pytest.raises(CommandError, match='comparison_write_forbidden'):
+        call_command('export_fx_comparison', output=str(path))
+    assert FXSyncState.objects.get(pk=1).release_id == 'old'
+    assert not path.exists()
 
 
 _POLICY_HASH = 'dc402fff8264f862325f6ad33bf34ff2a8d3d02ef82f5f66ec1ee6351a2eefd5'

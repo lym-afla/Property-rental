@@ -7,6 +7,7 @@ import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
+from rentals.services.fx_context import backend as fx_backend
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management.color import no_style
 from django.db import connection, transaction
@@ -254,7 +255,7 @@ class Command(BaseCommand):
             source_rows, options["include_username"]
         )
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+        if fx_backend() == 'mirror':
             rows[FX] = []
         if any(selection_errors.values()):
             report = build_report(

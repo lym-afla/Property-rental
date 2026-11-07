@@ -1,6 +1,7 @@
 """Authenticated HTTP endpoints for portfolio analytics responses."""
 
 from dataclasses import dataclass
+from rentals.services.fx_context import backend as fx_backend
 from datetime import date
 
 from rest_framework import serializers
@@ -94,7 +95,7 @@ class _PortfolioAnalyticsView(APIView):
 
     def dispatch(self, request, *args, **kwargs):
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+        if fx_backend() != 'mirror':
             return super().dispatch(request, *args, **kwargs)
         from rentals.models import FXSyncState
         from rentals.services.fx_mirror import report_provisional

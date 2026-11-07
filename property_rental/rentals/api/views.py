@@ -38,6 +38,7 @@ from functools import wraps
 
 from dateutil.parser import parse as parse_date
 
+from rentals.services.fx_context import backend as fx_backend, behavior as fx_behavior
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -151,7 +152,7 @@ def _consistent_fx_report(fn):
     @wraps(fn)
     def wrapped(self, request, *args, **kwargs):
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+        if fx_backend() != 'mirror':
             return fn(self, request, *args, **kwargs)
         from rentals.models import FXSyncState
         from rentals.services.fx import MissingFXRate
@@ -285,7 +286,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
             stats_currency = prop.currency if use_native else requested_currency
 
             from django.conf import settings
-            if use_native and getattr(settings, "FX_BACKEND", "legacy") != "mirror":
+            if use_native and not fx_behavior("native_stats_and_pnl"):
                 # Raw face-value sums filtered to this property. The
                 # ``rentals.services.financials.aggregate`` helper requires
                 # a non-None target currency (it raises ValueError
@@ -698,14 +699,14 @@ class FXViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request, *args, **kwargs):
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+        if fx_backend() == 'mirror':
             from rentals.api.fx_browsing import browse
             return browse(request)
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
+        if fx_backend() == 'mirror':
             from rest_framework.exceptions import NotFound
             raise NotFound('Use the pinned row details link for shared FX.')
         return super().retrieve(request, *args, **kwargs)
@@ -713,7 +714,7 @@ class FXViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='details')
     def details(self, request):
         from django.conf import settings
-        if getattr(settings, 'FX_BACKEND', 'legacy') != 'mirror':
+        if fx_backend() != 'mirror':
             from rest_framework.exceptions import NotFound
             raise NotFound()
         from rentals.api.fx_browsing import details

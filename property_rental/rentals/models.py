@@ -1,3 +1,4 @@
+from rentals.services.fx_context import behavior as fx_behavior
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
@@ -257,7 +258,7 @@ class Tenant(models.Model):
         # is property-level, not per-row, and the silent fallback to face value
         # is a known latent quirk deliberately preserved here).
         from django.conf import settings
-        if getattr(settings, "FX_BACKEND", "legacy") == "mirror":
+        if fx_behavior("rent_total_face_value"):
             from rentals.services.financials import convert_transactions
             total_rent = convert_transactions(transactions.all(), target_currency or property.currency, end_date)
         elif target_currency is None or property.currency == target_currency:

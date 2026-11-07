@@ -41,6 +41,7 @@ arrears scenario. The unification is mechanical:
 resolve exactly as before.
 """
 
+from rentals.services.fx_context import behavior as fx_behavior
 from datetime import date
 from decimal import Decimal
 
@@ -179,18 +180,16 @@ def debt(tenant, as_of_date=None, method='standard'):
             # vacated" / "No rent history for the Tenant") in edge
             # cases; we treat those as "no rent due for this month"
             # (skip) so the accumulator only ever sees numeric rates.
-            from django.conf import settings
-            if getattr(settings, 'FX_BACKEND', 'legacy') == 'mirror':
-                from rentals.services.fx import convert, MissingFXRate
-                row = tenant.rent_history.filter(date_rent_set__lte=due_date).order_by('-date_rent_set', '-pk').first()
-                if row:
+            from rentals.services.fx import convert, MissingFXRate
+            ordering = ('-date_rent_set', '-pk') if fx_behavior('scheduler_rent_selection') else ('-date_rent_set',)
+            row = tenant.rent_history.filter(date_rent_set__lte=due_date).order_by(*ordering).first()
+            if row:
+                if fx_behavior('scheduler_rent_denomination'):
                     if not row.currency or not tenant.property.currency:
                         raise MissingFXRate('Rent currency is unavailable')
                     total_rent_due += convert(row.rent, row.currency, tenant.property.currency, due_date)
-            else:
-                monthly_rate = tenant.lease_rent(due_date)
-                if isinstance(monthly_rate, (int, Decimal)):
-                    total_rent_due += monthly_rate
+                else:
+                    total_rent_due += row.rent
 
         # Move to next month.
         if current_month.month == 12:
