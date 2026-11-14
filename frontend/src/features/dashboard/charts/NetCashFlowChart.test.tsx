@@ -47,6 +47,7 @@ describe('NetCashFlowChart', () => {
     const user = userEvent.setup()
     render(<MemoryRouter><NetCashFlowChart data={data} /></MemoryRouter>)
 
+    expect(screen.getByText('Signed income and expense categories by reporting period.')).toBeInTheDocument()
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
     expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toMatch(/^url\(/)

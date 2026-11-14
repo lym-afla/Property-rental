@@ -40,7 +40,9 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
     <AnalyticsChartCard
       state={state}
       title="Net cash flow"
-      subtitle="Income, costs, principal repayments and deposits by reporting period."
+      subtitle={series.some((item) => item.kind === 'balance_sheet')
+        ? 'Income, costs, principal repayments and deposits by reporting period.'
+        : 'Signed income and expense categories by reporting period.'}
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
         if (next.has(key)) {
