@@ -115,7 +115,7 @@ def profit_and_loss(user, end, currency, property_ids=()):
     income_rows = []
     expense_rows = []
     for key in category_keys:
-        if not any(values[key].values()):
+        if category_kinds[key] == "balance_sheet" or not any(values[key].values()):
             continue
         row = ProfitLossRow(
             key=key,

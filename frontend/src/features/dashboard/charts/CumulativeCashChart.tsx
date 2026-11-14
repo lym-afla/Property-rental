@@ -11,7 +11,8 @@ import { cashTable, chartState, compactPeriod, hasSeriesValues, type ChartDataPr
 
 export function CumulativeCashChart({ data, isLoading, isError, onRetry }: ChartDataProps) {
   const charts = useChartTheme()
-  const series = data?.series.filter((item) => item.kind === 'cumulative') ?? []
+  const cashSeries = data?.series.filter((item) => item.kind === 'cumulative_cash') ?? []
+  const series = cashSeries.length ? cashSeries : data?.series.filter((item) => item.kind === 'cumulative') ?? []
   const cumulativeSeries = series.at(0)
   const state = chartState('Cumulative cash', { data, isLoading, isError, onRetry }, hasSeriesValues(data, series))
   const last = cumulativeSeries && data?.points.at(-1)?.[cumulativeSeries.key] as number | null | undefined

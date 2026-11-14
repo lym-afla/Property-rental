@@ -26,3 +26,17 @@ describe('CumulativeCashChart', () => {
     expect(screen.getByText('No cumulative cash data for this selection.')).toBeInTheDocument()
   })
 })
+
+it('prefers cumulative cash including principal and deposits over cumulative profit', async () => {
+  const user = userEvent.setup()
+  render(<CumulativeCashChart data={{...data,
+    series:[...data.series,{key:'cumulative_net_cash_flow',label:'Cumulative net cash flow',kind:'cumulative_cash'}],
+    points:data.points.map((point) => ({...point,cumulative_net_cash_flow:point.cumulative_net_income - 400})),
+  }} />)
+  expect(screen.getByText('Final cumulative cash: ($150)')).toBeInTheDocument()
+  await user.click(screen.getByRole('button',{name:'Table'}))
+  const table = screen.getByRole('table',{name:'Cumulative cash exact values'})
+  expect(table).toHaveTextContent('Cumulative net cash flow')
+  expect(table).toHaveTextContent('($150)')
+  expect(table).not.toHaveTextContent('Cumulative net income')
+})

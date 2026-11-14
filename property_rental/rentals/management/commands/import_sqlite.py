@@ -41,15 +41,24 @@ def read_source(source: Path):
             table = model._meta.db_table
             expected = [field.column for field in model._meta.concrete_fields]
             actual = [row[1] for row in db.execute(f'PRAGMA table_info("{table}")')]
-            missing = sorted(set(expected) - set(actual))
+            optional = {
+                field.column for field in model._meta.concrete_fields
+                if field.name in {"created_at", "updated_at", "loan"}
+            }
+            missing = sorted(set(expected) - set(actual) - optional)
             if missing:
                 raise CommandError(
                     f"Unsupported source schema for {table}; missing columns: {missing}"
                 )
-            selected = ", ".join(f'"{column}"' for column in expected)
+            selected = ", ".join(
+                f'"{column}"' for column in expected if column in actual
+            )
             result[model] = [dict(row) for row in db.execute(
                 f'SELECT {selected} FROM "{table}" ORDER BY "{model._meta.pk.column}"'
             )]
+            if "loan_id" in expected and "loan_id" not in actual:
+                for row in result[model]:
+                    row["loan_id"] = None
     except sqlite3.Error as exc:
         raise CommandError(f"Invalid SQLite source: {exc}") from exc
     finally:
@@ -65,7 +74,16 @@ def relationship_errors(rows_by_model, *, allowed_user_ids=None):
     }
     for model, rows in rows_by_model.items():
         for field in model._meta.concrete_fields:
-            if not field.is_relation or field.remote_field.model not in source_ids:
+            if not field.is_relation:
+                continue
+            if field.remote_field.model not in source_ids:
+                for row in rows:
+                    value = row[field.column]
+                    if value is not None:
+                        errors[model].append(
+                            f"{model._meta.db_table}.{field.column}={value} "
+                            f"references {field.remote_field.model.__name__}, which is not imported"
+                        )
                 continue
             for row in rows:
                 value = row[field.column]
@@ -175,6 +193,8 @@ def destination_exactly_matches(rows_by_model):
                 if model is User and field.name == "password":
                     if dest and not str(dest).startswith("!"):
                         return False
+                    continue
+                if field.column not in source:
                     continue
                 expected = source_value(field, source[field.column])
                 if expected != dest:
@@ -327,7 +347,7 @@ class Command(BaseCommand):
                     objects = []
                     for row in rows[model]:
                         values = {
-                            field.attname: source_value(field, row[field.column])
+                            field.attname: source_value(field, row.get(field.column))
                             for field in model._meta.concrete_fields
                         }
                         obj = model(**values)
@@ -335,6 +355,20 @@ class Command(BaseCommand):
                             obj.set_unusable_password()
                         objects.append(obj)
                     model.objects.bulk_create(objects, batch_size=500)
+                    audit_fields = [
+                        field for field in model._meta.concrete_fields
+                        if getattr(field, "auto_now", False)
+                        or getattr(field, "auto_now_add", False)
+                    ]
+                    for row in rows[model]:
+                        timestamps = {
+                            field.attname: source_value(field, row[field.column])
+                            for field in audit_fields if field.column in row
+                        }
+                        if timestamps:
+                            model.objects.filter(
+                                pk=row[model._meta.pk.column]
+                            ).update(**timestamps)
 
                 if not destination_exactly_matches(rows):
                     raise CommandError(

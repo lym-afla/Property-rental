@@ -38,6 +38,7 @@ import {
 } from '@/api/transactions'
 import { apiErrorMessage } from '@/api/client'
 import { useProperties } from '@/api/properties'
+import { useLoans } from '@/api/loans'
 import { useTenants } from '@/api/tenants'
 import { DataTable } from '@/components/table/DataTable'
 import { EntityFormDialog } from '@/components/modals/EntityFormDialog'
@@ -140,6 +141,7 @@ export function TransactionsPage() {
   })
   const propertiesQuery = useProperties()
   const tenantsQuery = useTenants()
+  const loansQuery = useLoans()
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
   const deleteTransaction = useDeleteTransaction()
@@ -321,6 +323,7 @@ export function TransactionsPage() {
           mode="create"
         >
           <TransactionForm
+            loans={loansQuery.data ?? []}
             properties={propertiesQuery.data ?? []}
             tenants={tenantsQuery.data ?? []}
             onSubmit={(values) =>
@@ -345,6 +348,7 @@ export function TransactionsPage() {
             mode="edit"
           >
           <TransactionForm
+            loans={loansQuery.data ?? []}
             properties={propertiesQuery.data ?? []}
             tenants={tenantsQuery.data ?? []}
             mode="edit"
@@ -352,6 +356,7 @@ export function TransactionsPage() {
               date: editTarget.date,
               property: editTarget.property,
               tenant: editTarget.tenant,
+              loan: editTarget.loan ?? null,
               category: editTarget.category as
                 | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
                 | undefined,
@@ -411,6 +416,7 @@ export function TransactionsPage() {
         mode="create"
       >
         <TransactionForm
+            loans={loansQuery.data ?? []}
           properties={propertiesQuery.data ?? []}
           tenants={tenantsQuery.data ?? []}
           onSubmit={(values) =>
@@ -436,6 +442,7 @@ export function TransactionsPage() {
           mode="edit"
         >
             <TransactionForm
+            loans={loansQuery.data ?? []}
               properties={propertiesQuery.data ?? []}
               tenants={tenantsQuery.data ?? []}
               mode="edit"
@@ -443,6 +450,7 @@ export function TransactionsPage() {
                 date: editTarget.date,
                 property: editTarget.property,
                 tenant: editTarget.tenant,
+              loan: editTarget.loan ?? null,
                 category: editTarget.category as
                   | (typeof TRANSACTION_CATEGORY_OPTIONS)[number]
                   | undefined,

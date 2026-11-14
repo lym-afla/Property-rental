@@ -2,6 +2,7 @@
 // `property_rental/rentals/api/serializers.py`. Field names MUST match the
 // serializer exactly (snake_case preserved on purpose).
 export type Transaction = {
+  loan?: number | null
   id: number
   property: number
   tenant: number | null

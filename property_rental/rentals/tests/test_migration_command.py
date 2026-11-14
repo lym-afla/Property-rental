@@ -478,3 +478,57 @@ def test_postgresql_sequence_allows_next_generated_id_after_explicit_import(tmp_
     call_command("import_sqlite", source=str(source))
     created = User.objects.create_user("after-import")
     assert created.pk > ids["user"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_import_preserves_source_audit_timestamps(tmp_path):
+    from datetime import datetime, timezone
+
+    source, ids = _source_snapshot(tmp_path)
+    created = datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    updated = datetime(2026, 2, 3, 4, 5, 6, tzinfo=timezone.utc)
+    with sqlite3.connect(source) as db:
+        db.execute(
+            'UPDATE rentals_property SET created_at = ?, updated_at = ?',
+            (created.isoformat(), updated.isoformat()),
+        )
+    call_command("import_sqlite", source=str(source))
+    prop = Property.objects.get(pk=ids["property"])
+    assert prop.created_at == created
+    assert prop.updated_at == updated
+    call_command("import_sqlite", source=str(source))
+    prop.refresh_from_db()
+    assert prop.updated_at == updated
+
+
+@pytest.mark.django_db(transaction=True)
+def test_import_supports_legacy_source_without_audit_or_loan_columns(tmp_path):
+    source, ids = _source_snapshot(tmp_path)
+    with sqlite3.connect(source) as db:
+        for model in MODELS:
+            for field in model._meta.concrete_fields:
+                if field.name in {"created_at", "updated_at", "loan"}:
+                    db.execute(f'ALTER TABLE "{model._meta.db_table}" DROP COLUMN "{field.column}"')
+    original_source = source.read_bytes()
+    call_command("import_sqlite", source=str(source))
+    prop = Property.objects.get(pk=ids["property"])
+    assert prop.created_at is not None
+    assert prop.updated_at is not None
+    imported_updated_at = prop.updated_at
+    call_command("import_sqlite", source=str(source))
+    prop.refresh_from_db()
+    assert prop.updated_at == imported_updated_at
+    assert source.read_bytes() == original_source
+    Property.objects.filter(pk=prop.pk).update(name="Changed business value")
+    with pytest.raises(CommandError, match="must be empty"):
+        call_command("import_sqlite", source=str(source))
+
+
+@pytest.mark.django_db(transaction=True)
+def test_import_rejects_loan_references_without_importing_loans(tmp_path):
+    source, _ = _multi_user_source_snapshot(tmp_path)
+    with sqlite3.connect(source) as db:
+        db.execute('UPDATE rentals_transaction SET loan_id = 999')
+    with pytest.raises(CommandError, match="loan_id=999.*not imported"):
+        call_command("import_sqlite", source=str(source))
+    assert not Property.objects.exists()

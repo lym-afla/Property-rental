@@ -16,7 +16,7 @@ type Props = ChartDataProps & {
   onDrillDown?: (drillDown: DrillDown) => void
 }
 
-const CASH_FLOW_CATEGORY_KINDS = new Set(['income_category', 'expense_category', 'deposit_movement'])
+const CASH_FLOW_CATEGORY_KINDS = new Set(['income_category', 'expense_category', 'balance_sheet', 'deposit_movement'])
 
 const DEPOSIT_KIND = 'deposit_movement'
 const NET_CASH_KIND = 'net_cash'
@@ -40,7 +40,7 @@ export function NetCashFlowChart({ data, isLoading, isError, onRetry, propertyId
     <AnalyticsChartCard
       state={state}
       title="Net cash flow"
-      subtitle="Signed income and expense categories by reporting period."
+      subtitle="Income, costs, principal repayments and deposits by reporting period."
       controls={state.status === 'success' && <ChartLegend series={series} hiddenKeys={hiddenKeys} onToggle={(key) => setHiddenKeys((current) => {
         const next = new Set(current)
         if (next.has(key)) {

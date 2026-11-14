@@ -8,7 +8,7 @@ from django.db.models import Exists
 
 from rentals.analytics.contracts import SeriesDefinition, TimeSeriesResponse
 from rentals.constants import INCOME_CATEGORIES, TRANSACTION_CATEGORIES
-from rentals.financial_semantics import deposit_signed_amount
+from rentals.financial_semantics import category_kind, deposit_signed_amount
 from rentals.models import Transaction
 from rentals.services.deposits import movements_for_user
 from rentals.services.financials import convert_transactions
@@ -131,7 +131,7 @@ def _expense_category_keys(transactions):
     return tuple(
         key
         for key, _label in TRANSACTION_CATEGORIES
-        if key in present_categories and key not in INCOME_CATEGORIES
+        if key in present_categories and category_kind(key) == "expense"
     )
 
 
@@ -150,7 +150,9 @@ def _category_series(category_keys):
             key=key,
             label=_CATEGORY_LABELS[key],
             kind=(
-                "income_category"
+                "balance_sheet"
+                if category_kind(key) == "balance_sheet"
+                else "income_category"
                 if key in INCOME_CATEGORIES
                 else "expense_category"
             ),
@@ -181,6 +183,8 @@ def portfolio_cash_flow(user, filters):
     periods = _calendar_periods(filters)
     points = []
     cumulative_net_income = 0.0
+    cumulative_net_cash_flow = 0.0
+    has_cash_adjustments = bool(deposit_amounts or "loan_principal" in category_keys)
 
     for period_start, period_end in periods:
         category_rows = bucketed_transactions[period_start]
@@ -200,7 +204,7 @@ def portfolio_cash_flow(user, filters):
             point[category] for category in category_keys if category in INCOME_CATEGORIES
         )
         total_expenses = sum(
-            point[category] for category in category_keys if category not in INCOME_CATEGORIES
+            point[category] for category in category_keys if category_kind(category) == "expense"
         )
         net_income = total_income + total_expenses
         cumulative_net_income += net_income
@@ -210,6 +214,7 @@ def portfolio_cash_flow(user, filters):
             net_income=net_income,
             cumulative_net_income=cumulative_net_income,
         )
+        principal = point.get("loan_principal", 0.0)
         if deposit_amounts:
             deposits = float(
                 convert_transactions(
@@ -219,7 +224,12 @@ def portfolio_cash_flow(user, filters):
                     converter=converter,
                 )
             )
-            point.update(deposits=deposits, net_cash_flow=net_income + deposits)
+            point.update(deposits=deposits, net_cash_flow=net_income + deposits + principal)
+        elif "loan_principal" in category_keys:
+            point["net_cash_flow"] = net_income + principal
+        if has_cash_adjustments:
+            cumulative_net_cash_flow += point["net_cash_flow"]
+            point["cumulative_net_cash_flow"] = cumulative_net_cash_flow
         points.append(point)
 
     deposit_series = (
@@ -227,7 +237,6 @@ def portfolio_cash_flow(user, filters):
             SeriesDefinition(
                 "deposits", "Security deposits", "deposit_movement"
             ),
-            SeriesDefinition("net_cash_flow", "Net cash flow", "net_cash"),
         )
         if deposit_amounts
         else ()
@@ -248,7 +257,19 @@ def portfolio_cash_flow(user, filters):
                 "cumulative_net_income", "Cumulative net income", "cumulative"
             ),
         )
-        + deposit_series,
+        + (
+            (SeriesDefinition(
+                "cumulative_net_cash_flow", "Cumulative net cash flow", "cumulative_cash"
+            ),)
+            if has_cash_adjustments
+            else ()
+        )
+        + deposit_series
+        + (
+            (SeriesDefinition("net_cash_flow", "Net cash flow", "net_cash"),)
+            if has_cash_adjustments
+            else ()
+        ),
         points=tuple(points),
     )
 
