@@ -14,6 +14,8 @@ TRANSACTION_CATEGORIES = (
     ('utilities', 'Utilities'),
     ('internet', 'Internet'),
     ('cost_reimbursement', 'Cost reimbursement'),
+    ('loan_interest', 'Loan interest'),
+    ('loan_principal', 'Loan principal'),
     ('other_expenses', 'Other Expenses')
 )
 

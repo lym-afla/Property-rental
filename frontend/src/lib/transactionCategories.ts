@@ -1,5 +1,7 @@
 export const TRANSACTION_CATEGORIES = [
   { value: 'rent', label: 'Rent' },
+  { value: 'loan_interest', label: 'Loan interest' },
+  { value: 'loan_principal', label: 'Loan principal' },
   { value: 'tax', label: 'Tax' },
   { value: 'capex', label: 'Capex' },
   { value: 'management', label: 'Management' },

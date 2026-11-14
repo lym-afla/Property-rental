@@ -42,6 +42,7 @@ export function useCreateTransaction() {
     mutationFn: (data: Partial<Transaction>) =>
       apiFetch<Transaction>('/transactions/', { method: 'POST', body: data }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
       qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
@@ -58,6 +59,7 @@ export function useUpdateTransaction() {
         body: data,
       }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
       qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
@@ -71,6 +73,7 @@ export function useDeleteTransaction() {
     mutationFn: (id: number) =>
       apiFetch(`/transactions/${id}/`, { method: 'DELETE' }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] })
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
       qc.invalidateQueries({ queryKey: queryKeys.deposits.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0 — 2026-11-14
+
+- Track property loans, split mortgage payments into interest and principal, and reconcile debt history.
+- Export complete Rent history to Wealth v1.1 using read-only database access and content versions.
+- Add source timestamps and validated CSV mortgage payment imports; preserve legacy SQLite imports.
+
 ## 2.2.0 — 2026-11-01
 
 - Sort transactions using accessible column headers, including numeric amounts and property/tenant names.

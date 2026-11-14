@@ -1,0 +1,11 @@
+# Loans and Wealth history export
+
+Implement the attached Rent requirements within Django/DRF and the existing React UI. Reuse canonical financial semantics, scoped CRUD, deposit services and scheduler; no new dependencies or production writes.
+
+Loan is a property-owned entity with lender, matching currency, reference, dates, optional original principal and informational rate. Historical migration creates one placeholder loan for each property with nonzero debt, using its earliest observation date. Capital observations retain nullable balances and gain a protected loan reference. New nonzero debt must reference the property's loan. Transactions gain protected loan references; interest is an expense, principal is a positive balance-sheet payment. Cash flow includes principal outflow, but all cost/profit calculations exclude it.
+
+Add property loan management, valuation loan selection, mortgage split entry and reconciliation between consecutive dated debt observations. Principal on (opening date, closing date] reconciles with closing debt; absolute difference above 1 flags a warning. No interpolation for checks. Blank debt remains unknown; only explicit zero records a payoff. Unlinked payoff zeros reconcile only when a single observed outstanding loan resolves the association; ambiguity raises an actionable error.
+
+Export one subject's owned data through a read-only command, using OIDC subject mapping (fail closed on ambiguity). v1.1 field names follow the local Wealth published schema and attached appendix. Every fact version hashes content excluding timestamps. Export all observation history; carry forward missing independently recorded value/debt where representable, reject ambiguous/unrepresentable data instead of inventing balances. Preserve deposit application semantics. Add real timestamps to all source models used by export.
+
+Alternatives considered: keep debt implicit (cannot identify lender or split principal); separate parallel ledger (duplicates existing transactions). Extend existing models and reports instead. Local branch only; do not push, merge, deploy, access production or modify another repository. Parser validation may read the named Wealth checkout.

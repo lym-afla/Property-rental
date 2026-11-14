@@ -137,3 +137,30 @@ describe('TransactionForm', () => {
     expect(screen.getByRole('combobox', { name: 'Tenant (optional)' })).toHaveTextContent('Unassigned')
   })
 })
+
+it('requires a loan when recording principal and sends its ID', async () => {
+  const user = userEvent.setup()
+  const onSubmit = vi.fn()
+  render(<TransactionForm properties={[fixtureProperty]} tenants={[]} loans={[{id:7,property:fixtureProperty.id,lender:'Example Bank', currency:fixtureProperty.currency,reference:'',start_date:'2020-01-01',end_date:null, original_principal:null,interest_rate:null,rate_type:'',created_at:'',updated_at:''}]} defaultValues={{property:fixtureProperty.id, date:'2026-10-01',category:'loan_principal',currency:'EUR',amount:'500'}} onSubmit={onSubmit} />)
+  await user.click(screen.getByRole('button',{name:'Save'}))
+  expect(await screen.findByText('Select a loan for this payment')).toBeInTheDocument()
+  expect(onSubmit).not.toHaveBeenCalled()
+  await user.selectOptions(screen.getByLabelText('Loan (required for interest or principal)'), '7')
+  await user.click(screen.getByRole('button',{name:'Save'}))
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({category:'loan_principal',amount:'500',loan:7}),expect.anything()))
+})
+
+it('preserves the loan on edit and resets it with the property currency when switching properties', async () => {
+  const user = userEvent.setup()
+  const onSubmit = vi.fn()
+  const loan = { id: 7, property: 1, lender: 'Example Bank', currency: 'EUR', reference: '', start_date: '2020-01-01', end_date: null, original_principal: null, interest_rate: null, rate_type: '' as const, created_at: '', updated_at: '' }
+  render(<TransactionForm mode="edit" properties={properties} tenants={[]} loans={[loan]} defaultValues={{ property: 1, date: '2026-10-01', category: 'loan_principal', currency: 'EUR', amount: '500', loan: 7 }} onSubmit={onSubmit} />)
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ loan: 7, currency: 'EUR' }), expect.anything()))
+  await select('Property', 'Lakeside House')
+  expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('GBP')
+  expect(screen.getByRole('combobox', { name: 'Loan (required for interest or principal)' })).toHaveValue('')
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByText('Select a loan for this payment')).toBeInTheDocument()
+  expect(onSubmit).toHaveBeenCalledTimes(1)
+})
