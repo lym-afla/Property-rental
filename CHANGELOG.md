@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.1 — 2026-11-16
+
+- Sort property valuation history chronologically, including older observations entered later.
+- Update the Wealth export handoff and document estimated mortgage-history entries.
+
 ## 2.3.0 — 2026-11-14
 
 - Track property loans, split mortgage payments into interest and principal, and reconcile debt history.

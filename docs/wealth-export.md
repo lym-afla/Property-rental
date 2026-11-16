@@ -1,5 +1,24 @@
 # Exporting Rent history to Wealth
 
+## Delivery status — 2026-11-14
+
+Rent 2.3.0 is deployed at https://rent.linik.ru/ through the Life OS app-release process.
+The implementation was merged in [PR #9](https://github.com/lym-afla/Property-rental/pull/9)
+as `b09424397883b83f574dc84ac1e6fccfab74bfd4`, tagged `v2.3.0`.
+Migrations `0029_depositmovement_created_at_and_more` and `0030_backfill_loans` are applied.
+The migration created a placeholder loan. Its lender has since been filled in from the owner’s mortgage offer.
+
+Wealth v1.1 is now on Wealth's `main` at `e5a91c3`. On 2026-11-14, all 10 Rent export
+tests passed, and their generated loan/history/payment fixture passed that main-branch parser.
+This verifies format compatibility using synthetic data. A production export and Wealth import
+have not been performed, and the dedicated production read-only role has not been provisioned by this work.
+
+The owner confirmed version 2.3.0 and the Loans tab are visible. Final operator acceptance remains open
+following questions about the lender placeholder and historical balance warnings, explained below.
+Implementation and deployment are complete. Mortgage-history reconstruction is underway; transferring production data to Wealth remains follow-up work.
+
+## Running the export
+
 After applying Rent's migrations, run the command as the application's environment user:
 
 ```sh
@@ -34,7 +53,7 @@ Configure the normal production database settings with this read-only role using
 
 ## Parser validation
 
-Once Wealth v1.1 is on its main branch, validate the file from `/home/yl/code/Wealth-statements/backend`:
+Wealth v1.1 is available on its main branch. Validate each export from `/home/yl/code/Wealth-statements/backend`:
 
 ```sh
 uv run python -c "from pathlib import Path; from wealth.connectors.files import parse_file; parse_file('rent', Path('/secure/path/rent.json').read_bytes()); print('ok')"
@@ -51,6 +70,10 @@ Leave debt blank for a valuation-only observation; enter an explicit zero when p
 Record payoff observations with the relevant loan. An unlinked zero can close the sole observed outstanding loan; ambiguous payoffs require a loan link.
 Reconciliation checks each consecutive pair using principal dated after opening through closing, inclusive.
 An absolute difference above 1 unit flags a warning; the check does not infer advances, fees or missing history.
+For migrated loans, warnings can reflect missing principal history rather than incorrect debt observations.
+For example, a decline from £235,000 to £205,988 with no recorded principal payments leaves £29,012 unexplained.
+Use statements to correct superseded balances. Preserve source provenance when estimating missing payment splits; do not add a balancing payment merely to clear a warning.
+Estimated monthly splits should be labelled in transaction comments, with assumed payment dates and the method retained in private evidence. Replace prior period aggregates atomically to avoid counting payments twice. Capitalised fees and unpaid accrued interest can explain differences between debt reduction and cash principal repayments.
 
 For bulk history, prepare a UTF-8 CSV with these headers:
 
