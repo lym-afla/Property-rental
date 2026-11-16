@@ -220,6 +220,29 @@ describe('PropertyDetailPage', () => {
     expect(screen.queryByText('€0')).not.toBeInTheDocument()
   })
 
+  it('orders valuation history by date when older entries are added later', async () => {
+    server.use(
+      http.get('/api/v1/property-valuations/', () =>
+        HttpResponse.json([
+          { id: 1, property: 1, capital_structure_date: '2026-12-31', capital_structure_value: '300000.00', capital_structure_debt: null },
+          { id: 2, property: 1, capital_structure_date: '2024-12-31', capital_structure_value: '250000.00', capital_structure_debt: null },
+          { id: 3, property: 1, capital_structure_date: '2025-04-01', capital_structure_value: null, capital_structure_debt: '150000.00' },
+        ]),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(fixtureProperty.name)
+    await user.click(screen.getByRole('tab', { name: /valuations/i }))
+
+    const editButtons = await screen.findAllByRole('button', { name: /^Edit valuation / })
+    expect(editButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Edit valuation 2',
+      'Edit valuation 3',
+      'Edit valuation 1',
+    ])
+  })
+
   it('switches to the Valuations tab on click', async () => {
     const user = userEvent.setup()
     renderPage()

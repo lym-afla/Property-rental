@@ -446,6 +446,7 @@ export function PropertyDetailPage() {
             <DataTable
               columns={valuationColumns}
               data={valuationsQuery.data}
+              initialSorting={[{ id: 'capital_structure_date', desc: false }]}
             />
           )}
         </TabsContent>
