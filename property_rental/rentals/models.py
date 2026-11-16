@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
@@ -226,7 +227,7 @@ class Loan(TimestampedModel):
         if self.pk:
             original = type(self).objects.get(pk=self.pk)
             if (original.property_id, original.currency) != (self.property_id, self.currency) and (
-                self.transactions.exists() or self.capital_observations.exists()
+                self.transactions.exists() or self.capital_observations.exists() or self.capitalised_fees.exists()
             ):
                 raise ValidationError({"property": "A loan with history cannot change property or currency."})
 
@@ -236,6 +237,25 @@ class Loan(TimestampedModel):
 
     def __str__(self):
         return self.lender
+
+
+class LoanCapitalisedFee(TimestampedModel):
+    loan = models.ForeignKey(Loan, on_delete=models.RESTRICT, related_name="capitalised_fees")
+    # Property deletion removes all loan history together; direct loan deletion is restricted.
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="loan_capitalised_fees", editable=False)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    description = models.CharField(max_length=250, blank=True, default="")
+
+    class Meta:
+        constraints = [models.CheckConstraint(check=Q(amount__gt=0), name="loan_capitalised_fee_positive")]
+
+    def save(self, *args, **kwargs):
+        self.property_id = self.loan.property_id
+        self.full_clean()
+        if kwargs.get("update_fields"):
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"property"}
+        return super().save(*args, **kwargs)
 
 
 # Keep track of captital structure for the property

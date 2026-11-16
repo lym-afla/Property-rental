@@ -30,6 +30,7 @@ const API = '/api/v1'
 
 const defaultHandlers = [
   http.get(`${API}/loans/`, () => HttpResponse.json([])),
+  http.get(`${API}/loan-capitalised-fees/`, () => HttpResponse.json([])),
   // ---- Auth (existing behavior preserved) -------------------------------
   // Task 13: SPA calls this on boot via SessionProvider to prime the
   // csrftoken cookie. Default to a 200 so the request doesn't show up as

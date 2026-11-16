@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './client'
 import { queryKeys } from './keys'
-import type { Loan, LoanPayment, LoanReconciliation } from '@/types/loan'
+import type { Loan, LoanCapitalisedFee, LoanCapitalisedFeeInput, LoanPayment, LoanReconciliation } from '@/types/loan'
 import type { Transaction } from '@/types/transaction'
 
 export function useLoans(property?: number) {
@@ -32,5 +32,26 @@ export function useLoanPayment() {
       qc.invalidateQueries({ queryKey: queryKeys.transactions.all })
       qc.invalidateQueries({ queryKey: queryKeys.analytics.all })
     },
+  })
+}
+
+export function useLoanCapitalisedFees(loan: number) {
+  return useQuery({
+    queryKey: ['loans', loan, 'capitalised-fees'],
+    queryFn: () => apiFetch<LoanCapitalisedFee[]>('/loan-capitalised-fees/', { query: { loan } }),
+  })
+}
+export function useSaveLoanCapitalisedFee() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: LoanCapitalisedFeeInput) => apiFetch<LoanCapitalisedFee>(id ? `/loan-capitalised-fees/${id}/` : '/loan-capitalised-fees/', { method: id ? 'PATCH' : 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loans'] }),
+  })
+}
+export function useDeleteLoanCapitalisedFee() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<void>(`/loan-capitalised-fees/${id}/`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loans'] }),
   })
 }
