@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.1 — 2026-11-16
+
+- Restore dashboard cash-flow, cumulative cash, and revenue/expenses charts for portfolios with loan principal payments.
+
 ## 2.4.0 — 2026-11-16
 
 - Record dated capitalised loan fees without cash transactions, and include them in debt reconciliation.
