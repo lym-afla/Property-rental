@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { ErrorState } from '@/components/states/ErrorState'
 import { formatAccounting, formatDate } from '@/lib/format'
 import type { Loan } from '@/types/loan'
+import { LoanCapitalisedFees } from './LoanCapitalisedFees'
 
 export function PropertyLoans({ property, currency }: { property: number; currency: string }) {
   const loans = useLoans(property)
@@ -21,6 +22,7 @@ export function PropertyLoans({ property, currency }: { property: number; curren
     {loans.isLoading ? <p>Loading loans…</p> : loans.isError ? <ErrorState message="Failed to load loans" onRetry={() => loans.refetch()} /> : !loans.data?.length ? <p className="text-muted-foreground">No loans recorded yet.</p> : loans.data.map((loan) => <div key={loan.id} className="space-y-3 rounded-md border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">{loan.lender}</h3><p className="text-sm text-muted-foreground">{loan.reference} · {loan.currency} · From {formatDate(loan.start_date)}{loan.end_date ? ` to ${formatDate(loan.end_date)}` : ''}</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => setEditing(loan)}>Edit loan</Button><Button onClick={() => setPaying(loan)}>Record payment</Button></div></div>
       {loan.lender.startsWith('UNKNOWN') && <p role="alert" className="text-amber-700">Fill in the lender for this migrated loan.</p>}
+      <LoanCapitalisedFees loan={loan} />
       <Reconciliation loan={loan} />
     </div>)}
     {editing && <EntityFormDialog open onOpenChange={(open) => { if (!open) setEditing(null) }} title="Loan" mode={editing.id ? 'edit' : 'create'}>
@@ -54,5 +56,8 @@ function Reconciliation({ loan }: { loan: Loan }) {
   const rows = query.data ?? []
   if (!rows.length) return <p className="text-sm text-muted-foreground">Record two dated debt balances to check principal repayments.</p>
   const flagged = rows.filter((row) => row.flagged)
-  return flagged.length ? <div role="alert" className="space-y-1 text-sm text-amber-700">{flagged.map((row) => <p key={`${row.opening_date}-${row.closing_date}`}>Balance mismatch {formatDate(row.opening_date)} – {formatDate(row.closing_date)}: expected {formatAccounting(row.expected_closing_debt, loan.currency)}, recorded {formatAccounting(row.closing_debt, loan.currency)} (difference {formatAccounting(row.difference, loan.currency)}). Review debt balances and principal payments.</p>)}</div> : <p className="text-sm text-muted-foreground">Recorded debt balances agree with principal payments within 1 {loan.currency}.</p>
+  const fees = rows.reduce((total, row) => total + Number(row.capitalised_fees ?? 0), 0)
+  return <div className="space-y-1">{flagged.length ? <div role="alert" className="space-y-1 text-sm text-amber-700">{flagged.map((row) => <p key={`${row.opening_date}-${row.closing_date}`}>Balance mismatch {formatDate(row.opening_date)} – {formatDate(row.closing_date)}: expected {formatAccounting(row.expected_closing_debt, loan.currency)}, recorded {formatAccounting(row.closing_debt, loan.currency)} (difference {formatAccounting(row.difference, loan.currency)}). Review debt balances, principal payments and capitalised fees.</p>)}</div> : <p className="text-sm text-muted-foreground">Recorded debt balances agree with principal payments and capitalised fees within 1 {loan.currency}.</p>}
+    {fees > 0 && <p className="text-sm text-muted-foreground">Includes {formatAccounting(fees, loan.currency)} in capitalised fees across checked periods.</p>}
+  </div>
 }

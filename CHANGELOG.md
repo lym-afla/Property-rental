@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.0 — 2026-11-16
+
+- Record dated capitalised loan fees without cash transactions, and include them in debt reconciliation.
+- Manage capitalised fees on the property Loans tab through an owner-scoped API.
+
 ## 2.3.1 — 2026-11-16
 
 - Sort property valuation history chronologically, including older observations entered later.

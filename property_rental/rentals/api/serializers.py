@@ -24,6 +24,7 @@ from rentals.models import (
     DepositMovement,
     Lease_rent,
     Loan,
+    LoanCapitalisedFee,
     Property,
     Property_capital_structure,
     Tenant,
@@ -278,6 +279,18 @@ class LoanSerializer(ValidatedModelSerializer):
                   "end_date", "original_principal", "interest_rate", "rate_type",
                   "created_at", "updated_at"]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class LoanCapitalisedFeeFilterSerializer(serializers.Serializer):
+    loan = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+    property = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+
+
+class LoanCapitalisedFeeSerializer(ValidatedModelSerializer):
+    class Meta:
+        model = LoanCapitalisedFee
+        fields = ["id", "loan", "property", "date", "amount", "description", "created_at", "updated_at"]
+        read_only_fields = ["property", "created_at", "updated_at"]
 
 
 class LoanPaymentSerializer(serializers.Serializer):

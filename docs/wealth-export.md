@@ -68,12 +68,12 @@ Enter total plus interest, or interest plus principal. Both rows save together i
 Interest is a cost; principal is a balance-sheet outflow and appears only in net cash flow.
 Leave debt blank for a valuation-only observation; enter an explicit zero when paying off debt.
 Record payoff observations with the relevant loan. An unlinked zero can close the sole observed outstanding loan; ambiguous payoffs require a loan link.
-Reconciliation checks each consecutive pair using principal dated after opening through closing, inclusive.
+Reconciliation checks each consecutive pair using principal repayments and capitalised fees dated after opening through closing, inclusive. Expected debt is opening debt plus capitalised fees minus principal repaid. Record financed product fees under **Loans → Capitalised fees**; they increase debt without creating a cash payment or changing profit. The fee date must match when the fee is included in the dated debt balance.
 An absolute difference above 1 unit flags a warning; the check does not infer advances, fees or missing history.
 For migrated loans, warnings can reflect missing principal history rather than incorrect debt observations.
 For example, a decline from £235,000 to £205,988 with no recorded principal payments leaves £29,012 unexplained.
 Use statements to correct superseded balances. Preserve source provenance when estimating missing payment splits; do not add a balancing payment merely to clear a warning.
-Estimated monthly splits should be labelled in transaction comments, with assumed payment dates and the method retained in private evidence. Replace prior period aggregates atomically to avoid counting payments twice. Capitalised fees and unpaid accrued interest can explain differences between debt reduction and cash principal repayments.
+Estimated monthly splits should be labelled in transaction comments, with assumed payment dates and the method retained in private evidence. Replace prior period aggregates atomically to avoid counting payments twice. Unpaid accrued interest can explain differences between debt reduction and cash principal repayments. Prefer comparable month-end balance snapshots when using month-end payment estimates. Capitalised fees have their own dated records and are included in reconciliation; Wealth represents their effect through debt observations, without an invented cash transaction or an additional v1.1 fact type.
 
 For bulk history, prepare a UTF-8 CSV with these headers:
 

@@ -15,5 +15,17 @@ export type Loan = {
 export type LoanPayment = { date: string; interest: string; total?: string; principal?: string; comment?: string; period?: string }
 export type LoanReconciliation = {
   opening_date: string; closing_date: string; opening_debt: string; principal_paid: string
-  closing_debt: string; expected_closing_debt: string; difference: string; flagged: boolean
+  capitalised_fees?: string; closing_debt: string; expected_closing_debt: string; difference: string; flagged: boolean
 }
+
+export type LoanCapitalisedFee = {
+  id: number
+  loan: number
+  property: number
+  date: string
+  amount: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+export type LoanCapitalisedFeeInput = Pick<LoanCapitalisedFee, 'loan' | 'date' | 'amount' | 'description'> & { id?: number }

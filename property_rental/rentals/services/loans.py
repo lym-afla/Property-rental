@@ -43,17 +43,21 @@ def reconcile_loan(loan):
             by_date[on] = row
     rows = list(by_date.values())
     payments = list(loan.transactions.filter(category='loan_principal').order_by('date', 'id'))
+    fees = list(loan.capitalised_fees.order_by('date', 'id'))
     result = []
     for opening, closing in zip(rows, rows[1:]):
         paid = sum((p.amount.copy_abs() for p in payments
                     if opening.capital_structure_date < p.date <= closing.capital_structure_date), Decimal('0'))
-        expected = opening.capital_structure_debt - paid
+        capitalised = sum((fee.amount for fee in fees
+                           if opening.capital_structure_date < fee.date <= closing.capital_structure_date), Decimal('0'))
+        expected = opening.capital_structure_debt + capitalised - paid
         difference = closing.capital_structure_debt - expected
         result.append({
             'opening_date': opening.capital_structure_date.isoformat(),
             'closing_date': closing.capital_structure_date.isoformat(),
             'opening_debt': str(opening.capital_structure_debt),
             'principal_paid': str(paid),
+            'capitalised_fees': str(capitalised),
             'closing_debt': str(closing.capital_structure_debt),
             'expected_closing_debt': str(expected),
             'difference': str(difference),

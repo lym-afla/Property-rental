@@ -54,13 +54,15 @@ from rentals.services.deposits import (
     movements_for_user,
     update_movement,
 )
-from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction, Loan
+from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction, Loan, LoanCapitalisedFee
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     DepositMovementSerializer,
     FXSerializer,
     LeaseRentSerializer,
     LoanSerializer,
+    LoanCapitalisedFeeSerializer,
+    LoanCapitalisedFeeFilterSerializer,
     LoanPaymentSerializer,
     PropertyCapitalStructureSerializer,
     PropertySerializer,
@@ -925,7 +927,7 @@ class LoanViewSet(viewsets.ModelViewSet):
         try:
             instance.delete()
         except (ProtectedError, RestrictedError):
-            raise ValidationError({"loan": "Cannot delete a loan with observations or payments."})
+            raise ValidationError({"loan": "Cannot delete a loan with observations, payments or capitalised fees."})
 
     @action(detail=True, methods=["post"])
     def payments(self, request, pk=None):
@@ -944,3 +946,27 @@ class LoanViewSet(viewsets.ModelViewSet):
             return Response(reconcile_loan(loan))
         except ValueError as exc:
             raise ValidationError({"loan": str(exc)})
+
+
+class LoanCapitalisedFeeViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanCapitalisedFeeSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = LoanCapitalisedFee.objects.filter(property__owned_by__user=self.request.user).order_by("date", "id")
+        filters = LoanCapitalisedFeeFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        for field, value in filters.validated_data.items():
+            qs = qs.filter(**{f"{field}_id": value})
+        return qs
+
+    def _save(self, serializer):
+        loan = serializer.validated_data.get("loan", getattr(serializer.instance, "loan", None))
+        _validate_property_owned_by(loan.property_id, self.request.user)
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._save(serializer)
+
+    def perform_update(self, serializer):
+        self._save(serializer)
