@@ -11,3 +11,7 @@ When the owner requests estimated mortgage history, calculate and label monthly 
 ## 2026-11-16 — Keep reconstructed mortgage snapshots complete and comparable
 
 For a user-requested mortgage reconstruction, preserve property valuations and replace superseded manual debt with clearly documented modelled balances on consistent month-end dates. Compare balances with the same payment cutoff; a mid-month accrued balance cannot be checked using cash principal alone. Model capitalised fees as dated non-cash debt increases, rather than forcing them into cash transactions or suppressing mismatch warnings. Keep original statement observations and reconstruction provenance in private evidence when the owner asks to replace the displayed snapshots.
+
+## 2026-11-16 — Validate new analytics series at the browser boundary
+
+When the backend adds cash-flow series kinds, update the frontend runtime schema and exercise the shared query with principal and cumulative cash present. Backend success and chart rendering tests alone do not prove the browser accepts the response.
