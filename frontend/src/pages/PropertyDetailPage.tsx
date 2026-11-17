@@ -41,7 +41,7 @@ import {
   usePropertyValuations,
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
-import { useLoans } from '@/api/loans'
+import { useLoans, usePropertyLoanProducts } from '@/api/loans'
 import { PropertyLoans } from '@/features/property/PropertyLoans'
 import { useTenants } from '@/api/tenants'
 import { useTransactions } from '@/api/transactions'
@@ -100,6 +100,7 @@ export function PropertyDetailPage() {
   const transactionsQuery = useTransactions({ property: propertyId })
   const tenantsQuery = useTenants()
   const loansQuery = useLoans(propertyId)
+  const productsQuery = usePropertyLoanProducts(propertyId)
 
   // The valuation endpoint returns complete record history. Deliberately do
   // not pass an end date or derive a client-side five-year cutoff.
@@ -169,7 +170,16 @@ export function PropertyDetailPage() {
     {
       accessorKey: 'loan',
       header: 'Loan',
-      cell: ({ row }) => loansQuery.data?.find((loan) => loan.id === row.original.loan)?.lender ?? '—',
+      cell: ({ row }) => {
+        if (!row.original.loan) return '—'
+        if (productsQuery.isLoading) return 'Loading product…'
+        if (productsQuery.isError) return <Button variant="link" className="min-h-11" onClick={() => productsQuery.refetch()}>Product unavailable — retry</Button>
+        const product = productsQuery.data?.find((item) =>
+          item.loan === row.original.loan && item.start_date <= row.original.capital_structure_date &&
+          (item.end_date === null || row.original.capital_structure_date <= item.end_date),
+        )
+        return product ? <div className="whitespace-normal"><div>{product.lender}</div><div className="text-xs text-muted-foreground">{product.name}</div></div> : 'Product not recorded'
+      },
     },
     {
       accessorKey: 'capital_structure_date',

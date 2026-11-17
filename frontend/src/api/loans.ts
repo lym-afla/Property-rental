@@ -76,3 +76,10 @@ export function useDeleteLoanProduct() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['loan-products'] }),
   })
 }
+
+export function usePropertyLoanProducts(property: number) {
+  return useQuery({
+    queryKey: ['loan-products', { property }],
+    queryFn: () => apiFetch<LoanProduct[]>('/loan-products/', { query: { property } }),
+  })
+}
