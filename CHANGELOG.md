@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1 — 2026-11-17
+
+- Show the mortgage lender and product active on each valuation date, with explicit missing-history and retry states.
+
 ## 2.5.0 — 2026-11-17
 
 - File separate dated mortgage products with lender, rate, opening balance and source notes while keeping payment and balance history continuous.

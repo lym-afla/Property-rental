@@ -19,3 +19,7 @@ When the backend adds cash-flow series kinds, update the frontend runtime schema
 ## 2026-11-17 — Store mortgage product history as dated records
 
 A continuous mortgage ledger and the product setting its rate are different records. When source offers describe renewals, file each product with its own lender, dates, rate and uncertainty notes instead of leaving historical terms only in transaction comments or applying the current rate to all years. Keep the accounting identity stable so product switches cannot duplicate principal, fees or Wealth facts.
+
+## 2026-11-17 — Resolve historical labels using dated product records
+
+Adding product history also requires updating historical consumers. Valuation rows must resolve the product for their linked loan and date rather than rendering current parent-loan terms. Regression coverage in PropertyDetailPage.test.tsx enforces inclusive switch boundaries, loan isolation and explicit missing/error states; current account references must not label earlier lender history.
