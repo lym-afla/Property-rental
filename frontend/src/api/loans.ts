@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './client'
 import { queryKeys } from './keys'
-import type { Loan, LoanCapitalisedFee, LoanCapitalisedFeeInput, LoanPayment, LoanReconciliation } from '@/types/loan'
+import type { Loan, LoanCapitalisedFee, LoanCapitalisedFeeInput, LoanPayment, LoanProduct, LoanProductInput, LoanReconciliation } from '@/types/loan'
 import type { Transaction } from '@/types/transaction'
 
 export function useLoans(property?: number) {
@@ -53,5 +53,26 @@ export function useDeleteLoanCapitalisedFee() {
   return useMutation({
     mutationFn: (id: number) => apiFetch<void>(`/loan-capitalised-fees/${id}/`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['loans'] }),
+  })
+}
+
+export function useLoanProducts(loan: number) {
+  return useQuery({
+    queryKey: ['loan-products', { loan }],
+    queryFn: () => apiFetch<LoanProduct[]>('/loan-products/', { query: { loan } }),
+  })
+}
+export function useSaveLoanProduct() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: LoanProductInput) => apiFetch<LoanProduct>(id ? `/loan-products/${id}/` : '/loan-products/', { method: id ? 'PATCH' : 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loan-products'] }),
+  })
+}
+export function useDeleteLoanProduct() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<void>(`/loan-products/${id}/`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loan-products'] }),
   })
 }

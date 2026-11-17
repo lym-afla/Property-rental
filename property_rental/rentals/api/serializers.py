@@ -25,6 +25,7 @@ from rentals.models import (
     Lease_rent,
     Loan,
     LoanCapitalisedFee,
+    LoanProduct,
     Property,
     Property_capital_structure,
     Tenant,
@@ -279,6 +280,36 @@ class LoanSerializer(ValidatedModelSerializer):
                   "end_date", "original_principal", "interest_rate", "rate_type",
                   "created_at", "updated_at"]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class LoanProductFilterSerializer(serializers.Serializer):
+    loan = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+    property = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+
+
+class LoanProductSerializer(ValidatedModelSerializer):
+    class Meta:
+        model = LoanProduct
+        fields = ["id", "loan", "name", "lender", "start_date", "end_date", "interest_rate",
+                  "rate_type", "opening_balance", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        self.fields["loan"].queryset = Loan.objects.filter(property__owned_by__user=request.user) if request else Loan.objects.none()
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except ModelValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+
+    def update(self, instance, validated_data):
+        try:
+            return super().update(instance, validated_data)
+        except ModelValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
 
 
 class LoanCapitalisedFeeFilterSerializer(serializers.Serializer):

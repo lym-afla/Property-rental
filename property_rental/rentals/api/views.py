@@ -54,13 +54,15 @@ from rentals.services.deposits import (
     movements_for_user,
     update_movement,
 )
-from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction, Loan, LoanCapitalisedFee
+from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction, Loan, LoanCapitalisedFee, LoanProduct
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     DepositMovementSerializer,
     FXSerializer,
     LeaseRentSerializer,
     LoanSerializer,
+    LoanProductSerializer,
+    LoanProductFilterSerializer,
     LoanCapitalisedFeeSerializer,
     LoanCapitalisedFeeFilterSerializer,
     LoanPaymentSerializer,
@@ -946,6 +948,21 @@ class LoanViewSet(viewsets.ModelViewSet):
             return Response(reconcile_loan(loan))
         except ValueError as exc:
             raise ValidationError({"loan": str(exc)})
+
+
+class LoanProductViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanProductSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = LoanProduct.objects.filter(loan__property__owned_by__user=self.request.user).select_related("loan__property__owned_by__user")
+        filters = LoanProductFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        if "loan" in filters.validated_data:
+            qs = qs.filter(loan_id=filters.validated_data["loan"])
+        if "property" in filters.validated_data:
+            qs = qs.filter(loan__property_id=filters.validated_data["property"])
+        return qs.order_by("start_date", "id")
 
 
 class LoanCapitalisedFeeViewSet(viewsets.ModelViewSet):

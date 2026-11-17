@@ -29,3 +29,19 @@ export type LoanCapitalisedFee = {
   updated_at: string
 }
 export type LoanCapitalisedFeeInput = Pick<LoanCapitalisedFee, 'loan' | 'date' | 'amount' | 'description'> & { id?: number }
+
+export type LoanProduct = {
+  id: number
+  loan: number
+  name: string
+  lender: string
+  start_date: string
+  end_date: string | null
+  interest_rate: string | null
+  rate_type: '' | 'fixed' | 'variable'
+  opening_balance: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
+export type LoanProductInput = Omit<LoanProduct, 'id' | 'created_at' | 'updated_at'> & { id?: number }

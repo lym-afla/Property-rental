@@ -15,3 +15,7 @@ For a user-requested mortgage reconstruction, preserve property valuations and r
 ## 2026-11-16 — Validate new analytics series at the browser boundary
 
 When the backend adds cash-flow series kinds, update the frontend runtime schema and exercise the shared query with principal and cumulative cash present. Backend success and chart rendering tests alone do not prove the browser accepts the response.
+
+## 2026-11-17 — Store mortgage product history as dated records
+
+A continuous mortgage ledger and the product setting its rate are different records. When source offers describe renewals, file each product with its own lender, dates, rate and uncertainty notes instead of leaving historical terms only in transaction comments or applying the current rate to all years. Keep the accounting identity stable so product switches cannot duplicate principal, fees or Wealth facts.

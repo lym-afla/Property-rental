@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0 — 2026-11-17
+
+- File separate dated mortgage products with lender, rate, opening balance and source notes while keeping payment and balance history continuous.
+
 ## 2.4.1 — 2026-11-16
 
 - Restore dashboard cash-flow, cumulative cash, and revenue/expenses charts for portfolios with loan principal payments.
