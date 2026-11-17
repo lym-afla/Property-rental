@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/states/ErrorState'
 import { formatAccounting, formatDate } from '@/lib/format'
 import type { Loan } from '@/types/loan'
 import { LoanCapitalisedFees } from './LoanCapitalisedFees'
+import { LoanProducts } from './LoanProducts'
 
 export function PropertyLoans({ property, currency }: { property: number; currency: string }) {
   const loans = useLoans(property)
@@ -22,6 +23,7 @@ export function PropertyLoans({ property, currency }: { property: number; curren
     {loans.isLoading ? <p>Loading loans…</p> : loans.isError ? <ErrorState message="Failed to load loans" onRetry={() => loans.refetch()} /> : !loans.data?.length ? <p className="text-muted-foreground">No loans recorded yet.</p> : loans.data.map((loan) => <div key={loan.id} className="space-y-3 rounded-md border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">{loan.lender}</h3><p className="text-sm text-muted-foreground">{loan.reference} · {loan.currency} · From {formatDate(loan.start_date)}{loan.end_date ? ` to ${formatDate(loan.end_date)}` : ''}</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => setEditing(loan)}>Edit loan</Button><Button onClick={() => setPaying(loan)}>Record payment</Button></div></div>
       {loan.lender.startsWith('UNKNOWN') && <p role="alert" className="text-amber-700">Fill in the lender for this migrated loan.</p>}
+      <LoanProducts loan={loan} />
       <LoanCapitalisedFees loan={loan} />
       <Reconciliation loan={loan} />
     </div>)}
@@ -32,14 +34,14 @@ export function PropertyLoans({ property, currency }: { property: number; curren
         const text = (key: string) => String(fields.get(key) ?? '').trim()
         save.mutate({ ...editing, property, currency, lender: text('lender'), reference: text('reference'), start_date: text('start_date'), end_date: text('end_date') || null, original_principal: text('original_principal') || null, interest_rate: text('interest_rate') || null, rate_type: text('rate_type') as Loan['rate_type'] }, { onSuccess: () => { setEditing(null); toast.success('Loan saved') }, onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save loan')) })
       }}>
-        <p className="text-sm text-muted-foreground">Currency: {currency}</p>
+        <p className="text-sm text-muted-foreground">Currency: {currency}. This is the continuous loan record. Record historical rates and switches under Mortgage products.</p>
         <label className="block">Lender<Input name="lender" required defaultValue={editing.lender} /></label>
         <label className="block">Reference (optional)<Input name="reference" defaultValue={editing.reference} /></label>
         <label className="block">Start date<Input name="start_date" type="date" required defaultValue={editing.start_date} /></label>
         <label className="block">End date (optional)<Input name="end_date" type="date" defaultValue={editing.end_date ?? ''} /></label>
         <label className="block">Original principal (optional)<Input name="original_principal" type="number" min="0" step="0.01" defaultValue={editing.original_principal ?? ''} /></label>
-        <label className="block">Interest rate % (optional)<Input name="interest_rate" type="number" min="0" step="0.0001" defaultValue={editing.interest_rate ?? ''} /></label>
-        <label className="block">Rate type<select name="rate_type" defaultValue={editing.rate_type ?? ''} className="block min-h-11 w-full rounded-md border bg-background px-3"><option value="">Unspecified</option><option value="fixed">Fixed</option><option value="variable">Variable</option></select></label>
+        <label className="block">Current interest rate % (optional)<Input name="interest_rate" type="number" min="0" step="0.0001" defaultValue={editing.interest_rate ?? ''} /></label>
+        <label className="block">Current rate type<select name="rate_type" defaultValue={editing.rate_type ?? ''} className="block min-h-11 w-full rounded-md border bg-background px-3"><option value="">Unspecified</option><option value="fixed">Fixed</option><option value="variable">Variable</option></select></label>
         <Button disabled={save.isPending} type="submit">Save loan</Button>
       </form>
     </EntityFormDialog>}

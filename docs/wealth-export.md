@@ -35,6 +35,14 @@ Costs are exported as positive `cost` amounts; reimbursements are positive `cost
 
 Migration-created loan lenders are `UNKNOWN — fill in`. The command lists their loan/property IDs, without tenant information. This is a reminder to replace placeholders with the actual lender; rates, payment history and other unknown facts are never inferred. The export does not change them.
 
+## Mortgage product history
+
+Rent records dated mortgage products beneath a continuous loan. Each product has its own name, lender, period, initial interest rate and rate type, optional opening balance, and source notes. Add or edit them under **Loans → Mortgage products**. Tracker rates can change within a product; the displayed rate is its initial rate and the notes describe known changes and uncertain dates. Product periods on the same loan cannot overlap.
+
+The owner-scoped `/api/v1/loan-products/` endpoint supports CRUD and filtering by `loan` or `property`. Existing loan terms are copied into one initial product when the feature is introduced; historical products can then be entered separately. Product opening balances are descriptive metadata and do not create debt observations or cash transactions.
+
+Product history does not split or relink the existing payment, fee or capital ledger. Wealth v1.1 continues to receive the same continuous loan IDs and its existing fact types; mortgage product metadata is not part of that export contract. Editing a product alone therefore does not create a new Wealth loan or change exported financial facts.
+
 ## Life OS: read-only Postgres access
 
 An administrator can create a dedicated role; **these are instructions, not actions performed by the export**. Substitute the database and schema names. Set a password through the normal secret-management process, not shell history.

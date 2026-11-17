@@ -1,5 +1,5 @@
 from decimal import Decimal
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -237,6 +237,65 @@ class Loan(TimestampedModel):
 
     def __str__(self):
         return self.lender
+
+
+class LoanProduct(TimestampedModel):
+    loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="products")
+    name = models.CharField(max_length=200)
+    lender = models.CharField(max_length=200)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    interest_rate = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
+    rate_type = models.CharField(max_length=8, choices=(("fixed", "Fixed"), ("variable", "Variable")), blank=True, default="")
+    opening_balance = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True, default="", max_length=2000)
+
+    class Meta:
+        ordering = ["start_date", "id"]
+        constraints = [
+            models.CheckConstraint(check=Q(interest_rate__isnull=True) | Q(interest_rate__gte=0), name="loan_product_rate_nonnegative"),
+            models.CheckConstraint(check=Q(opening_balance__isnull=True) | Q(opening_balance__gte=0), name="loan_product_balance_nonnegative"),
+            models.CheckConstraint(check=Q(end_date__isnull=True) | Q(end_date__gte=models.F("start_date")), name="loan_product_dates_ordered"),
+        ]
+
+    @property
+    def property(self):
+        return self.loan.property
+
+    def clean(self):
+        errors = {}
+        for field in ("name", "lender"):
+            value = getattr(self, field).strip()
+            setattr(self, field, value)
+            if not value:
+                errors[field] = "This field may not be blank."
+        if self.pk and type(self).objects.filter(pk=self.pk).exclude(loan_id=self.loan_id).exists():
+            errors["loan"] = "A product cannot change loan."
+        if self.interest_rate is not None and not self.rate_type:
+            errors["rate_type"] = "Choose fixed or variable for the rate."
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            errors["end_date"] = "Must be on or after the start date."
+        if self.loan_id and self.start_date:
+            others = type(self).objects.filter(loan_id=self.loan_id).exclude(pk=self.pk)
+            others = others.filter(Q(end_date__isnull=True) | Q(end_date__gte=self.start_date))
+            if self.end_date:
+                others = others.filter(start_date__lte=self.end_date)
+            if others.exists():
+                errors["start_date"] = "Product dates overlap another product for this loan."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            # Serialize switches so competing requests validate against committed products.
+            Loan.objects.select_for_update().get(pk=self.loan_id)
+            self.full_clean()
+            return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        with transaction.atomic():
+            Loan.objects.select_for_update().get(pk=self.loan_id)
+            return super().delete(*args, **kwargs)
 
 
 class LoanCapitalisedFee(TimestampedModel):
