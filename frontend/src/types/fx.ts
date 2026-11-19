@@ -27,6 +27,9 @@ export type SharedFXRow = {
   sources: string[]
   observation_date: string | null
   carried_forward: boolean
+  status: 'completed' | 'carried' | 'held' | null
+  statuses: Record<string, 'completed' | 'carried' | 'held'>
+  source_date: string | null
   provisional: boolean
   effective_date: string | null
   release_id: string

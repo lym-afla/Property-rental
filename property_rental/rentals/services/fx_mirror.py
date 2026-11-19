@@ -1,100 +1,128 @@
 from contextvars import ContextVar
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Context, Decimal, DecimalException, ROUND_HALF_UP, localcontext
+from decimal import Decimal, DecimalException
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db.models import Max
+from django.db import connection, transaction
+from django.utils.dateparse import parse_datetime
 
 from rentals.models import FXAnchor
 from rentals.services.fx import MissingFXRate
+from rentals.services import shared_fx_resolver as resolver
 
 report_provisional = ContextVar("fx_report_provisional", default=None)
 
-# Initial contract applicability. The feed does not carry policy applicability;
-# changing these dates requires coordinating the service contract and consumer.
-_COVERAGE_START = {
-    'USD': date(1998, 1, 1), 'RUB': date(1998, 1, 1),
-    'USDT': date(1998, 1, 1), 'USDC': date(1998, 1, 1),
-    'EUR': date(1999, 1, 4), 'GBP': date(1999, 1, 4),
-    'CHF': date(1999, 1, 4), 'PLN': date(1999, 1, 4),
-    'CNY': date(2000, 1, 13),
-}
+_snapshot_context = ContextVar('fx_snapshot_context', default=None)
+
+
+@dataclass(frozen=True)
+class MirrorAnchor:
+    value: str
+    observation_date: date | None
+    snapshot_id: str
+    status: str
+
+
+@dataclass(frozen=True)
+class MirrorSnapshot:
+    state: dict | None
+    anchors: dict
+    latest: date | None
+
+
+def capture(requested=None, currencies=None):
+    condition, params = 'TRUE', []
+    if requested is not None:
+        condition += ' AND a.date IN (%s,m.latest_date)'
+        params.append(requested)
+    if currencies is not None:
+        condition += ' AND a.currency IN (' + ','.join(['%s'] * len(currencies)) + ')'
+        params.extend(currencies)
+    with transaction.atomic(savepoint=False), connection.cursor() as cursor:
+        cursor.execute(f"""
+            SELECT s.release_id,s.seq,s.history_epoch,s.synced_at,
+                   a.date,a.currency,a.value,a.observation_date,a.snapshot_id,a.status,m.latest_date
+            FROM (SELECT max(date) AS latest_date FROM rentals_fxanchor) m
+            LEFT JOIN rentals_fxsyncstate s ON s.id=1
+            LEFT JOIN rentals_fxanchor a ON {condition}
+            ORDER BY a.date,a.currency
+        """, params)
+        rows = cursor.fetchall()
+    state = None
+    anchors = {}
+    for release_id, seq, epoch, synced_at, day, currency, value, observed, snapshot, status, latest in rows:
+        if release_id is not None and state is None:
+            state = {'release_id': release_id, 'seq': seq, 'history_epoch': epoch,
+                     'synced_at': parse_datetime(synced_at) if isinstance(synced_at, str) else synced_at}
+        if day is not None:
+            day = date.fromisoformat(day) if isinstance(day, str) else day
+            observed = date.fromisoformat(observed) if isinstance(observed, str) else observed
+            anchors.setdefault(day, {})[currency] = MirrorAnchor(value, observed, snapshot, status)
+    latest = date.fromisoformat(latest) if isinstance(latest, str) else latest
+    return MirrorSnapshot(state, anchors, latest)
+
+
+@contextmanager
+def pinned(snapshot=None):
+    selected = snapshot or _snapshot_context.get() or capture()
+    token = _snapshot_context.set(selected)
+    try:
+        yield selected
+    finally:
+        _snapshot_context.reset(token)
 
 
 def get_rate(base, quote, requested):
-    if any(currency not in _COVERAGE_START for currency in (base, quote)):
-        raise MissingFXRate('Unsupported FX currency', 'unsupported_currency')
-    if any(requested < _COVERAGE_START[currency] for currency in (base, quote)):
-        raise MissingFXRate('FX date is before currency coverage', 'before_coverage')
-    latest = FXAnchor.objects.aggregate(latest=Max('date'))['latest']
-    if latest is None:
-        raise MissingFXRate('FX mirror has no release')
-    effective = requested
-    if requested > latest:
-        today = datetime.now(ZoneInfo(getattr(settings, 'BUSINESS_TIME_ZONE', 'Europe/Moscow'))).date()
-        if requested > today:
-            raise MissingFXRate('FX date is in the future', 'future_date')
-        effective = latest
-    anchors = {row.currency: row for row in FXAnchor.objects.filter(date=effective, currency__in=[base, quote])}
-    if base not in anchors or quote not in anchors:
-        raise MissingFXRate(f'FX rate for {base} to {quote} not found.')
-    if requested > latest and base != quote:
-        for currency, anchor in anchors.items():
-            if currency not in {'USD', 'USDT', 'USDC'}:
-                if anchor.observation_date is None:
-                    raise MissingFXRate('FX observation is unavailable')
-                if anchor.observation_date > effective:
-                    raise MissingFXRate('FX observation is newer than its snapshot', 'future_observation')
-                if (requested - anchor.observation_date).days > 14:
-                    raise MissingFXRate('FX observation is stale', 'stale')
+    today = datetime.now(ZoneInfo(getattr(settings, 'BUSINESS_TIME_ZONE', 'Europe/Moscow'))).date()
     try:
-        with localcontext(Context(prec=38, rounding=ROUND_HALF_UP)):
-            values = [Decimal(anchors[currency].value) for currency in (base, quote)]
-            if any(not value.is_finite() or value <= 0 for value in values):
-                raise MissingFXRate('Invalid FX anchor', 'invalid_rate')
-            multiplier = (values[1] / values[0]).quantize(Decimal('0.000000000000000001'))
-            if multiplier <= 0:
-                raise MissingFXRate('Invalid FX rate', 'invalid_rate')
-    except DecimalException as exc:
-        raise MissingFXRate('Invalid FX rate', 'invalid_rate') from exc
-    if requested > latest and report_provisional.get() is not None:
-        report_provisional.get().add(effective.isoformat())
-    return {'FX': multiplier, 'conversions': int(base != quote), 'dates_async': False, 'dates': [effective], 'FX dates used': [effective], 'effective_date': effective, 'provisional': requested > latest, 'cacheable': requested <= latest}
-
+        resolver.select_date(requested, None)
+        snapshot = _snapshot_context.get() or capture(requested, (base, quote))
+        selection = resolver.select_date(requested, snapshot.latest)
+        anchors = {currency: anchor for currency, anchor in snapshot.anchors.get(selection.effective_date, {}).items()
+                   if currency in {base, quote}}
+        resolved = resolver.resolve(
+            {currency: Decimal(anchor.value) for currency, anchor in anchors.items()},
+            base, quote, requested, latest_completed_date=snapshot.latest, business_today=today,
+            observation_dates={currency: anchor.observation_date for currency, anchor in anchors.items()
+                               if anchor.observation_date is not None},
+            statuses={currency: anchor.status for currency, anchor in anchors.items()},
+        )
+    except resolver.ContractError as error:
+        raise MissingFXRate(str(error), error.code) from error
+    except DecimalException as error:
+        raise MissingFXRate('Invalid FX anchor', 'invalid_rate') from error
+    if resolved.provisional and report_provisional.get() is not None:
+        report_provisional.get().add(resolved.effective_date.isoformat())
+    return {'FX': resolved.multiplier, 'conversions': int(base != quote), 'dates_async': False,
+            'dates': [resolved.effective_date], 'FX dates used': [resolved.effective_date],
+            'effective_date': resolved.effective_date, 'source_date': resolved.source_date,
+            'statuses': {currency: anchor.status for currency, anchor in anchors.items()},
+            'provisional': resolved.provisional, 'cacheable': resolved.cacheable}
 
 
 _POLICY_ID = 'initial-v1'
-_POLICY_HASH = 'dc402fff8264f862325f6ad33bf34ff2a8d3d02ef82f5f66ec1ee6351a2eefd5'
+_POLICY_HASH = 'dcec25ddeff179e638416303494a030795f7d99883a646634894d1867c2e3aae'
 
 
 def _feed(client, release_id, after_seq):
-    import hashlib
-    import json
-
     previous_date = None
     ended = False
     for page in client.changes(after_seq):
         if ended or page['release_id'] != release_id or page['after_seq'] != after_seq:
             raise ValueError('Invalid FX changes page')
         for item in page['items']:
-            keys = ('date', 'policy_id', 'policy_hash', 'values', 'observation_ids', 'coverage', 'observation_dates')
-            canonical = {key: item[key] for key in keys}
-            digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+            item = resolver.check_snapshot(item)
             if item['policy_id'] != _POLICY_ID or item['policy_hash'] != _POLICY_HASH:
                 raise ValueError('Unsupported FX snapshot policy')
-            if digest != item['content_hash'] or (previous_date is not None and item['date'] <= previous_date):
+            if previous_date is not None and item['date'] <= previous_date:
                 raise ValueError('Invalid FX snapshot')
             date.fromisoformat(item['date'])
             previous_date = item['date']
-            if sorted(item['coverage']) != sorted(item['values']) or item['coverage'] != sorted(set(item['coverage'])) or item['observation_ids'] != sorted(set(item['observation_ids'])):
-                raise ValueError('Invalid FX coverage')
             if not item['snapshot_id'] or not isinstance(item['sources'], dict):
                 raise ValueError('Invalid FX snapshot')
-            for currency, value in item['values'].items():
-                number = Decimal(value)
-                if not number.is_finite() or number <= 0:
-                    raise ValueError('Invalid FX anchor')
             yield item
         ended = page['next_cursor'] is None
     if not ended:
@@ -104,7 +132,7 @@ def _feed(client, release_id, after_seq):
 def _coverage(assignments):
     result = {}
     latest = None
-    for day, currency, value, observed, snapshot in sorted(assignments, key=lambda row: (row[1], row[0])):
+    for day, currency, value, observed, snapshot, status in sorted(assignments, key=lambda row: (row[1], row[0])):
         day = date.fromisoformat(day)
         latest = max(latest, day) if latest else day
         intervals = result.setdefault(currency, [])
@@ -116,7 +144,7 @@ def _coverage(assignments):
 
 
 def _assignments(item):
-    return {(item['date'], currency, value, item['observation_dates'].get(currency), item['snapshot_id']) for currency, value in item['values'].items()}
+    return {(item['date'], currency, value, item['observation_dates'].get(currency), item['snapshot_id'], item['statuses'][currency]) for currency, value in item['values'].items()}
 
 
 def sync(client):
@@ -149,11 +177,11 @@ def sync(client):
             FXAnchor.objects.filter(date=item['date']).delete()
             FXAnchor.objects.bulk_create([
                 FXAnchor(date=item['date'], currency=currency, value=value,
-                         observation_date=item['observation_dates'].get(currency), snapshot_id=item['snapshot_id'])
+                         observation_date=item['observation_dates'].get(currency), snapshot_id=item['snapshot_id'], status=item['statuses'][currency])
                 for currency, value in item['values'].items()
             ])
-        staged = {(day.isoformat(), currency, value, observed.isoformat() if observed else None, snapshot)
-                  for day, currency, value, observed, snapshot in FXAnchor.objects.values_list('date', 'currency', 'value', 'observation_date', 'snapshot_id')}
+        staged = {(day.isoformat(), currency, value, observed.isoformat() if observed else None, snapshot, status)
+                  for day, currency, value, observed, snapshot, status in FXAnchor.objects.values_list('date', 'currency', 'value', 'observation_date', 'snapshot_id', 'status')}
         if _coverage(staged) != (expected, latest):
             raise ValueError('Incomplete FX coverage')
         if state and release['history_epoch'] != state.history_epoch:

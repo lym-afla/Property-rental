@@ -191,3 +191,11 @@ it('one explicit Refresh range from a later fresh page fetches the current relea
   await waitFor(() => expect(service.initialReads()).toBe(2))
   qc.clear()
 })
+
+it('labels held values separately from accepted carry and marks them provisional', async () => {
+  server.use(http.get('/api/v1/fx/', () => HttpResponse.json({ ...mirrorPage, results: [{ ...mirrorRow, status: 'held', statuses: { EUR: 'held', RUB: 'completed' }, provisional: true }] })))
+  renderPage()
+  expect(await screen.findByText('Held')).toBeInTheDocument()
+  expect(screen.getByText('Provisional')).toBeInTheDocument()
+  expect(screen.queryByText('Carried forward')).not.toBeInTheDocument()
+})

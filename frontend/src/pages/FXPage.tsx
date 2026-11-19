@@ -106,7 +106,7 @@ export function FXPage() {
             <TableCell>{row.kind === 'direct' ? 'Direct' : row.kind === 'derived' ? 'Derived' : 'Identity'}</TableCell>
             <TableCell>{row.sources.join(', ') || 'Policy'}</TableCell>
             <TableCell className="whitespace-nowrap">{formatDate(row.observation_date)}</TableCell>
-            <TableCell><div className="flex flex-wrap gap-1">{row.carried_forward && <Badge variant="secondary">Carried forward</Badge>}{row.provisional && <Badge variant="secondary">Provisional</Badge>}{!row.carried_forward && !row.provisional && row.rate && 'Completed'}</div></TableCell>
+            <TableCell><div className="flex flex-wrap gap-1">{row.status === 'held' && <Badge variant="secondary">Held</Badge>}{row.status !== 'held' && row.carried_forward && <Badge variant="secondary">Carried forward</Badge>}{row.provisional && <Badge variant="secondary">Provisional</Badge>}{!row.carried_forward && !row.provisional && row.rate && 'Completed'}</div></TableCell>
             <TableCell><Button variant="outline" size="sm" disabled={!row.details_token} onClick={() => setSelected(row)}>Details</Button></TableCell>
           </TableRow>)}
         </TableBody></Table>

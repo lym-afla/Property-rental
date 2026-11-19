@@ -524,6 +524,7 @@ class FXSyncState(models.Model):
 
 
 class FXAnchor(models.Model):
+    status = models.CharField(max_length=9, choices=[('completed', 'Completed'), ('carried', 'Carried'), ('held', 'Held')], default='completed')
     date = models.DateField()
     currency = models.CharField(max_length=8)
     value = models.TextField()

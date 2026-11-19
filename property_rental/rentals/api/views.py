@@ -154,12 +154,10 @@ def _consistent_fx_report(fn):
         from django.conf import settings
         if fx_backend() != 'mirror':
             return fn(self, request, *args, **kwargs)
-        from rentals.models import FXSyncState
         from rentals.services.fx import MissingFXRate
-        from rentals.services.fx_mirror import report_provisional
+        from rentals.services.fx_mirror import pinned, report_provisional
 
-        for attempt in range(2):
-            before = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
+        with pinned() as snapshot:
             provisional = set()
             token = report_provisional.set(provisional)
             try:
@@ -169,15 +167,13 @@ def _consistent_fx_report(fn):
                     response = Response({'code': 'missing_fx', 'detail': str(exc)}, status=422)
             finally:
                 report_provisional.reset(token)
-            after = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
-            if before == after:
-                if before:
-                    response['X-FX-Release-ID'] = before['release_id']
-                    response['X-FX-History-Epoch'] = str(before['history_epoch'])
-                response['X-FX-Provisional'] = str(bool(provisional)).lower()
-                response['Cache-Control'] = 'no-store' if provisional else 'private, no-cache'
-                return response
-        return Response({'code': 'fx_release_changed'}, status=503)
+            state = snapshot.state
+            if state:
+                response['X-FX-Release-ID'] = state['release_id']
+                response['X-FX-History-Epoch'] = str(state['history_epoch'])
+            response['X-FX-Provisional'] = str(bool(provisional)).lower()
+            response['Cache-Control'] = 'no-store' if provisional else 'private, no-cache'
+            return response
     return wrapped
 
 

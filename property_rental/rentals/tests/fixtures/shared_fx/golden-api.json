@@ -7,7 +7,7 @@
         "quote": "RUB",
         "date": "1998-01-01"
       },
-      "multiplier": "5.960000000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -15,7 +15,7 @@
         "quote": "USD",
         "date": "1998-01-01"
       },
-      "multiplier": "0.167785234899328859"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -23,7 +23,7 @@
         "quote": "RUB",
         "date": "1999-01-04"
       },
-      "multiplier": "20.650000000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -31,7 +31,7 @@
         "quote": "USD",
         "date": "1999-01-04"
       },
-      "multiplier": "0.048426150121065375"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -39,7 +39,7 @@
         "quote": "EUR",
         "date": "1999-01-04"
       },
-      "multiplier": "0.848248367121893290"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -47,7 +47,7 @@
         "quote": "USD",
         "date": "1999-01-04"
       },
-      "multiplier": "1.178900000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -55,7 +55,7 @@
         "quote": "RUB",
         "date": "1999-01-04"
       },
-      "multiplier": "34.234685698214034594"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -63,7 +63,7 @@
         "quote": "RUB",
         "date": "2000-01-12"
       },
-      "multiplier": "28.440000000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -71,7 +71,7 @@
         "quote": "USD",
         "date": "2000-01-12"
       },
-      "multiplier": "0.035161744022503516"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -79,7 +79,7 @@
         "quote": "EUR",
         "date": "2000-01-12"
       },
-      "multiplier": "0.970120294916569655"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -87,7 +87,7 @@
         "quote": "USD",
         "date": "2000-01-12"
       },
-      "multiplier": "1.030800000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -95,7 +95,7 @@
         "quote": "RUB",
         "date": "2000-01-12"
       },
-      "multiplier": "46.883019350711658404"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -103,7 +103,7 @@
         "quote": "RUB",
         "date": "2000-01-13"
       },
-      "multiplier": "28.850000000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -111,7 +111,7 @@
         "quote": "USD",
         "date": "2000-01-13"
       },
-      "multiplier": "0.034662045060658579"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -119,7 +119,7 @@
         "quote": "EUR",
         "date": "2000-01-13"
       },
-      "multiplier": "0.973141300116776956"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -127,7 +127,7 @@
         "quote": "USD",
         "date": "2000-01-13"
       },
-      "multiplier": "1.027600000000000000"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -135,7 +135,7 @@
         "quote": "RUB",
         "date": "2000-01-13"
       },
-      "multiplier": "47.396099120703437250"
+      "error": "before_coverage"
     },
     {
       "query": {
@@ -143,11 +143,203 @@
         "quote": "GBP",
         "date": "2000-01-13"
       },
-      "multiplier": "0.073541514802360853"
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-27"
+      },
+      "multiplier": "99.229500000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.010077648279997380"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.958313368471490177"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-27"
+      },
+      "multiplier": "1.043500000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-27"
+      },
+      "multiplier": "124.607070266432405112"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.109096876682114771"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-28"
+      },
+      "multiplier": "100.528100000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.009947467424531052"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.958313368471490177"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-28"
+      },
+      "multiplier": "1.043500000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-28"
+      },
+      "multiplier": "126.237782317263953404"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.109096876682114771"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-30"
+      },
+      "multiplier": "101.679700000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.009834804784042439"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.957487552661815396"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-30"
+      },
+      "multiplier": "1.044400000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-30"
+      },
+      "multiplier": "128.022035780590717300"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.108809717448907312"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-31"
+      },
+      "multiplier": "101.679700000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.009834804784042439"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.962556550197324093"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-31"
+      },
+      "multiplier": "1.038900000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-31"
+      },
+      "multiplier": "127.396995019175571046"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.109342898210541585"
     }
   ],
   "change_item_contract": {
-    "description": "Change pages omit observations; snapshot detail retains full observations. Canonical hashes and mirror fields are identical.",
+    "description": "Snapshot hash_version 2 covers statuses; legacy version 1 hashes omit statuses and statuses are derived from observation dates. Snapshot detail adds observations.",
     "fields": [
       "date",
       "policy_id",
@@ -158,7 +350,9 @@
       "observation_dates",
       "snapshot_id",
       "content_hash",
-      "sources"
+      "sources",
+      "statuses",
+      "hash_version"
     ],
     "detail_only_fields": [
       "observations"

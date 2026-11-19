@@ -1,7 +1,7 @@
 {
   "contract_version": "usd_anchor_ratio_v1",
   "policy_file": "../policies/initial.json",
-  "policy_hash": "dc402fff8264f862325f6ad33bf34ff2a8d3d02ef82f5f66ec1ee6351a2eefd5",
+  "policy_hash": "dcec25ddeff179e638416303494a030795f7d99883a646634894d1867c2e3aae",
   "direction": "quote currency units per one base currency unit",
   "formula": "v(quote) / v(base); v(currency) is currency units per USD",
   "significant_digits": 38,
@@ -15,7 +15,7 @@
     ],
     "applies_to": "quantized reciprocal and triangle agreement; exact equality is not required"
   },
-  "inputs": "Caller supplies anchors and required currency observation_dates for effective_date from one pinned release. Observation dates are oldest observed dates over full applicable paths; absent currency means no age limit. Requested and effective dates must both satisfy applicability. Provisional freshness uses requested date minus each requested fiat path observation date. Pegs and identity do not expire; completed snapshots are already validated at publication. Provisional results cannot enter persisted caches. No observation lookup occurs in this contract.",
+  "inputs": "Caller supplies anchors and required currency observation_dates for effective_date from one pinned release. Observation dates are oldest observed dates over full applicable paths; absent currency means no age limit. Requested and effective dates must both satisfy applicability. Provisional freshness uses requested date minus each requested fiat path observation date. Pegs and identity do not expire; completed snapshots are already validated at publication. Provisional results cannot enter persisted caches. No observation lookup occurs in this contract. Anchor statuses are completed, carried or held. Touching a held anchor is provisional and never cacheable; source_date is the oldest touched path observation date. Held paths obey the same ceiling; identity and pegs do not expire.",
   "edge_rate_example": {
     "USD/RUB": "90",
     "USD/EUR": "0.9",
@@ -540,10 +540,6 @@
         "USDT": "1",
         "USDC": "1"
       },
-      "multiplier": "1.000000000000000000",
-      "effective_date": "1998-01-01",
-      "provisional": false,
-      "cacheable": true,
       "observation_dates": {
         "RUB": "2026-11-05",
         "EUR": "2026-11-05",
@@ -551,7 +547,8 @@
         "CHF": "2026-11-05",
         "PLN": "2026-11-05",
         "CNY": "2026-11-05"
-      }
+      },
+      "error": "before_coverage"
     },
     {
       "name": "missing_anchor",
@@ -969,6 +966,98 @@
       "effective_date": "2026-10-01",
       "provisional": true,
       "cacheable": false
+    },
+    {
+      "base": "USD",
+      "quote": "CNY",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "CNY": "7.2"
+      },
+      "observation_dates": {
+        "CNY": "2026-11-04"
+      },
+      "statuses": {
+        "USD": "completed",
+        "CNY": "held"
+      },
+      "effective_date": "2026-11-05",
+      "source_date": "2026-11-04",
+      "multiplier": "7.200000000000000000",
+      "provisional": true,
+      "cacheable": false,
+      "name": "held_historical_anchor"
+    },
+    {
+      "base": "USD",
+      "quote": "CNY",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "CNY": "7.2"
+      },
+      "observation_dates": {
+        "CNY": "2026-10-22"
+      },
+      "statuses": {
+        "USD": "completed",
+        "CNY": "held"
+      },
+      "effective_date": "2026-11-05",
+      "source_date": "2026-10-22",
+      "multiplier": "7.200000000000000000",
+      "provisional": true,
+      "cacheable": false,
+      "name": "held_at_fourteen_days"
+    },
+    {
+      "base": "CNY",
+      "quote": "CNY",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "CNY": "7.2"
+      },
+      "observation_dates": {
+        "CNY": "2026-10-01"
+      },
+      "statuses": {
+        "USD": "completed",
+        "CNY": "held"
+      },
+      "effective_date": "2026-11-05",
+      "source_date": "2026-10-01",
+      "multiplier": "1.000000000000000000",
+      "provisional": true,
+      "cacheable": false,
+      "name": "held_identity_has_no_expiry"
+    },
+    {
+      "base": "USD",
+      "quote": "CNY",
+      "requested_date": "2026-11-05",
+      "latest_completed_date": "2026-11-05",
+      "business_today": "2026-11-06",
+      "anchor_values": {
+        "USD": "1",
+        "CNY": "7.2"
+      },
+      "observation_dates": {
+        "CNY": "2026-10-21"
+      },
+      "statuses": {
+        "USD": "completed",
+        "CNY": "held"
+      },
+      "name": "held_beyond_fourteen_days",
+      "error": "stale"
     }
   ],
   "decimal_context": {
@@ -993,12 +1082,7 @@
       "edge_rates": {
         "USD/RUB": "90"
       },
-      "anchor_values": {
-        "USD": "1",
-        "RUB": "90",
-        "USDT": "1",
-        "USDC": "1"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "initial_1999_no_cny",
@@ -1010,16 +1094,7 @@
         "EUR/CHF": "0.9",
         "EUR/PLN": "4"
       },
-      "anchor_values": {
-        "USD": "1",
-        "RUB": "90",
-        "EUR": "0.9",
-        "GBP": "0.72",
-        "CHF": "0.81",
-        "PLN": "3.6",
-        "USDT": "1",
-        "USDC": "1"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "cny_start_minus_one",
@@ -1031,16 +1106,7 @@
         "EUR/CHF": "0.9",
         "EUR/PLN": "4"
       },
-      "anchor_values": {
-        "USD": "1",
-        "RUB": "90",
-        "EUR": "0.9",
-        "GBP": "0.72",
-        "CHF": "0.81",
-        "PLN": "3.6",
-        "USDT": "1",
-        "USDC": "1"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "cny_start_inclusive",
@@ -1053,17 +1119,7 @@
         "EUR/PLN": "4",
         "EUR/CNY": "8"
       },
-      "anchor_values": {
-        "USD": "1",
-        "RUB": "90",
-        "EUR": "0.9",
-        "GBP": "0.72",
-        "CHF": "0.81",
-        "PLN": "3.6",
-        "CNY": "7.2",
-        "USDT": "1",
-        "USDC": "1"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "reversed_topology_start",
@@ -1077,17 +1133,7 @@
         "EUR/CNY": "8"
       },
       "reverse_edges": true,
-      "anchor_values": {
-        "USD": "1",
-        "RUB": "90",
-        "EUR": "0.9",
-        "GBP": "0.72",
-        "CHF": "0.81",
-        "PLN": "3.6",
-        "CNY": "7.2",
-        "USDT": "1",
-        "USDC": "1"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "gap_outside_2026-11-03",
@@ -1114,12 +1160,12 @@
         "USD": "1",
         "RUB": "90",
         "EUR": "0.9",
+        "USDT": "1",
+        "USDC": "1",
         "GBP": "0.72",
         "CHF": "0.81",
         "PLN": "3.6",
-        "CNY": "7.2",
-        "USDT": "1",
-        "USDC": "1"
+        "CNY": "7.2"
       }
     },
     {
@@ -1147,12 +1193,12 @@
         "USD": "1",
         "RUB": "90",
         "EUR": "0.9",
+        "USDT": "1",
+        "USDC": "1",
         "GBP": "0.72",
         "CHF": "0.81",
         "PLN": "3.6",
-        "CNY": "7.2",
-        "USDT": "1",
-        "USDC": "1"
+        "CNY": "7.2"
       }
     },
     {
@@ -1174,9 +1220,9 @@
       "reverse_edges": true,
       "anchor_values": {
         "USD": "1",
-        "RUB": "90",
+        "USDC": "1",
         "USDT": "1",
-        "USDC": "1"
+        "RUB": "90"
       }
     },
     {
@@ -1198,9 +1244,9 @@
       "reverse_edges": true,
       "anchor_values": {
         "USD": "1",
-        "RUB": "90",
+        "USDC": "1",
         "USDT": "1",
-        "USDC": "1"
+        "RUB": "90"
       }
     },
     {
@@ -1229,7 +1275,7 @@
         "USD/RUB": "90",
         "USD/EUR": "0.9"
       },
-      "error": "invalid_rate"
+      "error": "before_coverage"
     },
     {
       "name": "gap_supplied_descendant",
@@ -1257,7 +1303,7 @@
         "USD/RUB": "90",
         "EUR/GBP": "0.8"
       },
-      "error": "invalid_rate"
+      "error": "before_coverage"
     },
     {
       "name": "end_inclusive",
@@ -1279,12 +1325,12 @@
         "USD": "1",
         "RUB": "90",
         "EUR": "0.9",
+        "USDT": "1",
+        "USDC": "1",
         "GBP": "0.72",
         "CHF": "0.81",
         "PLN": "3.6",
-        "CNY": "7.2",
-        "USDT": "1",
-        "USDC": "1"
+        "CNY": "7.2"
       }
     },
     {
@@ -1380,12 +1426,12 @@
       },
       "reverse_edges": true,
       "anchor_observation_dates": {
-        "RUB": "2026-11-05",
         "EUR": "2026-10-22",
-        "GBP": "2026-10-22",
-        "CHF": "2026-10-22",
+        "RUB": "2026-11-05",
+        "CNY": "2026-10-22",
         "PLN": "2026-10-22",
-        "CNY": "2026-10-22"
+        "CHF": "2026-10-22",
+        "GBP": "2026-10-22"
       }
     },
     {
@@ -1414,9 +1460,7 @@
       "edge_observation_dates": {
         "USD/RUB": "1998-05-29"
       },
-      "anchor_observation_dates": {
-        "RUB": "1998-05-29"
-      }
+      "error": "before_coverage"
     },
     {
       "name": "excluded_subtree_omitted",

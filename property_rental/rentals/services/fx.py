@@ -40,7 +40,6 @@ not "improve" any of them — ``test_fx_char.py`` and
 """
 
 import logging
-from decimal import Context, ROUND_HALF_UP, localcontext
 
 import networkx as nx
 from rentals.services.fx_context import backend as fx_backend, calculation_context
@@ -265,8 +264,11 @@ def convert(amount, from_currency, to_currency, as_of):
     if from_currency == to_currency and fx_backend() != "mirror":
         return amount
     if fx_backend() == 'mirror':
-        with localcontext(Context(prec=38, rounding=ROUND_HALF_UP)):
-            return amount * get_rate(from_currency, to_currency, as_of)['FX']
+        from rentals.services.shared_fx_resolver import ContractError, convert_amount
+        try:
+            return convert_amount(amount, get_rate(from_currency, to_currency, as_of)['FX'])
+        except ContractError as error:
+            raise MissingFXRate(str(error), error.code) from error
     return amount * get_rate(from_currency, to_currency, as_of)['FX']
 
 
@@ -291,6 +293,8 @@ class PreloadedConverter:
         self.target_currency = target_currency
         self._mirror = fx_backend() == "mirror"
         if self._mirror:
+            from rentals.services.fx_mirror import _snapshot_context, capture
+            self._snapshot = _snapshot_context.get() or capture()
             return
         cross_currency_dates = [
             transaction.date
@@ -338,7 +342,8 @@ class PreloadedConverter:
 
     def convert(self, amount, from_currency, to_currency, as_of):
         if self._mirror:
-            with calculation_context('mirror'):
+            from rentals.services.fx_mirror import pinned
+            with calculation_context('mirror'), pinned(self._snapshot):
                 return convert(amount, from_currency, to_currency, as_of)
         if from_currency == to_currency:
             return amount

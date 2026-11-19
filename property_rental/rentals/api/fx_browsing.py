@@ -61,7 +61,7 @@ def _row(base, quote, day, release_id):
            'kind': 'identity' if base == quote else 'direct' if len(path) == 2 else 'derived',
            'path': path, 'sources': sources, 'rate': None, 'error': None,
            'snapshot_id': None, 'observation_date': None, 'carried_forward': False,
-           'provisional': False, 'effective_date': None}
+           'provisional': False, 'effective_date': None, 'source_date': None, 'status': None, 'statuses': {}}
     try:
         result = get_rate(base, quote, day)
         anchors = list(FXAnchor.objects.filter(date=result['effective_date'], currency__in=[base, quote]))
@@ -73,7 +73,8 @@ def _row(base, quote, day, release_id):
                    effective_date=result['effective_date'].isoformat(),
                    observation_date=min(observed).isoformat() if observed else None,
                    carried_forward=any(observation < day for observation in observed),
-                   provisional=result['provisional'])
+                   provisional=result['provisional'], source_date=result['source_date'].isoformat(),
+                   statuses=result['statuses'], status='held' if any(anchor.status == 'held' for anchor in anchors) else 'carried' if any(anchor.status == 'carried' for anchor in anchors) else 'completed')
     except MissingFXRate as exc:
         row['error'] = 'missing_fx' if exc.code == 'missing_rate' else exc.code
     return row

@@ -62,7 +62,7 @@ def test_provisional_rejects_observation_newer_than_snapshot():
 
 @pytest.mark.django_db
 @override_settings(FX_BACKEND='mirror')
-def test_report_retries_when_release_changes_during_calculation(landlord_user):
+def test_report_retains_captured_release_when_database_state_changes(landlord_user):
     from rest_framework.response import Response
     from rest_framework.test import APIRequestFactory, force_authenticate
     from rentals.api.analytics_views import _PortfolioAnalyticsView
@@ -81,8 +81,8 @@ def test_report_retries_when_release_changes_during_calculation(landlord_user):
     request = APIRequestFactory().get('/')
     force_authenticate(request, user=landlord_user)
     response = View.as_view()(request)
-    assert response.data['calculation'] == 2
-    assert response.data['fx']['release_id'] == 'new'
+    assert response.data['calculation'] == 1
+    assert response.data['fx']['release_id'] == 'old'
 
 
 @pytest.mark.django_db
@@ -136,9 +136,9 @@ def test_vendored_golden_fixture_hashes():
     import hashlib
     from pathlib import Path
     directory = Path(__file__).parent / 'fixtures' / 'shared_fx'
-    assert hashlib.sha256((directory / 'golden-rates.json').read_bytes()).hexdigest() == 'e76787e4c720a0bd478759a7ca7e0b5d8e6707032c32649025c3966277e3cee2'
-    assert hashlib.sha256((directory / 'golden-api.json').read_bytes()).hexdigest() == '29545eabe3c5f6ae20eb20afc7433df505cb3957bf7a3d3158e10f8771287349'
-    assert hashlib.sha256((directory / 'boundary-anchors.json').read_bytes()).hexdigest() == '8893f6c9ce49c4cb130e951b4942b4d7f3af9df5d4421ccc55f3e335886c5d9a'
+    assert hashlib.sha256((directory / 'golden-rates.json').read_bytes()).hexdigest() == 'e676abcb9f3365071b452672ea6ec502fdbf60f2783e932b3ef925f9e88d951c'
+    assert hashlib.sha256((directory / 'golden-api.json').read_bytes()).hexdigest() == '8399120d9d214fad21d11438296b22870c5b43be7afce5bfd480bd065d99938f'
+    assert hashlib.sha256((directory / 'boundary-anchors.json').read_bytes()).hexdigest() == '3eb8a234ae378771eae3ae85071e06d0367020f5d21d5e83b9f98cb6e39a7fef'
 
 
 @pytest.mark.django_db
@@ -154,7 +154,7 @@ def test_completed_golden_rates_match_both_resolvers():
     for case in cases:
         FXAnchor.objects.all().delete()
         for currency, value in case['anchor_values'].items():
-            FXAnchor.objects.create(date=case['requested_date'], currency=currency, value=value, observation_date=case['observation_dates'].get(currency), snapshot_id='golden')
+            FXAnchor.objects.create(date=case['requested_date'], currency=currency, value=value, observation_date=case['observation_dates'].get(currency), snapshot_id='golden', status=case.get('statuses', {}).get(currency, 'completed'))
         target_date = date.fromisoformat(case['requested_date'])
         expected = Decimal(case['multiplier'])
         assert get_rate(case['base'], case['quote'], target_date)['FX'] == expected, case['name']
@@ -184,7 +184,7 @@ def test_comparison_export_covers_native_transaction_without_writing_it(tmp_path
 
 @pytest.mark.django_db
 @override_settings(FX_BACKEND='mirror')
-def test_property_statistics_retry_when_release_changes(auth_client, sample_property, monkeypatch):
+def test_property_statistics_retain_captured_release(auth_client, sample_property, monkeypatch):
     from rentals.models import FXSyncState
     from rentals.services import financials
 
@@ -198,8 +198,8 @@ def test_property_statistics_retry_when_release_changes(auth_client, sample_prop
     monkeypatch.setattr(financials, 'aggregate', aggregate)
     response = auth_client.get('/api/v1/properties/with_stats/?as_of=2026-01-05&currency=EUR')
     assert response.status_code == 200
-    assert len(calls) == 8
-    assert response['X-FX-Release-ID'] == 'new'
+    assert len(calls) == 4
+    assert response['X-FX-Release-ID'] == 'old'
 
 
 @pytest.mark.django_db
@@ -218,9 +218,18 @@ def test_golden_api_rates_using_independently_observed_anchors():
     for case in json.loads((folder / 'golden-api.json').read_text())['cases']:
         query = case['query']
         as_of = date.fromisoformat(query['date'])
-        expected = Decimal(case['multiplier'])
-        assert get_rate(query['base'], query['quote'], as_of)['FX'] == expected
-        assert PreloadedConverter([], query['quote']).convert(Decimal('1'), query['base'], query['quote'], as_of) == expected
+        if case.get('error'):
+            from rentals.services.fx import MissingFXRate
+            with pytest.raises(MissingFXRate) as failure:
+                get_rate(query['base'], query['quote'], as_of)
+            assert failure.value.code == case['error']
+            with pytest.raises(MissingFXRate) as preloaded_failure:
+                PreloadedConverter([], query['quote']).convert(Decimal('1'), query['base'], query['quote'], as_of)
+            assert preloaded_failure.value.code == case['error']
+        else:
+            expected = Decimal(case['multiplier'])
+            assert get_rate(query['base'], query['quote'], as_of)['FX'] == expected
+            assert PreloadedConverter([], query['quote']).convert(Decimal('1'), query['base'], query['quote'], as_of) == expected
 
 
 @pytest.mark.django_db
@@ -262,7 +271,7 @@ def test_all_golden_rate_outcomes(monkeypatch):
         latest = date.fromisoformat(case['latest_completed_date'])
         for day in {latest, min(requested, latest)}:
             for currency, value in case['anchor_values'].items():
-                FXAnchor.objects.create(date=day, currency=currency, value=value, observation_date=case['observation_dates'].get(currency), snapshot_id='golden')
+                FXAnchor.objects.create(date=day, currency=currency, value=value, observation_date=case['observation_dates'].get(currency), snapshot_id='golden', status=case.get('statuses', {}).get(currency, 'completed'))
         if case.get('error'):
             from rentals.services.fx import PreloadedConverter
             with pytest.raises(MissingFXRate) as failure:
@@ -457,7 +466,7 @@ def test_comparison_export_rejects_release_write_inside_calculation(tmp_path, mo
     assert not path.exists()
 
 
-_POLICY_HASH = 'dc402fff8264f862325f6ad33bf34ff2a8d3d02ef82f5f66ec1ee6351a2eefd5'
+_POLICY_HASH = 'dcec25ddeff179e638416303494a030795f7d99883a646634894d1867c2e3aae'
 
 
 def _review_item(value='0.9', snapshot='old', policy='initial-v1', policy_hash=_POLICY_HASH):
@@ -517,7 +526,7 @@ def test_sync_rejects_unsupported_policy_and_incomplete_metadata(bad_release, ba
 
 @pytest.mark.django_db
 @override_settings(FX_BACKEND='mirror', ROOT_URLCONF=__name__)
-def test_repeated_release_changes_return_rendered_503(client, landlord_user, monkeypatch):
+def test_report_state_change_keeps_single_captured_release(client, landlord_user, monkeypatch):
     import sys
     from django.urls import path
     from rest_framework.response import Response
@@ -533,8 +542,8 @@ def test_repeated_release_changes_return_rendered_503(client, landlord_user, mon
     monkeypatch.setattr(sys.modules[__name__], 'urlpatterns', [path('probe/', View.as_view())], raising=False)
     client.force_login(landlord_user)
     response = client.get('/probe/')
-    assert response.status_code == 503
-    assert response.json()['code'] == 'fx_release_changed'
+    assert response.status_code == 200
+    assert response.json()['fx']['release_id'] == 'old'
 
 
 @pytest.mark.django_db
@@ -604,3 +613,17 @@ def test_correction_audit_does_not_use_staged_rows_to_mask_missing_audit_data():
     state.refresh_from_db()
     assert (state.release_id, state.seq, state.history_epoch, state.synced_at) == ('old', 1, 1, timestamp)
     assert FXAnchor.objects.get(currency='EUR').value == '0.9'
+
+
+@pytest.mark.django_db
+@override_settings(FX_BACKEND='mirror')
+@pytest.mark.parametrize('currency', ['USD', 'RUB', 'EUR', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC'])
+def test_all_mirror_currencies_start_coverage_in_2008(currency):
+    from rentals.models import FXAnchor
+    from rentals.services.fx import get_rate, MissingFXRate
+    FXAnchor.objects.create(date=date(2007, 12, 31), currency=currency, value='1', snapshot_id='before')
+    with pytest.raises(MissingFXRate) as error:
+        get_rate(currency, currency, date(2007, 12, 31))
+    assert error.value.code == 'before_coverage'
+    FXAnchor.objects.create(date=date(2008, 1, 1), currency=currency, value='1', snapshot_id='first')
+    assert get_rate(currency, currency, date(2008, 1, 1))['FX'] == Decimal('1')
