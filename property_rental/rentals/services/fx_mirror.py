@@ -1,3 +1,4 @@
+import json
 from contextvars import ContextVar
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -44,7 +45,8 @@ def capture(requested=None, currencies=None):
     with transaction.atomic(savepoint=False), connection.cursor() as cursor:
         cursor.execute(f"""
             SELECT s.release_id,s.seq,s.history_epoch,s.synced_at,
-                   a.date,a.currency,a.value,a.observation_date,a.snapshot_id,a.status,m.latest_date
+                   a.date,a.currency,a.value,a.observation_date,a.snapshot_id,a.status,m.latest_date,
+                   s.coverage,s.max_fiat_age_days
             FROM (SELECT max(date) AS latest_date FROM rentals_fxanchor) m
             LEFT JOIN rentals_fxsyncstate s ON s.id=1
             LEFT JOIN rentals_fxanchor a ON {condition}
@@ -53,10 +55,12 @@ def capture(requested=None, currencies=None):
         rows = cursor.fetchall()
     state = None
     anchors = {}
-    for release_id, seq, epoch, synced_at, day, currency, value, observed, snapshot, status, latest in rows:
+    for release_id, seq, epoch, synced_at, day, currency, value, observed, snapshot, status, latest, coverage, ceiling in rows:
         if release_id is not None and state is None:
             state = {'release_id': release_id, 'seq': seq, 'history_epoch': epoch,
-                     'synced_at': parse_datetime(synced_at) if isinstance(synced_at, str) else synced_at}
+                     'synced_at': parse_datetime(synced_at) if isinstance(synced_at, str) else synced_at,
+                     'coverage': json.loads(coverage) if isinstance(coverage, str) else coverage,
+                     'max_fiat_age_days': ceiling}
         if day is not None:
             day = date.fromisoformat(day) if isinstance(day, str) else day
             observed = date.fromisoformat(observed) if isinstance(observed, str) else observed
@@ -89,6 +93,8 @@ def get_rate(base, quote, requested):
             observation_dates={currency: anchor.observation_date for currency, anchor in anchors.items()
                                if anchor.observation_date is not None},
             statuses={currency: anchor.status for currency, anchor in anchors.items()},
+            coverage=snapshot.state['coverage'] if snapshot.state else {},
+            max_fiat_age_days=snapshot.state['max_fiat_age_days'] if snapshot.state else 14,
         )
     except resolver.ContractError as error:
         raise MissingFXRate(str(error), error.code) from error
@@ -103,10 +109,6 @@ def get_rate(base, quote, requested):
             'provisional': resolved.provisional, 'cacheable': resolved.cacheable}
 
 
-_POLICY_ID = 'initial-v1'
-_POLICY_HASH = 'dcec25ddeff179e638416303494a030795f7d99883a646634894d1867c2e3aae'
-
-
 def _feed(client, release_id, after_seq):
     previous_date = None
     ended = False
@@ -115,8 +117,6 @@ def _feed(client, release_id, after_seq):
             raise ValueError('Invalid FX changes page')
         for item in page['items']:
             item = resolver.check_snapshot(item)
-            if item['policy_id'] != _POLICY_ID or item['policy_hash'] != _POLICY_HASH:
-                raise ValueError('Unsupported FX snapshot policy')
             if previous_date is not None and item['date'] <= previous_date:
                 raise ValueError('Invalid FX snapshot')
             date.fromisoformat(item['date'])
@@ -147,6 +147,12 @@ def _assignments(item):
     return {(item['date'], currency, value, item['observation_dates'].get(currency), item['snapshot_id'], item['statuses'][currency]) for currency, value in item['values'].items()}
 
 
+def _stored_assignments():
+    return {(day.isoformat(), currency, value, observed.isoformat() if observed else None, snapshot, status)
+            for day, currency, value, observed, snapshot, status in FXAnchor.objects.values_list(
+                'date', 'currency', 'value', 'observation_date', 'snapshot_id', 'status')}
+
+
 def sync(client):
     from django.db import transaction
     from rentals.models import FXSyncState
@@ -157,8 +163,8 @@ def sync(client):
         raise ValueError('Missing FX release metadata')
     if not isinstance(release['chain_hash'], str) or not release['chain_hash']:
         raise ValueError('Missing FX release chain hash')
-    if release['policy_id'] != _POLICY_ID or release['max_fiat_age_days'] != 14:
-        raise ValueError('Unsupported FX release policy')
+    if type(release['max_fiat_age_days']) is not int or release['max_fiat_age_days'] < 0:
+        raise ValueError('Invalid FX release ceiling')
     expected = release['coverage']
     latest = release['latest_completed_date']
     if not isinstance(expected, dict) or not expected or not isinstance(latest, str):
@@ -172,6 +178,11 @@ def sync(client):
         if release['seq'] == after_seq:
             if not state or state.release_id != release['id'] or state.history_epoch != release['history_epoch']:
                 raise ValueError('FX release sequence conflicts')
+            if _coverage(_stored_assignments()) != (expected, latest):
+                raise ValueError('Incomplete FX coverage')
+            state.coverage = expected
+            state.max_fiat_age_days = release['max_fiat_age_days']
+            state.save(update_fields=['coverage', 'max_fiat_age_days'])
             return state
         for item in _feed(client, release['id'], after_seq):
             FXAnchor.objects.filter(date=item['date']).delete()
@@ -180,8 +191,7 @@ def sync(client):
                          observation_date=item['observation_dates'].get(currency), snapshot_id=item['snapshot_id'], status=item['statuses'][currency])
                 for currency, value in item['values'].items()
             ])
-        staged = {(day.isoformat(), currency, value, observed.isoformat() if observed else None, snapshot, status)
-                  for day, currency, value, observed, snapshot, status in FXAnchor.objects.values_list('date', 'currency', 'value', 'observation_date', 'snapshot_id', 'status')}
+        staged = _stored_assignments()
         if _coverage(staged) != (expected, latest):
             raise ValueError('Incomplete FX coverage')
         if state and release['history_epoch'] != state.history_epoch:
@@ -190,5 +200,6 @@ def sync(client):
                 audited.update(_assignments(item))
             if _coverage(audited) != (expected, latest) or audited != staged:
                 raise ValueError('Incomplete FX correction')
-        state, _ = FXSyncState.objects.update_or_create(pk=1, defaults={'release_id': release['id'], 'seq': release['seq'], 'history_epoch': release['history_epoch']})
+        state, _ = FXSyncState.objects.update_or_create(pk=1, defaults={'release_id': release['id'], 'seq': release['seq'], 'history_epoch': release['history_epoch'],
+                                                                                     'coverage': expected, 'max_fiat_age_days': release['max_fiat_age_days']})
         return state

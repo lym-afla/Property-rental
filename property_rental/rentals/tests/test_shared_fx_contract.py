@@ -10,7 +10,7 @@ def test_vendored_resolver_hash():
     import hashlib
     from pathlib import Path
     from rentals.services import shared_fx_resolver
-    assert hashlib.sha256(Path(shared_fx_resolver.__file__).read_bytes()).hexdigest() == 'feee2baef84e3d44ba369facfd0a83142f1fb681905b44a55d014a37c419b86d'
+    assert hashlib.sha256(Path(shared_fx_resolver.__file__).read_bytes()).hexdigest() == '94671f1bbe570ec9f191d4c2f79a1eb75ee7716b107c57438dd98e94a2b52a5d'
 
 
 @pytest.mark.django_db

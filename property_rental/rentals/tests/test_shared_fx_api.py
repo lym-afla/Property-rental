@@ -113,7 +113,7 @@ def test_browse_empty_unsynced_and_missing_states(auth_client, mirror):
     missing = auth_client.get('/api/v1/fx/?base=GBP&quote=USD&start=2026-01-04&end=2026-01-04').json()
     assert isinstance(missing, dict)
     assert missing['results'][0]['rate'] is None
-    assert missing['results'][0]['error'] == 'missing_fx'
+    assert missing['results'][0]['error'] == 'unsupported_currency'
     FXAnchor.objects.all().delete()
     assert auth_client.get('/api/v1/fx/').json()['status'] == 'empty'
     FXSyncState.objects.all().delete()

@@ -136,7 +136,7 @@ def test_vendored_golden_fixture_hashes():
     import hashlib
     from pathlib import Path
     directory = Path(__file__).parent / 'fixtures' / 'shared_fx'
-    assert hashlib.sha256((directory / 'golden-rates.json').read_bytes()).hexdigest() == 'e676abcb9f3365071b452672ea6ec502fdbf60f2783e932b3ef925f9e88d951c'
+    assert hashlib.sha256((directory / 'golden-rates.json').read_bytes()).hexdigest() == '4a173c32a06eaa10ce4c9072d47438b1d98a60413f5fc2140dbf2ae5962c9445'
     assert hashlib.sha256((directory / 'golden-api.json').read_bytes()).hexdigest() == '8399120d9d214fad21d11438296b22870c5b43be7afce5bfd480bd065d99938f'
     assert hashlib.sha256((directory / 'boundary-anchors.json').read_bytes()).hexdigest() == '3eb8a234ae378771eae3ae85071e06d0367020f5d21d5e83b9f98cb6e39a7fef'
 
@@ -207,7 +207,7 @@ def test_property_statistics_retain_captured_release(auth_client, sample_propert
 def test_golden_api_rates_using_independently_observed_anchors():
     import json
     from pathlib import Path
-    from rentals.models import FXAnchor
+    from rentals.models import FXAnchor, FXSyncState
     from rentals.services.fx import get_rate, PreloadedConverter
 
     folder = Path(__file__).parent / 'fixtures/shared_fx'
@@ -215,6 +215,9 @@ def test_golden_api_rates_using_independently_observed_anchors():
     anchors = json.loads((folder / 'boundary-anchors.json').read_text())['dates']
     for anchor_date, snapshot in anchors.items():
         seed_anchors(anchor_date, snapshot['values'], snapshot['observation_dates'], 'boundary')
+    FXSyncState.objects.create(pk=1, release_id='boundary', seq=1, history_epoch=1,
+                               coverage={currency: [{'start': '2008-01-01', 'end': '2008-01-01'}]
+                                         for currency in ['USD','RUB','EUR','GBP','CHF','PLN','CNY','USDT','USDC']})
     for case in json.loads((folder / 'golden-api.json').read_text())['cases']:
         query = case['query']
         as_of = date.fromisoformat(query['date'])
@@ -254,13 +257,15 @@ def test_all_golden_rate_outcomes(monkeypatch):
     import json
     from datetime import datetime
     from pathlib import Path
-    from rentals.models import FXAnchor
+    from rentals.models import FXAnchor, FXSyncState
     from rentals.services import fx_mirror
     from rentals.services.fx import get_rate, MissingFXRate
 
     cases = json.loads((Path(__file__).parent / 'fixtures/shared_fx/golden-rates.json').read_text())['cases']
     for case in cases:
         FXAnchor.objects.all().delete()
+        FXSyncState.objects.update_or_create(pk=1, defaults={'release_id': 'golden', 'seq': 1, 'history_epoch': 1,
+                                                          'coverage': case.get('release_coverage', {}), 'max_fiat_age_days': 14})
         today = date.fromisoformat(case['business_today'])
         class Clock(datetime):
             @classmethod
@@ -269,6 +274,7 @@ def test_all_golden_rate_outcomes(monkeypatch):
         monkeypatch.setattr(fx_mirror, 'datetime', Clock)
         requested = date.fromisoformat(case['requested_date'])
         latest = date.fromisoformat(case['latest_completed_date'])
+        FXAnchor.objects.create(date=latest, currency='TEST', value='1', snapshot_id='latest')
         for day in {latest, min(requested, latest)}:
             for currency, value in case['anchor_values'].items():
                 FXAnchor.objects.create(date=day, currency=currency, value=value, observation_date=case['observation_dates'].get(currency), snapshot_id='golden', status=case.get('statuses', {}).get(currency, 'completed'))
@@ -506,11 +512,10 @@ def test_sync_omitted_correction_rolls_back_state_and_anchors():
 
 @pytest.mark.django_db
 @pytest.mark.parametrize('bad_release,bad_item', [
-    ({'policy_id': 'future-policy'}, {}), ({'max_fiat_age_days': 30}, {}),
-    ({}, {'policy': 'future-policy'}), ({}, {'policy_hash': '0' * 64}),
+    ({'max_fiat_age_days': -1}, {}), ({'max_fiat_age_days': True}, {}),
     ({'coverage': None}, {}), ({'latest_completed_date': None}, {}),
 ])
-def test_sync_rejects_unsupported_policy_and_incomplete_metadata(bad_release, bad_item):
+def test_sync_rejects_invalid_ceiling_hash_and_incomplete_metadata(bad_release, bad_item):
     from rentals.models import FXSyncState
     from rentals.services.fx_mirror import sync
     state = FXSyncState.objects.create(pk=1, release_id='old', seq=1, history_epoch=1)
@@ -619,9 +624,11 @@ def test_correction_audit_does_not_use_staged_rows_to_mask_missing_audit_data():
 @override_settings(FX_BACKEND='mirror')
 @pytest.mark.parametrize('currency', ['USD', 'RUB', 'EUR', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC'])
 def test_all_mirror_currencies_start_coverage_in_2008(currency):
-    from rentals.models import FXAnchor
+    from rentals.models import FXAnchor, FXSyncState
     from rentals.services.fx import get_rate, MissingFXRate
-    FXAnchor.objects.create(date=date(2007, 12, 31), currency=currency, value='1', snapshot_id='before')
+    FXSyncState.objects.create(pk=1, release_id='first', seq=1, history_epoch=1,
+                               coverage={currency: [{'start': '2008-01-01', 'end': '2008-01-01'}]})
+    FXAnchor.objects.create(date=date(2008, 1, 1), currency='TEST', value='1', snapshot_id='latest')
     with pytest.raises(MissingFXRate) as error:
         get_rate(currency, currency, date(2007, 12, 31))
     assert error.value.code == 'before_coverage'

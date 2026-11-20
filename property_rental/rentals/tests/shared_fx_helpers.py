@@ -1,3 +1,5 @@
+INITIAL_POLICY_HASH = 'dcec25ddeff179e638416303494a030795f7d99883a646634894d1867c2e3aae'
+
 from rentals.models import FXAnchor
 
 

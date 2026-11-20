@@ -6,7 +6,6 @@ from django.core.management import call_command
 import pytest
 
 from rentals.models import FX, FXAnchor, FXSyncState
-from rentals.services.fx_mirror import _POLICY_HASH
 from rentals.tests.factories import TransactionFactory
 
 
@@ -31,7 +30,7 @@ def test_comparison_exports_actual_fix_time_inputs_and_explicit_missing_evidence
     assert record['multiplier_difference_cause'] == 'unseparated_reference_policy_and_fix_time'
     assert record['fix_time_inputs'] == {
         'status': 'unavailable', 'reason': 'fixing_time_aligned_reference_unavailable',
-        'policy_hash': _POLICY_HASH, 'effective_date': '2026-01-06',
+        'release_id': 'release', 'effective_date': '2026-01-06',
         'anchors': {
             'EUR': {'value': '0.9', 'observation_date': '2026-01-05', 'snapshot_id': 'snapshot', 'status': 'carried'},
             'RUB': {'value': '95', 'observation_date': '2026-01-06', 'snapshot_id': 'snapshot', 'status': 'completed'},

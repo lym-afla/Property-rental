@@ -9,22 +9,12 @@ from decimal import (
     Context, Decimal, DecimalException, DivisionByZero, InvalidOperation,
     Overflow, Underflow, localcontext,
 )
-from types import MappingProxyType
 
 
 class ContractError(ValueError):
     def __init__(self, code, message):
         self.code = code
         super().__init__(message)
-
-
-@dataclass(frozen=True)
-class PathRule:
-    parent: str
-    coverage_start: date = date(2008, 1, 1)
-    coverage_end: date | None = None
-    excluded_intervals: tuple = ()
-    observed: bool = True
 
 
 @dataclass(frozen=True)
@@ -41,13 +31,6 @@ class Resolution:
     provisional: bool
     cacheable: bool
     source_date: date
-
-
-INITIAL_PATH_RULES = MappingProxyType({
-    currency: PathRule('USD' if currency in {'RUB', 'EUR', 'USDT', 'USDC'} else 'EUR',
-                       observed=currency not in {'USDT', 'USDC'})
-    for currency in ('RUB', 'EUR', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC')
-})
 
 
 def decimal_context(significant_digits=38, fractional_digits=18):
@@ -99,31 +82,20 @@ def select_date(requested_date, latest_completed_date):
     return Selection(min(requested_date, latest_completed_date), requested_date > latest_completed_date)
 
 
-def require_applicable(currency, day, *, path_rules=INITIAL_PATH_RULES, root='USD', coverage_start=date(2008, 1, 1)):
-    if type(day) is not date:
-        raise ContractError('invalid_date', 'Valuation date must be a calendar date')
-    if currency != root and currency not in path_rules:
+def require_anchor(currency, values, day, coverage):
+    if currency in values:
+        return
+    intervals = coverage.get(currency, ())
+    if not intervals:
         raise ContractError('unsupported_currency', f'Unsupported currency {currency}')
-    if day < coverage_start:
-        raise ContractError('before_coverage', f'{currency} predates policy coverage')
-    seen, observed = set(), False
-    while currency != root:
-        if currency in seen or currency not in path_rules:
-            raise ContractError('invalid_policy', 'The tree must be connected and acyclic')
-        seen.add(currency)
-        rule = path_rules[currency]
-        if day < rule.coverage_start:
-            raise ContractError('before_coverage', f'{currency} predates path coverage')
-        if (rule.coverage_end is not None and day > rule.coverage_end) or any(start <= day <= end for start, end in rule.excluded_intervals):
-            raise ContractError('outside_applicability', f'{currency} is outside path applicability')
-        observed |= rule.observed
-        currency = rule.parent
-    return observed
+    if day < min(_day(interval['start']) for interval in intervals):
+        raise ContractError('before_coverage', f'{currency} predates release coverage')
+    raise ContractError('outside_applicability', f'{currency} is outside release applicability')
 
 
 def resolve(values, base, quote, requested_date, *, latest_completed_date, business_today,
-            observation_dates, statuses=None, max_fiat_age_days=14, path_rules=INITIAL_PATH_RULES,
-            root='USD', coverage_start=date(2008, 1, 1), significant_digits=38, fractional_digits=18):
+            observation_dates, coverage, max_fiat_age_days, statuses=None,
+            significant_digits=38, fractional_digits=18):
     selection = select_date(requested_date, latest_completed_date)
     if type(business_today) is not date:
         raise ContractError('invalid_date', 'Business date must be a calendar date')
@@ -131,27 +103,23 @@ def resolve(values, base, quote, requested_date, *, latest_completed_date, busin
         raise ContractError('invalid_completed_date', 'Latest completed day must precede business today')
     if requested_date > business_today:
         raise ContractError('future_date', 'Valuation date is after business today')
-    applicability = dict(path_rules=path_rules, root=root, coverage_start=coverage_start)
-    for currency in (base, quote):
-        require_applicable(currency, requested_date, **applicability)
     if latest_completed_date is None:
         raise ContractError('missing_rate', 'FX mirror has no release')
     effective = selection.effective_date
+    for currency in (base, quote):
+        require_anchor(currency, values, effective, coverage)
     held = any((statuses or {}).get(currency) == 'held' for currency in (base, quote))
     provisional = selection.provisional or held
     for currency in (base, quote):
-        observed_path = require_applicable(currency, effective, **applicability)
         observed = observation_dates.get(currency)
         if observed is not None:
             observation_date(observed, effective)
-        if not provisional or base == quote or not observed_path:
+        if not provisional or base == quote or observed is None:
             continue
-        if observed is None:
-            raise ContractError('missing_rate', f'Missing observation date for {currency}')
         if (requested_date - observed).days > max_fiat_age_days:
             raise ContractError('stale', f'{currency} path observation exceeds the provisional ceiling')
     rate = multiplier(values, base, quote, significant_digits=significant_digits, fractional_digits=fractional_digits)
-    source = min((observation_dates[c] for c in (base, quote) if c in observation_dates), default=effective) if held else effective
+    source = min((observation_dates[c] for c in (base, quote) if observation_dates.get(c) is not None), default=effective) if held else effective
     return Resolution(rate, requested_date, effective, provisional, not provisional, source)
 
 

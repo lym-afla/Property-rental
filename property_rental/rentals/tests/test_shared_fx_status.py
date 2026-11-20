@@ -1,3 +1,4 @@
+from rentals.tests.shared_fx_helpers import INITIAL_POLICY_HASH as _POLICY_HASH
 from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
@@ -8,7 +9,7 @@ from django.test import override_settings
 
 from rentals.models import FXAnchor, FXSyncState
 from rentals.services.fx import get_rate, MissingFXRate, PreloadedConverter
-from rentals.services.fx_mirror import report_provisional, sync, _POLICY_HASH
+from rentals.services.fx_mirror import report_provisional, sync
 
 pytestmark = pytest.mark.django_db
 

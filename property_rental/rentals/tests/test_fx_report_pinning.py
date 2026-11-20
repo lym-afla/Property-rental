@@ -1,3 +1,4 @@
+from rentals.tests.shared_fx_helpers import INITIAL_POLICY_HASH as _POLICY_HASH
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
@@ -13,7 +14,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from rentals.api.analytics_views import _PortfolioAnalyticsView
 from rentals.models import FXAnchor, FXSyncState
 from rentals.services.fx import get_rate, PreloadedConverter
-from rentals.services.fx_mirror import sync, _POLICY_HASH
+from rentals.services.fx_mirror import sync
 
 
 def seed():
@@ -135,3 +136,89 @@ def test_standalone_resolution_captures_only_requested_and_latest_pair_anchors(m
     assert len(captured) == 1
     assert set(captured[0].anchors) == {first + timedelta(days=10), first + timedelta(days=99)}
     assert sum(len(anchors) for anchors in captured[0].anchors.values()) == 4
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize('entry_point', ['analytics', 'property'])
+@override_settings(FX_BACKEND='mirror')
+def test_postgresql_report_actually_uses_repeatable_read(landlord_user, entry_point):
+    from django.db import connection
+    from psycopg import IsolationLevel
+    from rentals.api.views import _consistent_fx_report
+
+    if connection.vendor != 'postgresql':
+        pytest.skip('PostgreSQL report isolation contract')
+    seed()
+    connection.ensure_connection()
+    original = connection.connection.isolation_level
+    connection.connection.isolation_level = IsolationLevel.READ_COMMITTED
+    observed = {}
+
+    def calculate():
+        with connection.cursor() as cursor:
+            cursor.execute('SHOW transaction_isolation')
+            observed['isolation'] = cursor.fetchone()[0]
+        observed['before'] = FXAnchor.objects.get(currency='EUR').value
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            assert executor.submit(promote_on_separate_connection).result(timeout=10) == 2
+        observed['after'] = FXAnchor.objects.get(currency='EUR').value
+        observed['release'] = FXSyncState.objects.get(pk=1).release_id
+        return Response({'ok': True})
+
+    class AnalyticsView(_PortfolioAnalyticsView):
+        def get(self, request):
+            return calculate()
+
+    class PropertyView:
+        @_consistent_fx_report
+        def get(self, request):
+            return calculate()
+
+    try:
+        request = APIRequestFactory().get('/')
+        force_authenticate(request, user=landlord_user)
+        response = (AnalyticsView.as_view()(request) if entry_point == 'analytics'
+                    else PropertyView().get(request))
+        assert response.status_code == 200
+        assert observed == {'isolation': 'repeatable read', 'before': '0.9',
+                            'after': '0.9', 'release': 'old'}
+        assert FXSyncState.objects.get(pk=1).release_id == 'new'
+        with connection.cursor() as cursor:
+            cursor.execute('SHOW transaction_isolation')
+            assert cursor.fetchone()[0] == 'read committed'
+    finally:
+        connection.connection.isolation_level = original
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ', 'SERIALIZABLE'])
+def test_postgresql_report_checks_existing_transaction_isolation(isolation):
+    from django.db import connection, transaction
+    from rentals.services.fx_report_transaction import repeatable_read
+
+    if connection.vendor != 'postgresql':
+        pytest.skip('PostgreSQL report isolation contract')
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute(f'SET TRANSACTION ISOLATION LEVEL {isolation}')
+            cursor.execute('SELECT 1')
+        if isolation == 'READ COMMITTED':
+            with pytest.raises(RuntimeError, match='require REPEATABLE READ'):
+                with repeatable_read():
+                    pytest.fail('A report entered a READ COMMITTED transaction')
+        else:
+            with repeatable_read(), connection.cursor() as cursor:
+                cursor.execute('SHOW transaction_isolation')
+                assert cursor.fetchone()[0] == isolation.lower()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sqlite_report_keeps_existing_transaction_behavior():
+    from django.db import connection
+    from rentals.services.fx_report_transaction import repeatable_read
+
+    if connection.vendor != 'sqlite':
+        pytest.skip('SQLite report transaction contract')
+    assert not connection.in_atomic_block
+    with repeatable_read():
+        assert not connection.in_atomic_block

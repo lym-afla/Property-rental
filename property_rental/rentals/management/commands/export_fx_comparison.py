@@ -15,7 +15,7 @@ from rentals.analytics.tenant import _due_dates, _effective_rate
 from rentals.constants import CURRENCY_CHOICES
 from rentals.models import DepositMovement, FXAnchor, FXSyncState, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.fx import get_rate
-from rentals.services.fx_mirror import _POLICY_HASH, pinned
+from rentals.services.fx_mirror import pinned
 from rentals.services.fx_context import calculation_context, backend
 from rentals.services.fx_comparison import build_reports, report_scope, FAMILIES
 
@@ -46,7 +46,7 @@ def fix_time_inputs(base, quote, effective_date):
                     'snapshot_id': anchor.snapshot_id, 'status': anchor.status}
                    for anchor in FXAnchor.objects.filter(date=effective_date, currency__in=[base, quote])}
     return {'status': 'unavailable', 'reason': 'fixing_time_aligned_reference_unavailable',
-            'policy_hash': _POLICY_HASH,
+            'release_id': getattr(FXSyncState.objects.filter(pk=1).first(), 'release_id', None),
             'effective_date': effective_date.isoformat() if effective_date else None, 'anchors': anchors,
             'missing': ['cbr_fixing_timestamp', 'non_usd_usd_quote_at_cbr_fixing_time']}
 

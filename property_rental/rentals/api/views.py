@@ -157,7 +157,9 @@ def _consistent_fx_report(fn):
         from rentals.services.fx import MissingFXRate
         from rentals.services.fx_mirror import pinned, report_provisional
 
-        with pinned() as snapshot:
+        from rentals.services.fx_report_transaction import repeatable_read
+
+        with repeatable_read(), pinned() as snapshot:
             provisional = set()
             token = report_provisional.set(provisional)
             try:

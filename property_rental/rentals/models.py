@@ -517,6 +517,8 @@ class FX(models.Model):
 
 
 class FXSyncState(models.Model):
+    coverage = models.JSONField(default=dict)
+    max_fiat_age_days = models.PositiveIntegerField(default=14)
     release_id = models.CharField(max_length=64)
     seq = models.PositiveBigIntegerField()
     history_epoch = models.PositiveBigIntegerField()
