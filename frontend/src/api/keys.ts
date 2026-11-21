@@ -9,6 +9,8 @@
 // deep-compare keys across renders (no inline `[]` literals that would break
 // referential equality).
 
+import type { FXBrowseParams } from '@/types/fx'
+
 type TransactionFilters = {
   property?: number
   tenant?: number
@@ -97,6 +99,7 @@ export const queryKeys = {
 
   fx: {
     all: ['fx'] as const,
+    browse: (params: FXBrowseParams, continuation: string | null, session: string) => ['fx', params, continuation, session] as const,
     detail: (id: number) => ['fx', 'detail', id] as const,
   },
 

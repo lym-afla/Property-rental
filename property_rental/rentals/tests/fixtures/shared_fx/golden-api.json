@@ -1,0 +1,361 @@
+{
+  "description": "Offline CBR R01235 and ECB CSV boundary rates. Requests contain currency/date data only; supply the seeded explicit release ID. Inverted ECB USD/EUR uses precision 38 before deriving anchors; all multipliers ROUND_HALF_UP to 18 places.",
+  "cases": [
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "1998-01-01"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "1998-01-01"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "1999-01-04"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "1999-01-04"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "1999-01-04"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "1999-01-04"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "1999-01-04"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2000-01-12"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2000-01-12"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2000-01-12"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2000-01-12"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2000-01-12"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2000-01-13"
+      },
+      "error": "before_coverage"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-27"
+      },
+      "multiplier": "99.229500000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.010077648279997380"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.958313368471490177"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-27"
+      },
+      "multiplier": "1.043500000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-27"
+      },
+      "multiplier": "124.607070266432405112"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-27"
+      },
+      "multiplier": "0.109096876682114771"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-28"
+      },
+      "multiplier": "100.528100000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.009947467424531052"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.958313368471490177"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-28"
+      },
+      "multiplier": "1.043500000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-28"
+      },
+      "multiplier": "126.237782317263953404"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-28"
+      },
+      "multiplier": "0.109096876682114771"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-30"
+      },
+      "multiplier": "101.679700000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.009834804784042439"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.957487552661815396"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-30"
+      },
+      "multiplier": "1.044400000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-30"
+      },
+      "multiplier": "128.022035780590717300"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-30"
+      },
+      "multiplier": "0.108809717448907312"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "RUB",
+        "date": "2024-12-31"
+      },
+      "multiplier": "101.679700000000000000"
+    },
+    {
+      "query": {
+        "base": "RUB",
+        "quote": "USD",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.009834804784042439"
+    },
+    {
+      "query": {
+        "base": "USD",
+        "quote": "EUR",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.962556550197324093"
+    },
+    {
+      "query": {
+        "base": "EUR",
+        "quote": "USD",
+        "date": "2024-12-31"
+      },
+      "multiplier": "1.038900000000000000"
+    },
+    {
+      "query": {
+        "base": "GBP",
+        "quote": "RUB",
+        "date": "2024-12-31"
+      },
+      "multiplier": "127.396995019175571046"
+    },
+    {
+      "query": {
+        "base": "CNY",
+        "quote": "GBP",
+        "date": "2024-12-31"
+      },
+      "multiplier": "0.109342898210541585"
+    }
+  ],
+  "change_item_contract": {
+    "description": "Snapshot hash_version 2 covers statuses; legacy version 1 hashes omit statuses and statuses are derived from observation dates. Snapshot detail adds observations.",
+    "fields": [
+      "date",
+      "policy_id",
+      "policy_hash",
+      "values",
+      "observation_ids",
+      "coverage",
+      "observation_dates",
+      "snapshot_id",
+      "content_hash",
+      "sources",
+      "statuses",
+      "hash_version"
+    ],
+    "detail_only_fields": [
+      "observations"
+    ]
+  }
+}

@@ -230,3 +230,11 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# Shared FX reads are opt-in until the mirror cutover.
+FX_BACKEND = os.environ.get('FX_BACKEND', 'legacy')
+if FX_BACKEND not in {'legacy', 'mirror'}:
+    raise ValueError('FX_BACKEND must be legacy or mirror')
+FX_BASE_URL = os.environ.get('FX_BASE_URL', '')
+FX_TOKEN = os.environ.get('FX_TOKEN', '')
+BUSINESS_TIME_ZONE = os.environ.get('BUSINESS_TIME_ZONE', 'Europe/Moscow')

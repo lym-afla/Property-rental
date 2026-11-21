@@ -82,6 +82,8 @@ def test_product_invalid_filters(auth_client, field, value):
 
 
 def test_product_edits_preserve_financial_outputs(auth_client, landlord_user, sample_property):
+    from rentals.tests.shared_fx_helpers import seed_anchors
+    seed_anchors(date(2026, 1, 10), {"USD": "1"})
     from rentals.analytics.cash_flow import portfolio_cash_flow
     from rentals.analytics.pnl import profit_and_loss
     from rentals.services.loans import reconcile_loan

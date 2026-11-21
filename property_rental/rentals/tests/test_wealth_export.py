@@ -135,6 +135,9 @@ def test_loan_history_and_payments_export_with_real_timestamps(source, tmp_path)
 
 
 def test_deposit_application_offsets_cash_and_retains_income_once(source):
+    from rentals.tests.shared_fx_helpers import seed_anchors
+    for day in (date(2024, 1, 1), date(2024, 1, 10), date(2024, 2, 1), date(2024, 3, 1)):
+        seed_anchors(day, {"GBP": "0.8"}, observation_dates={"GBP": day})
     from rentals.services.deposits import create_movement
     _, prop, _ = source
     tenant = TenantFactory(property=prop, first_name="PRIVATE TENANT", lease_start=date(2024, 1, 1), payday=1)

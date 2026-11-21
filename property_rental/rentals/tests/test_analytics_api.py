@@ -16,6 +16,27 @@ from rentals.tests.factories import (
 )
 
 
+
+@pytest.fixture
+def no_fx_mirror():
+    """Leave the mirror empty for explicit missing-rate tests."""
+
+
+@pytest.fixture(autouse=True)
+def seed_native_mirror(request, settings):
+    if settings.FX_BACKEND != 'mirror' or 'no_fx_mirror' in request.fixturenames:
+        return
+    request.getfixturevalue('db')
+    from datetime import timedelta
+    from rentals.models import FXAnchor, FXSyncState
+
+    FXSyncState.objects.create(pk=1, release_id='api-test', seq=1, history_epoch=1)
+    first = date(2026, 1, 1)
+    FXAnchor.objects.bulk_create([
+        FXAnchor(date=first + timedelta(days=day), currency=currency, value='1', snapshot_id='api-test')
+        for day in range(31) for currency in ('USD', 'EUR')
+    ])
+
 def valid_yield_row():
     return {
         "property_id": 1,
@@ -32,7 +53,7 @@ def valid_yield_row():
     }
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_tenant_rent_performance_api_owns_native_currency_and_rejects_override(
     auth_client, landlord_user
 ):
@@ -73,7 +94,7 @@ def test_tenant_rent_performance_api_owns_native_currency_and_rejects_override(
     assert "currency" in override.json()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_tenant_rent_performance_api_rejects_missing_property_currency(
     auth_client, landlord_user
 ):
@@ -97,7 +118,7 @@ def test_tenant_rent_performance_api_rejects_missing_property_currency(
     assert response.json()["code"] == "missing_currency"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("default_currency", [None, ""])
 def test_tenant_rent_performance_api_does_not_require_user_reporting_currency(
     auth_client, landlord_user, default_currency
@@ -176,7 +197,7 @@ def test_yield_serializer_accepts_explicit_equity_denominator_statuses(
     assert serializer.is_valid(), serializer.errors
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cash_flow_requires_authentication(sample_property):
     """Removing the auth gate would expose portfolio financial data anonymously."""
     response = Client().get("/api/v1/analytics/portfolio/cash-flow/")
@@ -184,7 +205,7 @@ def test_cash_flow_requires_authentication(sample_property):
     assert response.status_code == 403
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cash_flow_scopes_transactions_to_requesting_landlord(
     auth_client, sample_property, other_landlord_user
 ):
@@ -214,7 +235,7 @@ def test_cash_flow_scopes_transactions_to_requesting_landlord(
     assert response.json()["points"][0]["rent"] == 2000.0
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cash_flow_rejects_non_iso_date(auth_client):
     """Relaxing date parsing would make URL filter boundaries ambiguous."""
     response = auth_client.get(
@@ -226,7 +247,7 @@ def test_cash_flow_rejects_non_iso_date(auth_client):
     assert "start" in response.json()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_cash_flow_emits_explicit_series_kinds(auth_client, sample_property):
     """Omitting kinds would force the frontend to reimplement category classification."""
     TransactionFactory(
@@ -258,7 +279,7 @@ def test_cash_flow_emits_explicit_series_kinds(auth_client, sample_property):
     assert kinds["net_income"] == "net"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_expense_drivers_emits_only_expense_series(auth_client, sample_property):
     """Including income in expense drivers would hide the real cost drivers."""
     TransactionFactory(
@@ -287,7 +308,7 @@ def test_expense_drivers_emits_only_expense_series(auth_client, sample_property)
     ]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_property_breakdown_api_exposes_equity_by_property(auth_client, sample_property):
     """Keeping the currency route or omitting equity would break the dashboard contract."""
     PropertyCapitalStructureFactory(
@@ -332,7 +353,7 @@ def test_property_breakdown_api_removes_currency_exposure_route(auth_client):
     assert response.status_code == 404
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(
     ("path", "extra_params"),
     [
@@ -348,7 +369,7 @@ def test_property_breakdown_api_removes_currency_exposure_route(auth_client):
     ],
 )
 def test_portfolio_endpoints_return_typed_non_500_when_fx_is_missing(
-    auth_client, landlord_user, path, extra_params
+    auth_client, landlord_user, path, extra_params, no_fx_mirror
 ):
     """An absent conversion rate must be actionable API data, never a server error."""
     property_eur = PropertyFactory(
@@ -390,7 +411,7 @@ def test_portfolio_endpoints_return_typed_non_500_when_fx_is_missing(
     assert response.json()["code"] == "missing_fx"
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_profit_loss_requires_authentication():
     """Removing the auth gate would expose a complete financial statement."""
     response = Client().get("/api/v1/analytics/portfolio/profit-loss/")
@@ -398,7 +419,7 @@ def test_profit_loss_requires_authentication():
     assert response.status_code == 403
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_profit_loss_endpoint_returns_typed_statement_and_excludes_foreign_property(
     auth_client, landlord_user, other_landlord_user
 ):
@@ -448,7 +469,7 @@ def test_profit_loss_endpoint_returns_typed_statement_and_excludes_foreign_prope
     }
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(
     ("params", "field"),
     [
@@ -468,7 +489,7 @@ def test_profit_loss_rejects_invalid_filters(auth_client, params, field):
     assert field in response.json()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_profit_loss_rejects_filters_outside_its_contract(auth_client):
     """Accepting chart filters would imply unsupported P&L period semantics."""
     response = auth_client.get(

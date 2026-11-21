@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0 — 2026-11-21
+
+- Add an opt-in shared FX mirror and sync command for rental calculations.
+- Browse shared reference rates by pair and date range with pinned pagination and read-only provenance details.
+- Preserve typed incomplete tenant analytics and document named mirror financial differences.
+- Export private, provenance-pinned legacy/mirror report comparisons with deterministic horizons, counterfactual attribution and read-only snapshots.
+- Include original lease calendars and deposit, capital and rent facts to verify complete dated currency-pair coverage.
+
 ## 2.5.1 — 2026-11-17
 
 - Show the mortgage lender and product active on each valuation date, with explicit missing-history and retry states.
