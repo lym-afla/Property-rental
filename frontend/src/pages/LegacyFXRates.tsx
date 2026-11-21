@@ -1,0 +1,193 @@
+import { useMemo, useState } from 'react'
+
+import { EmptyState } from '@/components/states/EmptyState'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { formatDate } from '@/lib/format'
+import type { FX } from '@/types/fx'
+
+// One row per currency pair: the most recent snapshot for that pair plus
+// the inverse rate (1 / rate) for at-a-glance conversion in both directions.
+// `id` is a synthetic 1-based index so the row has a stable React key.
+type LatestRate = {
+  id: number
+  pair: string
+  from_currency: string
+  to_currency: string
+  rate: string
+  date: string
+  inverse: string
+}
+
+// Collapse the raw FX history to the latest snapshot per currency pair,
+// optionally restricted to snapshots observed at or before `asOf`
+// (ISO `YYYY-MM-DD`). Dates are ISO `YYYY-MM-DD` strings, so lexicographic
+// comparison matches chronological order — no Date parsing needed.
+function latestRatePerPair(rows: FX[], asOf?: string): LatestRate[] {
+  const latest = new Map<string, FX>()
+  for (const row of rows) {
+    if (asOf && row.date > asOf) continue
+    const key = `${row.from_currency}/${row.to_currency}`
+    const prev = latest.get(key)
+    if (!prev || row.date >= prev.date) {
+      latest.set(key, row)
+    }
+  }
+  return Array.from(latest.entries())
+    .map(([key, row], idx) => {
+      const rateNum = Number(row.rate)
+      const inverse =
+        Number.isFinite(rateNum) && rateNum !== 0
+          ? (1 / rateNum).toFixed(4)
+          : '—'
+      return {
+        id: idx + 1,
+        pair: key,
+        from_currency: row.from_currency,
+        to_currency: row.to_currency,
+        rate: row.rate,
+        date: row.date,
+        inverse,
+      }
+    })
+    .sort((a, b) => a.pair.localeCompare(b.pair))
+}
+
+export function LegacyFXRates({ data }: { data: FX[] }) {
+
+  // Task 11: optional "as of" date. Empty string means "latest available".
+  // Controlled input lets the user pick a past date to see historical
+  // latest-per-pair rates; clearing the input reverts to today's view.
+  const [asOf, setAsOf] = useState('')
+
+  const summary = useMemo(
+    () => (data ? latestRatePerPair(data, asOf || undefined) : []),
+    [data, asOf],
+  )
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="space-y-4">
+        <EmptyState
+          title="No FX rates yet"
+          description="No scheduled refresh has populated FX rates yet. Run the refresh_fx management command to fetch rates."
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">FX Rates</h1>
+          <p className="text-sm text-muted-foreground">
+            {asOf
+              ? `Latest rate per currency pair as of ${formatDate(asOf)} (${summary.length} ${
+                  summary.length === 1 ? 'pair' : 'pairs'
+                }).`
+              : `Latest rate per currency pair (${summary.length} ${
+                  summary.length === 1 ? 'pair' : 'pairs'
+                }).`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            FX data is refreshed by the scheduled refresh_fx command; this
+            page does not call external providers.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Date scope: filters the history to rates observed at or
+              before the chosen date, then takes the latest per pair.
+              Native <input type="date"> is enough — no need for a full
+              calendar popover for a single-date picker. */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <label htmlFor="fx-as-of" className="whitespace-nowrap">
+              As of
+            </label>
+            <Input
+              id="fx-as-of"
+              type="date"
+              value={asOf}
+              onChange={(e) => setAsOf(e.target.value)}
+              className="h-8 w-[150px]"
+            />
+            {asOf && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAsOf('')}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Plain <Table> instead of DataTable so there are no pagination
+          controls — the summary is short (one row per pair) and the spec
+          asks for pagination to be removed. */}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Pair</TableHead>
+              <TableHead>Rate</TableHead>
+              <TableHead>Inverse</TableHead>
+              <TableHead>Date</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {summary.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={4}
+                  className="text-sm text-muted-foreground"
+                >
+                  No rates on or before {formatDate(asOf)}.
+                </TableCell>
+              </TableRow>
+            ) : (
+              summary.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>
+                    <span className="font-medium">
+                      {row.from_currency} → {row.to_currency}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {/* The serializer returns the rate as a stringified
+                        decimal; display it verbatim (no rounding) so users
+                        see exactly what the backend stored. The rate lives
+                        in its own <span> so screen readers and tests can
+                        target the numeric value directly. */}
+                    <span className="font-mono">
+                      1 {row.from_currency} ={' '}
+                      <span data-testid="rate-value">{row.rate}</span>{' '}
+                      {row.to_currency}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-mono text-muted-foreground">
+                      1 {row.to_currency} = {row.inverse}{' '}
+                      {row.from_currency}
+                    </span>
+                  </TableCell>
+                  <TableCell>{formatDate(row.date)}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}

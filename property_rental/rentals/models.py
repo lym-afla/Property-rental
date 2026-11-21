@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.db import models, transaction
+from rentals.services.fx_context import behavior as fx_behavior
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -400,7 +401,11 @@ class Tenant(TimestampedModel):
         # ``transaction.currency == target_currency``; the rent_total contract
         # is property-level, not per-row, and the silent fallback to face value
         # is a known latent quirk deliberately preserved here).
-        if target_currency == None or property.currency == target_currency:
+        from django.conf import settings
+        if fx_behavior("rent_total_face_value"):
+            from rentals.services.financials import convert_transactions
+            total_rent = convert_transactions(transactions.all(), target_currency or property.currency, end_date)
+        elif target_currency is None or property.currency == target_currency:
             total_rent = transactions.aggregate(models.Sum('amount'))['amount__sum'] or 0
         else:
             # Cross-currency path: delegate the FX loop to the canonical
@@ -668,3 +673,24 @@ class FX(models.Model):
         # the output values byte-for-byte; the cache is transparent.
         from rentals.services.fx import get_rate as _get_rate
         return _get_rate(from_currency, to_currency, as_of)
+
+
+class FXSyncState(models.Model):
+    coverage = models.JSONField(default=dict)
+    max_fiat_age_days = models.PositiveIntegerField(default=14)
+    release_id = models.CharField(max_length=64)
+    seq = models.PositiveBigIntegerField()
+    history_epoch = models.PositiveBigIntegerField()
+    synced_at = models.DateTimeField(auto_now=True)
+
+
+class FXAnchor(models.Model):
+    status = models.CharField(max_length=9, choices=[('completed', 'Completed'), ('carried', 'Carried'), ('held', 'Held')], default='completed')
+    date = models.DateField()
+    currency = models.CharField(max_length=8)
+    value = models.TextField()
+    observation_date = models.DateField(null=True)
+    snapshot_id = models.CharField(max_length=64)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['date', 'currency'], name='unique_shared_fx_anchor')]

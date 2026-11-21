@@ -11,6 +11,7 @@ from rentals.financial_semantics import normalize_transaction_amount, revenue_co
 from rentals.models import Loan, Transaction
 from rentals.services.financials import pnl_calc
 from rentals.tests.factories import TenantFactory, TransactionFactory
+from rentals.tests.shared_fx_helpers import seed_anchors
 
 pytestmark = pytest.mark.django_db
 END = date(2026, 1, 31)
@@ -25,6 +26,8 @@ def filters_for():
 
 @pytest.fixture
 def repayment(sample_property):
+    for day in (date(2026, 1, 5), date(2026, 1, 10), date(2026, 2, 10)):
+        seed_anchors(day, {"USD": "1"})
     loan = Loan.objects.create(
         property=sample_property, lender="Bank", currency="USD", start_date=date(2026, 1, 1),
     )

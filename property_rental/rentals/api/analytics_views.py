@@ -1,6 +1,7 @@
 """Authenticated HTTP endpoints for portfolio analytics responses."""
 
 from dataclasses import dataclass
+from rentals.services.fx_context import backend as fx_backend
 from datetime import date
 
 from rest_framework import serializers
@@ -91,6 +92,36 @@ class _TenantRentPerformanceFilterSerializer(serializers.Serializer):
 
 class _PortfolioAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def dispatch(self, request, *args, **kwargs):
+        from django.conf import settings
+        if fx_backend() != 'mirror':
+            return super().dispatch(request, *args, **kwargs)
+        from rentals.services.fx_mirror import pinned, report_provisional
+
+        from rentals.services.fx_report_transaction import repeatable_read
+
+        with repeatable_read(), pinned() as snapshot:
+            provisional = set()
+            token = report_provisional.set(provisional)
+            try:
+                response = super().dispatch(request, *args, **kwargs)
+            finally:
+                report_provisional.reset(token)
+            state = snapshot.state
+            if 200 <= response.status_code < 300 and isinstance(response.data, dict):
+                response.data = dict(response.data)
+                response.data['fx'] = {
+                    'release_id': state['release_id'] if state else None,
+                    'history_epoch': state['history_epoch'] if state else None,
+                    'synced_at': state['synced_at'].isoformat() if state else None,
+                    'provisional': bool(provisional),
+                    'effective_dates': sorted(provisional),
+                    'cacheable': not bool(provisional),
+                }
+                if provisional:
+                    response['Cache-Control'] = 'no-store'
+            return response
 
     def handle_exception(self, exc):
         if isinstance(exc, MissingFXRate):

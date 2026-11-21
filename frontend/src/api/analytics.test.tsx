@@ -789,3 +789,20 @@ describe('analytics hooks', () => {
     )
   })
 })
+
+it.each([
+  [portfolioCashFlowSchema, cashFlowFixture],
+  [portfolioOccupancySchema, occupancyFixture],
+  [portfolioSummarySchema, summaryFixture],
+  [propertyContributionSchema, contributionFixture],
+  [propertyYieldsSchema, yieldsFixture],
+  [propertyBreakdownSchema, breakdownFixture],
+  [propertyValuationSchema, valuationFixture],
+  [tenantRentPerformanceSchema, tenantFixture],
+  [profitLossSchema, profitLossFixture],
+])('accepts validated mirror release metadata on every analytics response', (schema, fixture) => {
+  const fx = { release_id: null, history_epoch: null, synced_at: null, provisional: false, effective_dates: [], cacheable: true }
+  expect(schema.safeParse({ ...fixture, fx }).success).toBe(true)
+  expect(schema.safeParse({ ...fixture, fx: { ...fx, provisional: 'false' } }).success).toBe(false)
+  expect(schema.safeParse({ ...fixture, unexpected: 1 }).success).toBe(false)
+})

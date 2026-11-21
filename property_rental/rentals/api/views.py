@@ -34,9 +34,11 @@ change widens a field.
 
 from datetime import date
 from decimal import Decimal
+from functools import wraps
 
 from dateutil.parser import parse as parse_date
 
+from rentals.services.fx_context import backend as fx_backend, behavior as fx_behavior
 from django.shortcuts import get_object_or_404
 from django.db.models.deletion import ProtectedError, RestrictedError
 from rest_framework import viewsets
@@ -157,6 +159,37 @@ def _native_sum(prop, window, transaction_type):
 # ---------------------------------------------------------------------------
 
 
+def _consistent_fx_report(fn):
+    @wraps(fn)
+    def wrapped(self, request, *args, **kwargs):
+        from django.conf import settings
+        if fx_backend() != 'mirror':
+            return fn(self, request, *args, **kwargs)
+        from rentals.services.fx import MissingFXRate
+        from rentals.services.fx_mirror import pinned, report_provisional
+
+        from rentals.services.fx_report_transaction import repeatable_read
+
+        with repeatable_read(), pinned() as snapshot:
+            provisional = set()
+            token = report_provisional.set(provisional)
+            try:
+                try:
+                    response = fn(self, request, *args, **kwargs)
+                except MissingFXRate as exc:
+                    response = Response({'code': 'missing_fx', 'detail': str(exc)}, status=422)
+            finally:
+                report_provisional.reset(token)
+            state = snapshot.state
+            if state:
+                response['X-FX-Release-ID'] = state['release_id']
+                response['X-FX-History-Epoch'] = str(state['history_epoch'])
+            response['X-FX-Provisional'] = str(bool(provisional)).lower()
+            response['Cache-Control'] = 'no-store' if provisional else 'private, no-cache'
+            return response
+    return wrapped
+
+
 class PropertyViewSet(viewsets.ModelViewSet):
     """CRUD for Property scoped to ``request.user.landlord``.
 
@@ -193,6 +226,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
         self._force_owner(serializer)
 
     @action(detail=False, methods=["get"])
+    @_consistent_fx_report
     def with_stats(self, request):
         """GET /api/v1/properties/with_stats/?as_of=YYYY-MM-DD&currency=USD
 
@@ -260,7 +294,8 @@ class PropertyViewSet(viewsets.ModelViewSet):
             # path it's the requested target currency.
             stats_currency = prop.currency if use_native else requested_currency
 
-            if use_native:
+            from django.conf import settings
+            if use_native and not fx_behavior("native_stats_and_pnl"):
                 # Raw face-value sums filtered to this property. The
                 # ``rentals.services.financials.aggregate`` helper requires
                 # a non-None target currency (it raises ValueError
@@ -374,6 +409,7 @@ class TenantViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         self._validate_and_save(serializer)
     @action(detail=False, methods=["get"])
+    @_consistent_fx_report
     def with_stats(self, request):
         """GET /api/v1/tenants/with_stats/?as_of=YYYY-MM-DD&currency=USD
 
@@ -669,6 +705,29 @@ class FXViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = FX.objects.all()
     lookup_value_regex = r"\d+"
+
+    def list(self, request, *args, **kwargs):
+        from django.conf import settings
+        if fx_backend() == 'mirror':
+            from rentals.api.fx_browsing import browse
+            return browse(request)
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        from django.conf import settings
+        if fx_backend() == 'mirror':
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Use the pinned row details link for shared FX.')
+        return super().retrieve(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'], url_path='details')
+    def details(self, request):
+        from django.conf import settings
+        if fx_backend() != 'mirror':
+            from rest_framework.exceptions import NotFound
+            raise NotFound()
+        from rentals.api.fx_browsing import details
+        return details(request)
 
 class PropertyCapitalStructureViewSet(viewsets.ModelViewSet):
     """CRUD for ``Property_capital_structure`` scoped via
