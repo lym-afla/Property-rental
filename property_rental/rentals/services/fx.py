@@ -257,16 +257,19 @@ def convert(amount, from_currency, to_currency, as_of):
     """Convert ``amount`` from ``from_currency`` to ``to_currency`` as
     of ``as_of``.
 
-    Returns ``amount`` unchanged when the two currencies are equal
-    (skips the graph entirely). Otherwise multiplies by
-    ``get_rate(...)['FX']``.
+    Returns ``amount`` unchanged when the two currencies are equal,
+    after checking dated coverage in mirror mode. Otherwise multiplies
+    by ``get_rate(...)['FX']``.
     """
     if from_currency == to_currency and fx_backend() != "mirror":
         return amount
     if fx_backend() == 'mirror':
         from rentals.services.shared_fx_resolver import ContractError, convert_amount
         try:
-            return convert_amount(amount, get_rate(from_currency, to_currency, as_of)['FX'])
+            rate = get_rate(from_currency, to_currency, as_of)['FX']
+            if from_currency == to_currency:
+                return amount
+            return convert_amount(amount, rate)
         except ContractError as error:
             raise MissingFXRate(str(error), error.code) from error
     return amount * get_rate(from_currency, to_currency, as_of)['FX']

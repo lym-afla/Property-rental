@@ -13,7 +13,7 @@ import networkx as nx
 
 from rentals.analytics.tenant import _due_dates, _effective_rate
 from rentals.constants import CURRENCY_CHOICES
-from rentals.models import DepositMovement, FXAnchor, FXSyncState, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
+from rentals.models import DepositMovement, FXAnchor, FXSyncState, Lease_rent, Loan, LoanCapitalisedFee, LoanProduct, Property, Property_capital_structure, Tenant, Transaction
 from rentals.services.fx import get_rate
 from rentals.services.fx_mirror import pinned
 from rentals.services.fx_context import calculation_context, backend
@@ -32,6 +32,9 @@ BEHAVIORAL_DIFFERENCES = [
     {'cause': 'fix_time_mismatch', 'locations': ['rentals/management/commands/export_fx_comparison.py::fix_time_inputs'], 'why': 'RUB crosses combine the CBR effective-date rate with later ECB fixes. Calendar-date anchors cannot isolate timing from reference-policy movement; aligned quotes and their fixing timestamps are required.'},
     {'cause': 'decimal_precision', 'locations': ['rentals/services/fx.py::convert', 'rentals/services/fx.py::PreloadedConverter', 'rentals/services/fx_mirror.py::get_rate'], 'why': 'Mirror uses isolated precision 38 / ROUND_HALF_UP and 18-place multipliers rather than legacy ambient-context arithmetic and stored-rate precision. Native monetary rounding remains unchanged.'},
 ]
+
+NATIVE_MODELS = (Property, Tenant, Transaction, DepositMovement, Property_capital_structure, Lease_rent,
+                 Loan, LoanProduct, LoanCapitalisedFee)
 
 
 def is_rub_fiat_cross(base, quote):
@@ -74,7 +77,8 @@ def behavioral_causes(kind, obj, currency, target):
 
 
 def business_hash(obj):
-    values = {field.attname: getattr(obj, field.attname) for field in obj._meta.concrete_fields}
+    values = {field.attname: getattr(obj, field.attname) for field in obj._meta.concrete_fields
+              if field.attname not in {'created_at', 'updated_at'}}
     return hashlib.sha256(json.dumps(values, default=str, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -141,7 +145,7 @@ class Command(BaseCommand):
             with pinned():
                 before_state = FXSyncState.objects.filter(pk=1).values('release_id', 'seq', 'history_epoch').first()
                 business = [{'kind': model._meta.model_name, 'record_id': str(obj.pk), 'business_hash': business_hash(obj)}
-                            for model in (Property, Tenant, Transaction, DepositMovement, Property_capital_structure, Lease_rent)
+                            for model in NATIVE_MODELS
                             for obj in model.objects.order_by('pk')]
                 records = []
                 for kind, obj, valued_on, currency in comparison_rows(as_of):
@@ -170,7 +174,7 @@ class Command(BaseCommand):
                         records.append(result)
                 reports, coverage = build_reports(as_of, start, options['report_currency'])
                 after_business = [{'kind': model._meta.model_name, 'record_id': str(obj.pk), 'business_hash': business_hash(obj)}
-                                  for model in (Property, Tenant, Transaction, DepositMovement, Property_capital_structure, Lease_rent)
+                                  for model in NATIVE_MODELS
                                   for obj in model.objects.order_by('pk')]
                 if business != after_business:
                     raise CommandError('business_changed_during_comparison')

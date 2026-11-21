@@ -47,6 +47,7 @@ describe('NetCashFlowChart', () => {
     const user = userEvent.setup()
     render(<MemoryRouter><NetCashFlowChart data={data} /></MemoryRouter>)
 
+    expect(screen.getByText('Signed income and expense categories by reporting period.')).toBeInTheDocument()
     expect(screen.getByLabelText('Net cash flow zero baseline')).toBeInTheDocument()
     expect(screen.getByTestId('cash-flow-plot')).toHaveAttribute('data-stack-offset', 'sign')
     expect(screen.getByRole('generic', { name: 'Rent' }).getAttribute('data-fill')).not.toMatch(/^url\(/)
@@ -170,4 +171,23 @@ describe('NetCashFlowChart', () => {
       expect(screen.queryByRole('button', { name: /View Security deposits transactions/ })).not.toBeInTheDocument()
     })
   })
+})
+
+it('shows principal as a cash outflow with a table column and transaction drill-down', async () => {
+  const user = userEvent.setup()
+  const onDrillDown = vi.fn()
+  render(<MemoryRouter><NetCashFlowChart propertyIds={[1]} onDrillDown={onDrillDown} data={{
+    ...data,
+    series:[...data.series, {key:'loan_principal',label:'Loan principal',kind:'balance_sheet'}, {key:'net_cash_flow',label:'Net cash flow',kind:'net_cash'}],
+    points:[{...data.points[0], loan_principal:-400, net_cash_flow:350}],
+  }} /></MemoryRouter>)
+  expect(screen.getByRole('generic',{name:'Loan principal'})).toHaveAttribute('data-stack-id','cash-flow')
+  await user.click(screen.getByText('Drill down to transactions'))
+  await user.click(screen.getByRole('button',{name:'View Loan principal transactions for Jan 1, 2026'}))
+  expect(onDrillDown).toHaveBeenCalledWith({from:'2026-01-01',to:'2026-01-28',category:'loan_principal',currency:'USD',propertyIds:[1]})
+  await user.click(screen.getByRole('button',{name:'Table'}))
+  const table = screen.getByRole('table',{name:'Net cash flow exact values'})
+  expect(within(table).getByRole('columnheader',{name:'Loan principal'})).toBeInTheDocument()
+  expect(table).toHaveTextContent('($400)')
+  expect(table).toHaveTextContent('$350')
 })

@@ -52,6 +52,9 @@ from .views import (
     DepositMovementViewSet,
     FXViewSet,
     LeaseRentViewSet,
+    LoanViewSet,
+    LoanProductViewSet,
+    LoanCapitalisedFeeViewSet,
     PropertyCapitalStructureViewSet,
     PropertyViewSet,
     TenantViewSet,
@@ -63,6 +66,9 @@ router = DefaultRouter()
 # instead of setting a class-level ``queryset`` attribute (the router
 # otherwise can't auto-derive a basename). Basenames are used for reverse
 # URL resolution; the URL prefix is set by the first arg.
+router.register(r"loans", LoanViewSet, basename="loan")
+router.register(r"loan-products", LoanProductViewSet, basename="loan-product")
+router.register(r"loan-capitalised-fees", LoanCapitalisedFeeViewSet, basename="loan-capitalised-fee")
 router.register(r"properties", PropertyViewSet, basename="property")
 router.register(r"tenants", TenantViewSet, basename="tenant")
 router.register(r"transactions", TransactionViewSet, basename="transaction")

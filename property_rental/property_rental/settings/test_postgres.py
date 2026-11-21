@@ -28,8 +28,4 @@ DJANGO_VITE = {
     },
 }
 if os.environ.get("DJANGO_SETTINGS_MODULE") == "property_rental.settings.test_postgres":
-    from psycopg import IsolationLevel
-
     DATABASES = {"default": postgres_database(required_env("DATABASE_URL"))}
-    # pytest-django opens a transaction before report views run.
-    DATABASES["default"]["OPTIONS"] = {"isolation_level": IsolationLevel.REPEATABLE_READ}

@@ -96,13 +96,16 @@ from django.db.models import Sum
 # and ``.date`` attributes, return the sum of (amount converted to
 # ``target_currency`` as of ``as_of``) across the iterable. Same-currency
 # rows skip FX entirely (the ``services.fx.convert`` short-circuit).
-def convert_transactions(transactions, target_currency, as_of, converter=None):
+def convert_transactions(
+    transactions, target_currency, as_of, converter=None, *, profit_loss=False
+):
     """Sum ``transactions`` into ``target_currency`` as of ``as_of``.
 
     Each row is multiplied by ``services.fx.get_rate(row.currency,
     target_currency, row.date)['FX']`` when the currencies differ, and
     passed through unchanged when they match. ``converter`` may provide a
     preloaded ``convert`` method for a batch while preserving those semantics.
+    ``profit_loss`` excludes principal and signs positive loan interest as a cost.
     Returns a ``Decimal`` (or ``int`` 0 for an empty iterable, matching the
     ``Transaction.financials`` ``total_amount = 0`` initializer).
     """
@@ -111,8 +114,14 @@ def convert_transactions(transactions, target_currency, as_of, converter=None):
     total = 0
     converter = converter or fx_service
     for transaction in transactions:
+        amount = transaction.amount
+        if profit_loss:
+            if transaction.category == "loan_principal":
+                continue
+            if transaction.category == "loan_interest":
+                amount = -abs(amount)
         total += converter.convert(
-            transaction.amount,
+            amount,
             transaction.currency,
             target_currency,
             transaction.date,
@@ -196,7 +205,9 @@ def aggregate(cls, end_date, target_currency=None, properties=None,
     # multiplies each row by ``services.fx.get_rate(...)['FX']`` when
     # currencies differ and returns the amount unchanged otherwise —
     # identical arithmetic to the original loop.
-    total_amount = convert_transactions(transactions, target_currency, end_date)
+    total_amount = convert_transactions(
+        transactions, target_currency, end_date, profit_loss=True
+    )
 
     return total_amount
 
@@ -258,7 +269,7 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
 
     filtered_transactions = Transaction.objects.filter(
         property__in=properties, date__lte=as_of, type='expense'
-    )
+    ).exclude(category='loan_principal')
 
     # Get a list of unique categories from the filtered transactions
     unique_categories = list(
@@ -307,11 +318,15 @@ def pnl_calc(properties, target_currency, default_currency_for_all_data,
             # ``round(float(...), digits)`` rounding is unchanged, then
             # cast at the point of accumulation / return.
             cf_ytd = convert_transactions(
-                queryset_ytd.all(), target_currency, as_of
+                queryset_ytd.all(), target_currency, as_of, profit_loss=True
             )
             cf_all_time = convert_transactions(
-                queryset_all_time.all(), target_currency, as_of
+                queryset_all_time.all(), target_currency, as_of, profit_loss=True
             )
+
+        if category == 'loan_interest':
+            cf_ytd = -abs(cf_ytd)
+            cf_all_time = -abs(cf_all_time)
 
         if category == 'rent':
             # Phase 4: cast to ``float`` for a uniform return type

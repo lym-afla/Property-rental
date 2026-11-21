@@ -135,8 +135,8 @@ def test_status_migration_retains_existing_anchor_values_and_infers_carry():
     from django.db import connection
     from django.db.migrations.executor import MigrationExecutor
     executor = MigrationExecutor(connection)
-    previous = [('rentals', '0029_fxanchor_fxsyncstate_and_more')]
-    current = [('rentals', '0030_fxanchor_status')]
+    previous = [('rentals', '0033_fxanchor_fxsyncstate_and_more')]
+    current = [('rentals', '0034_fxanchor_status')]
     executor.migrate(previous)
     try:
         old = executor.loader.project_state(previous).apps.get_model('rentals', 'FXAnchor')

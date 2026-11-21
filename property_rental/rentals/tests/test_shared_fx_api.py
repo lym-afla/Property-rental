@@ -16,6 +16,7 @@ def mirror_backend(settings):
     settings.FX_BACKEND = 'mirror'
 
 
+@pytest.mark.django_db(transaction=True)
 def test_tenant_missing_fx_is_typed_and_never_a_complete_total(auth_client, sample_property):
     tenant = TenantFactory(property=sample_property, lease_start=date(2026, 1, 1), payday=5)
     LeaseRentFactory(tenant=tenant, date_rent_set=date(2026, 1, 1), currency='EUR', rent=Decimal('100'))
@@ -231,6 +232,7 @@ def test_direct_pair_is_a_read_and_legacy_detail_never_leaks_in_mirror(auth_clie
     assert FXAnchor.objects.count() == count
 
 
+@pytest.mark.django_db(transaction=True)
 def test_tenant_partial_periods_preserve_valid_rows_but_not_cumulative(auth_client, sample_property):
     sample_property.currency = 'USD'
     sample_property.save()

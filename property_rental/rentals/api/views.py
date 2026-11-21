@@ -40,6 +40,7 @@ from dateutil.parser import parse as parse_date
 
 from rentals.services.fx_context import backend as fx_backend, behavior as fx_behavior
 from django.shortcuts import get_object_or_404
+from django.db.models.deletion import ProtectedError, RestrictedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
@@ -55,12 +56,18 @@ from rentals.services.deposits import (
     movements_for_user,
     update_movement,
 )
-from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction
+from rentals.models import FX, DepositMovement, Landlord, Lease_rent, Property, Property_capital_structure, Tenant, Transaction, Loan, LoanCapitalisedFee, LoanProduct
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     DepositMovementSerializer,
     FXSerializer,
     LeaseRentSerializer,
+    LoanSerializer,
+    LoanProductSerializer,
+    LoanProductFilterSerializer,
+    LoanCapitalisedFeeSerializer,
+    LoanCapitalisedFeeFilterSerializer,
+    LoanPaymentSerializer,
     PropertyCapitalStructureSerializer,
     PropertySerializer,
     TenantSerializer,
@@ -140,7 +147,11 @@ def _native_sum(prop, window, transaction_type):
         qs = qs.filter(date__range=(start_date, end_date))
     else:
         qs = qs.filter(date__lte=window)
-    return qs.aggregate(total=Sum("amount"))["total"] or 0
+    from django.db.models import Case, When, F
+    return qs.aggregate(total=Sum(Case(
+        When(category="loan_interest", then=-F("amount")),
+        default=F("amount"),
+    )))["total"] or 0
 
 
 # ---------------------------------------------------------------------------
@@ -950,3 +961,88 @@ class DepositMovementViewSet(viewsets.ModelViewSet):
         if by_tenant is not None:
             body["by_tenant"] = by_tenant
         return Response(body)
+
+
+class LoanViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = Loan.objects.filter(property__owned_by__user=self.request.user).order_by("start_date", "id")
+        if self.request.query_params.get("property"):
+            qs = qs.filter(property_id=self.request.query_params["property"])
+        return qs
+
+    def _save(self, serializer):
+        prop = serializer.validated_data.get("property", getattr(serializer.instance, "property", None))
+        _validate_property_owned_by(prop.pk, self.request.user)
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._save(serializer)
+
+    def perform_update(self, serializer):
+        self._save(serializer)
+
+    def perform_destroy(self, instance):
+        try:
+            instance.delete()
+        except (ProtectedError, RestrictedError):
+            raise ValidationError({"loan": "Cannot delete a loan with observations, payments or capitalised fees."})
+
+    @action(detail=True, methods=["post"])
+    def payments(self, request, pk=None):
+        from rentals.services.loans import record_payment
+        loan = self.get_object()
+        serializer = LoanPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payments = record_payment(loan, **serializer.validated_data)
+        return Response(TransactionSerializer(payments, many=True).data, status=201)
+
+    @action(detail=True, methods=["get"])
+    def reconciliation(self, request, pk=None):
+        from rentals.services.loans import reconcile_loan
+        loan = self.get_object()
+        try:
+            return Response(reconcile_loan(loan))
+        except ValueError as exc:
+            raise ValidationError({"loan": str(exc)})
+
+
+class LoanProductViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanProductSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = LoanProduct.objects.filter(loan__property__owned_by__user=self.request.user).select_related("loan__property__owned_by__user")
+        filters = LoanProductFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        if "loan" in filters.validated_data:
+            qs = qs.filter(loan_id=filters.validated_data["loan"])
+        if "property" in filters.validated_data:
+            qs = qs.filter(loan__property_id=filters.validated_data["property"])
+        return qs.order_by("start_date", "id")
+
+
+class LoanCapitalisedFeeViewSet(viewsets.ModelViewSet):
+    serializer_class = LoanCapitalisedFeeSerializer
+    permission_classes = _OWNER_PERMS
+
+    def get_queryset(self):
+        qs = LoanCapitalisedFee.objects.filter(property__owned_by__user=self.request.user).order_by("date", "id")
+        filters = LoanCapitalisedFeeFilterSerializer(data=self.request.query_params.dict())
+        filters.is_valid(raise_exception=True)
+        for field, value in filters.validated_data.items():
+            qs = qs.filter(**{f"{field}_id": value})
+        return qs
+
+    def _save(self, serializer):
+        loan = serializer.validated_data.get("loan", getattr(serializer.instance, "loan", None))
+        _validate_property_owned_by(loan.property_id, self.request.user)
+        serializer.save()
+
+    def perform_create(self, serializer):
+        self._save(serializer)
+
+    def perform_update(self, serializer):
+        self._save(serializer)

@@ -1,0 +1,103 @@
+# Exporting Rent history to Wealth
+
+## Delivery status — 2026-11-14
+
+Rent 2.3.0 is deployed at https://rent.linik.ru/ through the Life OS app-release process.
+The implementation was merged in [PR #9](https://github.com/lym-afla/Property-rental/pull/9)
+as `b09424397883b83f574dc84ac1e6fccfab74bfd4`, tagged `v2.3.0`.
+Migrations `0029_depositmovement_created_at_and_more` and `0030_backfill_loans` are applied.
+The migration created a placeholder loan. Its lender has since been filled in from the owner’s mortgage offer.
+
+Wealth v1.1 is now on Wealth's `main` at `e5a91c3`. On 2026-11-14, all 10 Rent export
+tests passed, and their generated loan/history/payment fixture passed that main-branch parser.
+This verifies format compatibility using synthetic data. A production export and Wealth import
+have not been performed, and the dedicated production read-only role has not been provisioned by this work.
+
+The owner confirmed version 2.3.0 and the Loans tab are visible. Final operator acceptance remains open
+following questions about the lender placeholder and historical balance warnings, explained below.
+Implementation and deployment are complete. Mortgage-history reconstruction is underway; transferring production data to Wealth remains follow-up work.
+
+## Running the export
+
+After applying Rent's migrations, run the command as the application's environment user:
+
+```sh
+uv run python property_rental/manage.py export_wealth --out /secure/path/rent.json --subject '<authentik sub>'
+```
+
+The subject must match an existing `OIDCIdentity`. Add `--issuer '<issuer URL>'` when the same subject occurs under multiple issuers. Ownership is resolved through that identity; there is no fallback to usernames or emails. Only that user's owned properties and their financial records are included. Tenant names, contacts, transaction comments, loan account references and addresses are omitted.
+
+The file uses Wealth v1.1 and contains all stored transactions, loans and dated capital history. `--as-of YYYY-MM-DD` selects the arrears and deposit snapshot date (default: today); it does not trim stored history. Arrears use Rent's existing rent schedule and grace rules, summing each tenant's positive amount owed; tenant credits do not cancel another tenant's arrears. Snapshot facts have property/date IDs. Each fact has a SHA-256 content version, excluding timestamps, and an actual source `updated_at` (maximum contributing row timestamp for derived facts). Changing only timestamps leaves the content version unchanged. Historical rows receive migration-time timestamps; earlier modification times cannot be recovered.
+
+Valuation and debt observations can be recorded independently. The export carries each known field forward from its last observation, without interpolation or backward filling. The first observation must establish both value and debt explicitly, including a recorded zero for a debt-free property. Complementary rows on the same date form one snapshot because Wealth allows only one snapshot per property/date. Conflicting same-date balances, multiple simultaneous loan balances, missing observations, unknown initial values/debts and currency mismatches stop the export with an error before replacing the output. Supply the missing facts in Rent rather than guessing. Wealth v1.1 cannot represent several concurrent loan balances for a property on the same date; those require a contract extension. Property compatibility fields match the last exported observation.
+
+Costs are exported as positive `cost` amounts; reimbursements are positive `cost_reimbursement`. Loan interest and principal have distinct types and loan IDs. Security-deposit receipts become `deposit_in`; returns become `deposit_out`. An application becomes a `deposit_out` plus its existing linked rent/reimbursement transaction, once. These offset on the bank side and release the deposit liability without inventing a second cash receipt. An invalid or missing application link stops the export. Deposits are also exported as one property-level balance at the snapshot date.
+
+Migration-created loan lenders are `UNKNOWN — fill in`. The command lists their loan/property IDs, without tenant information. This is a reminder to replace placeholders with the actual lender; rates, payment history and other unknown facts are never inferred. The export does not change them.
+
+## Mortgage product history
+
+Rent records dated mortgage products beneath a continuous loan. Each product has its own name, lender, period, initial interest rate and rate type, optional opening balance, and source notes. Add or edit them under **Loans → Mortgage products**. Tracker rates can change within a product; the displayed rate is its initial rate and the notes describe known changes and uncertain dates. Product periods on the same loan cannot overlap.
+
+The owner-scoped `/api/v1/loan-products/` endpoint supports CRUD and filtering by `loan` or `property`. Existing loan terms are copied into one initial product when the feature is introduced; historical products can then be entered separately. Product opening balances are descriptive metadata and do not create debt observations or cash transactions.
+
+Product history does not split or relink the existing payment, fee or capital ledger. Wealth v1.1 continues to receive the same continuous loan IDs and its existing fact types; mortgage product metadata is not part of that export contract. Editing a product alone therefore does not create a new Wealth loan or change exported financial facts.
+
+## Life OS: read-only Postgres access
+
+An administrator can create a dedicated role; **these are instructions, not actions performed by the export**. Substitute the database and schema names. Set a password through the normal secret-management process, not shell history.
+
+```sql
+CREATE ROLE rent_readonly LOGIN;
+GRANT CONNECT ON DATABASE rent TO rent_readonly;
+GRANT USAGE ON SCHEMA public TO rent_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO rent_readonly;
+-- Run as the role that owns tables, so future migrations retain read access:
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO rent_readonly;
+ALTER ROLE rent_readonly SET default_transaction_read_only = on;
+```
+
+Configure the normal production database settings with this read-only role using the deployment's secret configuration and run only `export_wealth`, not migrations. No table/sequence write privileges are required. Export tests wrap database execution and reject every statement other than `SELECT`. The output is a financial file: place it in a directory with appropriate access restrictions.
+
+## Parser validation
+
+Wealth v1.1 is available on its main branch. Validate each export from `/home/yl/code/Wealth-statements/backend`:
+
+```sh
+uv run python -c "from pathlib import Path; from wealth.connectors.files import parse_file; parse_file('rent', Path('/secure/path/rent.json').read_bytes()); print('ok')"
+```
+
+This reads the file through Wealth's strict schema and reference checks. It does not import data or modify Wealth. Parser availability in a local feature checkout alone does not establish that v1.1 has been merged to main.
+
+## Recording mortgage history
+
+Open a property's **Loans** tab to create loans, replace placeholder lenders and record payments.
+Enter total plus interest, or interest plus principal. Both rows save together in the loan currency.
+Interest is a cost; principal is a balance-sheet outflow and appears only in net cash flow.
+Leave debt blank for a valuation-only observation; enter an explicit zero when paying off debt.
+Record payoff observations with the relevant loan. An unlinked zero can close the sole observed outstanding loan; ambiguous payoffs require a loan link.
+Reconciliation checks each consecutive pair using principal repayments and capitalised fees dated after opening through closing, inclusive. Expected debt is opening debt plus capitalised fees minus principal repaid. Record financed product fees under **Loans → Capitalised fees**; they increase debt without creating a cash payment or changing profit. The fee date must match when the fee is included in the dated debt balance.
+An absolute difference above 1 unit flags a warning; the check does not infer advances, fees or missing history.
+For migrated loans, warnings can reflect missing principal history rather than incorrect debt observations.
+For example, a decline from £235,000 to £205,988 with no recorded principal payments leaves £29,012 unexplained.
+Use statements to correct superseded balances. Preserve source provenance when estimating missing payment splits; do not add a balancing payment merely to clear a warning.
+Estimated monthly splits should be labelled in transaction comments, with assumed payment dates and the method retained in private evidence. Replace prior period aggregates atomically to avoid counting payments twice. Unpaid accrued interest can explain differences between debt reduction and cash principal repayments. Prefer comparable month-end balance snapshots when using month-end payment estimates. Capitalised fees have their own dated records and are included in reconciliation; Wealth represents their effect through debt observations, without an invented cash transaction or an additional v1.1 fact type.
+
+For bulk history, prepare a UTF-8 CSV with these headers:
+
+```csv
+date,total,interest,comment
+```
+
+Alternatively use `date,interest,principal,comment`. `comment` and `period` are optional.
+Use ISO dates and nonnegative decimals with at most two decimal places; supply exactly one split mode per row.
+Use your own recorded amounts. Preview first:
+
+```sh
+uv run python property_rental/manage.py import_loan_payments --loan <id> --file /path/payments.csv --dry-run
+uv run python property_rental/manage.py import_loan_payments --loan <id> --file /path/payments.csv
+```
+
+The importer validates every row before writing, saves the file atomically, and rejects duplicate payment components.
+If a matching component already exists, review the ledger before importing. This command requires write access;
+`export_wealth` works with the read-only role above.

@@ -359,6 +359,18 @@ describe('analytics runtime schemas', () => {
     expect(parsed.points[0].deposits).toBe(500)
   })
 
+  it.each([
+    { key: 'loan_principal', label: 'Loan principal', kind: 'balance_sheet', value: -400 },
+    { key: 'cumulative_net_cash_flow', label: 'Cumulative net cash flow', kind: 'cumulative_cash', value: 1100 },
+  ])('accepts backend cash-flow series $kind', ({ key, label, kind, value }) => {
+    const parsed = portfolioCashFlowSchema.parse({
+      ...cashFlowFixture,
+      series: [...cashFlowFixture.series, { key, label, kind }],
+      points: [{ ...cashFlowFixture.points[0], [key]: value }],
+    })
+    expect(parsed.points[0][key]).toBe(value)
+  })
+
   it('rejects scaled monetary responses', () => {
     expect(() =>
       timeSeriesSchema.parse({ ...cashFlowFixture, scale: 1000 }),
@@ -610,6 +622,23 @@ describe('analytics query keys', () => {
 })
 
 describe('analytics hooks', () => {
+  it('loads shared chart data with loan principal and cumulative cash', async () => {
+    const payload = {
+      ...cashFlowFixture,
+      series: [
+        ...cashFlowFixture.series,
+        { key: 'loan_principal', label: 'Loan principal', kind: 'balance_sheet' },
+        { key: 'net_cash_flow', label: 'Net cash flow', kind: 'net_cash' },
+        { key: 'cumulative_net_cash_flow', label: 'Cumulative net cash flow', kind: 'cumulative_cash' },
+      ],
+      points: [{ ...cashFlowFixture.points[0], loan_principal: -400, net_cash_flow: 1100, cumulative_net_cash_flow: 1100 }],
+    }
+    server.use(http.get('/api/v1/analytics/portfolio/cash-flow/', () => HttpResponse.json(payload)))
+    const { result } = renderHook(() => usePortfolioCashFlow(filters), { wrapper: makeWrapper() })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data).toEqual(payload)
+  })
+
   it('validates every Tasks 1-4 analytics endpoint before exposing data', async () => {
     server.use(
       http.get('/api/v1/analytics/portfolio/summary/', () =>

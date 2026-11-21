@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import type { Property } from '@/types/property'
+import type { Loan } from '@/types/loan'
 import type { Tenant } from '@/types/tenant'
 import { TRANSACTION_CATEGORIES } from '@/lib/transactionCategories'
 import { tenantStatus } from '@/lib/tenantStatus'
@@ -39,6 +40,7 @@ export const TRANSACTION_CATEGORY_OPTIONS = TRANSACTION_CATEGORIES.map(
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/
 
 const schema = z.object({
+  loan: z.number().int().positive().nullable().optional(),
   date: z.string().min(1, 'Required'),
   property: z.coerce
     .number({ message: 'Required' })
@@ -57,6 +59,8 @@ const schema = z.object({
     .or(z.literal(''))
     .optional(),
   comment: z.string().optional().default(''),
+}).superRefine((values, ctx) => {
+  if (['loan_interest', 'loan_principal'].includes(values.category) && !values.loan) ctx.addIssue({ code: 'custom', path: ['loan'], message: 'Select a loan for this payment' })
 })
 // See PropertyForm for the zod 4 + RHF input/output typing rationale.
 type Input = z.input<typeof schema>
@@ -64,6 +68,7 @@ type Output = z.output<typeof schema>
 
 type Props = {
   mode?: 'create' | 'edit'
+  loans?: Loan[]
   properties: Property[]
   tenants: Tenant[]
   defaultValues?: Partial<Input>
@@ -85,6 +90,7 @@ function derivePeriod(dateStr: string | undefined | null): string {
 
 export function TransactionForm({
   mode = 'create',
+  loans = [],
   properties,
   tenants,
   defaultValues,
@@ -160,6 +166,7 @@ export function TransactionForm({
                   onValueChange={(v) => {
                     const num = Number(v)
                     if (num !== Number(field.value)) {
+                      form.setValue('loan', null, { shouldDirty: true })
                       currencyChosen.current = false
                       const property = properties.find((item) => item.id === num)
                       if (property) {
@@ -322,6 +329,13 @@ export function TransactionForm({
             )}
           />
         </div>
+
+        <FormField control={form.control} name="loan" render={({ field }) => <FormItem>
+          <FormLabel>Loan (required for interest or principal)</FormLabel>
+          <FormControl><select className="min-h-11 w-full rounded-md border bg-background px-3" value={field.value ?? ''} onChange={(event) => field.onChange(event.target.value ? Number(event.target.value) : null)}>
+            <option value="">No loan</option>{loans.filter((loan) => loan.property === Number(selectedProperty)).map((loan) => <option key={loan.id} value={loan.id}>{loan.lender}{loan.reference ? ` · ${loan.reference}` : ''}</option>)}
+          </select></FormControl><FormMessage />
+        </FormItem>} />
 
         <div className="grid grid-cols-2 gap-4">
           <FormField

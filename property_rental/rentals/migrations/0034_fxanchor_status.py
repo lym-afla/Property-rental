@@ -7,7 +7,7 @@ def carry_existing(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [('rentals', '0029_fxanchor_fxsyncstate_and_more')]
+    dependencies = [('rentals', '0033_fxanchor_fxsyncstate_and_more')]
     operations = [
         migrations.AddField(
             model_name='fxanchor', name='status',

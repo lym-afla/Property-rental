@@ -14,7 +14,7 @@
 // matching `<Route path="/properties/:id">`, so the test wrapper includes
 // the route definition rather than just `<MemoryRouter>`.
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -220,6 +220,29 @@ describe('PropertyDetailPage', () => {
     expect(screen.queryByText('€0')).not.toBeInTheDocument()
   })
 
+  it('orders valuation history by date when older entries are added later', async () => {
+    server.use(
+      http.get('/api/v1/property-valuations/', () =>
+        HttpResponse.json([
+          { id: 1, property: 1, capital_structure_date: '2026-12-31', capital_structure_value: '300000.00', capital_structure_debt: null },
+          { id: 2, property: 1, capital_structure_date: '2024-12-31', capital_structure_value: '250000.00', capital_structure_debt: null },
+          { id: 3, property: 1, capital_structure_date: '2025-04-01', capital_structure_value: null, capital_structure_debt: '150000.00' },
+        ]),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(fixtureProperty.name)
+    await user.click(screen.getByRole('tab', { name: /valuations/i }))
+
+    const editButtons = await screen.findAllByRole('button', { name: /^Edit valuation / })
+    expect(editButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Edit valuation 2',
+      'Edit valuation 3',
+      'Edit valuation 1',
+    ])
+  })
+
   it('switches to the Valuations tab on click', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -293,5 +316,53 @@ describe('PropertyDetailPage', () => {
     )
     renderPage()
     expect(await screen.findByText(/failed to load property/i)).toBeInTheDocument()
+  })
+})
+
+describe('valuation mortgage product history', () => {
+  const product = { id: 1, loan: 1, name: 'Original deal', lender: 'Historic Bank', start_date: '2012-08-15', end_date: '2015-01-31', interest_rate: null, rate_type: '', opening_balance: null, notes: '', created_at: '', updated_at: '' }
+  const products = [product, { ...product, id: 2, lender: 'Renewal Bank', name: 'Tracker renewal', start_date: '2015-02-01', end_date: null }, { ...product, id: 3, loan: 2, lender: 'Other loan bank', name: 'Unrelated mortgage' }]
+  beforeEach(() => {
+    server.use(
+      http.get('/api/v1/loans/', () => HttpResponse.json([{ id: 1, property: 1, lender: 'Current lender', reference: 'CURRENT-ACCOUNT', currency: 'EUR' }])),
+      http.get('/api/v1/property-valuations/', () => HttpResponse.json([
+        { id: 1, property: 1, loan: 1, capital_structure_date: '2012-08-15', capital_structure_value: '200000', capital_structure_debt: '100000' },
+        { id: 2, property: 1, loan: 1, capital_structure_date: '2015-01-31', capital_structure_value: '200000', capital_structure_debt: '100000' },
+        { id: 3, property: 1, loan: 1, capital_structure_date: '2015-02-01', capital_structure_value: '200000', capital_structure_debt: '100000' },
+        { id: 4, property: 1, loan: 1, capital_structure_date: '2012-08-14', capital_structure_value: '200000', capital_structure_debt: '100000' },
+        { id: 5, property: 1, loan: null, capital_structure_date: '2012-08-13', capital_structure_value: '200000', capital_structure_debt: null },
+      ])),
+    )
+  })
+  const row = (id: number) => within(screen.getByRole('button', { name: `Edit valuation ${id}` }).closest('tr')!)
+  it('uses the linked loan product on inclusive boundary dates and leaves gaps explicit', async () => {
+    let propertyFilter = ''
+    server.use(http.get('/api/v1/loan-products/', ({ request }) => {
+      propertyFilter = new URL(request.url).searchParams.get('property') ?? ''
+      return HttpResponse.json(products)
+    }))
+    renderPage()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Valuations' }))
+    expect(await row(1).findByText('Historic Bank')).toBeInTheDocument()
+    expect(row(1).getByText('Original deal')).toBeInTheDocument()
+    expect(row(2).getByText('Historic Bank')).toBeInTheDocument()
+    expect(row(3).getByText('Renewal Bank')).toBeInTheDocument()
+    expect(row(3).getByText('Tracker renewal')).toBeInTheDocument()
+    expect(row(4).getByText('Product not recorded')).toBeInTheDocument()
+    expect(row(5).queryByText('Product not recorded')).not.toBeInTheDocument()
+    expect(screen.queryByText('Other loan bank')).not.toBeInTheDocument()
+    expect(screen.queryByText('Current lender')).not.toBeInTheDocument()
+    expect(screen.queryByText('CURRENT-ACCOUNT')).not.toBeInTheDocument()
+    expect(propertyFilter).toBe('1')
+  })
+  it('shows fetch failure and supports retry instead of displaying the current lender', async () => {
+    server.use(http.get('/api/v1/loan-products/', () => HttpResponse.json({}, { status: 500 })))
+    renderPage()
+    await userEvent.click(await screen.findByRole('tab', { name: 'Valuations' }))
+    const retry = await row(1).findByRole('button', { name: 'Product unavailable — retry' })
+    expect(screen.queryByText('Current lender')).not.toBeInTheDocument()
+    server.use(http.get('/api/v1/loan-products/', () => HttpResponse.json(products)))
+    await userEvent.click(retry)
+    expect(await row(1).findByText('Historic Bank')).toBeInTheDocument()
   })
 })

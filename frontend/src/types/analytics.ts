@@ -158,6 +158,8 @@ const cashFlowSeriesDefinitionSchema = z
       'net',
       'cumulative',
       'deposit_movement',
+      'balance_sheet',
+      'cumulative_cash',
       'net_cash',
     ]),
   })

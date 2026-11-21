@@ -6,6 +6,7 @@ from rentals.constants import INCOME_CATEGORIES, TRANSACTION_CATEGORIES
 
 TRANSACTION_CATEGORY_KEYS = tuple(key for key, _label in TRANSACTION_CATEGORIES)
 CONTRA_EXPENSE_CATEGORIES = ("cost_reimbursement",)
+LOAN_PAYMENT_CATEGORIES = ("loan_interest", "loan_principal")
 
 
 def _decimal_abs(value: Decimal) -> Decimal:
@@ -13,6 +14,10 @@ def _decimal_abs(value: Decimal) -> Decimal:
 
 
 def category_kind(category: str, stored_type: str | None = None) -> str:
+    if category == "loan_principal":
+        return "balance_sheet"
+    if category == "loan_interest":
+        return "expense"
     if category in INCOME_CATEGORIES:
         return "income"
     if category in TRANSACTION_CATEGORY_KEYS:
@@ -21,7 +26,7 @@ def category_kind(category: str, stored_type: str | None = None) -> str:
 
 
 def normalize_transaction_amount(category: str, amount: Decimal) -> Decimal:
-    if category in CONTRA_EXPENSE_CATEGORIES:
+    if category in CONTRA_EXPENSE_CATEGORIES + LOAN_PAYMENT_CATEGORIES:
         return _decimal_abs(amount)
     if category in INCOME_CATEGORIES:
         return amount
@@ -48,6 +53,8 @@ def revenue_cost_deltas(
     stored_type: str | None = None,
 ) -> tuple[float, float]:
     kind = category_kind(category, stored_type)
+    if kind == "balance_sheet":
+        return 0.0, 0.0
     signed = signed_analytics_amount(category, amount, stored_type)
     if kind == "income":
         return signed, 0.0

@@ -41,6 +41,8 @@ import {
   usePropertyValuations,
   useUpdatePropertyValuation,
 } from '@/api/propertyValuations'
+import { useLoans, usePropertyLoanProducts } from '@/api/loans'
+import { PropertyLoans } from '@/features/property/PropertyLoans'
 import { useTenants } from '@/api/tenants'
 import { useTransactions } from '@/api/transactions'
 import { useProfitLoss, usePropertyValuationAnalytics } from '@/api/analytics'
@@ -97,6 +99,8 @@ export function PropertyDetailPage() {
   const valuationsQuery = usePropertyValuations(propertyId)
   const transactionsQuery = useTransactions({ property: propertyId })
   const tenantsQuery = useTenants()
+  const loansQuery = useLoans(propertyId)
+  const productsQuery = usePropertyLoanProducts(propertyId)
 
   // The valuation endpoint returns complete record history. Deliberately do
   // not pass an end date or derive a client-side five-year cutoff.
@@ -163,6 +167,20 @@ export function PropertyDetailPage() {
   // route on create, and is preserved on edit by passing the existing row
   // back through the PATCH.
   const valuationColumns: ColumnDef<PropertyValuation>[] = [
+    {
+      accessorKey: 'loan',
+      header: 'Loan',
+      cell: ({ row }) => {
+        if (!row.original.loan) return '—'
+        if (productsQuery.isLoading) return 'Loading product…'
+        if (productsQuery.isError) return <Button variant="link" className="min-h-11" onClick={() => productsQuery.refetch()}>Product unavailable — retry</Button>
+        const product = productsQuery.data?.find((item) =>
+          item.loan === row.original.loan && item.start_date <= row.original.capital_structure_date &&
+          (item.end_date === null || row.original.capital_structure_date <= item.end_date),
+        )
+        return product ? <div className="whitespace-normal"><div>{product.lender}</div><div className="text-xs text-muted-foreground">{product.name}</div></div> : 'Product not recorded'
+      },
+    },
     {
       accessorKey: 'capital_structure_date',
       header: 'Date',
@@ -316,6 +334,7 @@ export function PropertyDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="valuations">Valuations</TabsTrigger>
+          <TabsTrigger value="loans">Loans</TabsTrigger>
         </TabsList>
 
         {/* Overview tab -------------------------------------------------- */}
@@ -397,7 +416,7 @@ export function PropertyDetailPage() {
                             variant={t.type === 'income' ? 'secondary' : 'outline'}
                             className="capitalize"
                           >
-                            {t.type}
+                            {t.type.replaceAll('_', ' ')}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -437,9 +456,11 @@ export function PropertyDetailPage() {
             <DataTable
               columns={valuationColumns}
               data={valuationsQuery.data}
+              initialSorting={[{ id: 'capital_structure_date', desc: false }]}
             />
           )}
         </TabsContent>
+        <TabsContent value="loans" className="pt-4"><PropertyLoans property={property.id} currency={property.currency} /></TabsContent>
       </Tabs>
 
       {/* ---- Dialogs ------------------------------------------------------ */}
@@ -515,6 +536,7 @@ export function PropertyDetailPage() {
         description="Record a snapshot of the property's value and debt."
       >
         <PropertyValuationForm
+          loans={loansQuery.data ?? []}
           onSubmit={(values) =>
             createValuation.mutate(
               { ...values, property: property.id },
@@ -542,7 +564,9 @@ export function PropertyDetailPage() {
           mode="edit"
         >
           <PropertyValuationForm
+          loans={loansQuery.data ?? []}
             defaultValues={{
+              loan: editValuationTarget.loan ?? null,
               capital_structure_date:
                 editValuationTarget.capital_structure_date,
               capital_structure_value:

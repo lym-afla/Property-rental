@@ -11,15 +11,21 @@ Transaction and FX. Field lists match the real model fields in
 ``rentals/models.py`` (no invented fields).
 """
 
+from copy import copy
 from decimal import Decimal
 
 from rest_framework import serializers
 from django.conf import settings
+from django.core.exceptions import ValidationError as ModelValidationError
+
 
 from rentals.models import (
     FX,
     DepositMovement,
     Lease_rent,
+    Loan,
+    LoanCapitalisedFee,
+    LoanProduct,
     Property,
     Property_capital_structure,
     Tenant,
@@ -27,6 +33,16 @@ from rentals.models import (
     User,
 )
 
+class ValidatedModelSerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        instance = self.Meta.model() if self.instance is None else copy(self.instance)
+        for key, value in attrs.items():
+            setattr(instance, key, value)
+        try:
+            instance.clean()
+        except ModelValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+        return attrs
 
 class FXBrowseSerializer(serializers.Serializer):
     base = serializers.ChoiceField(choices=['USD', 'EUR', 'RUB', 'GBP', 'CHF', 'PLN', 'CNY', 'USDT', 'USDC'], default='USD')
@@ -36,7 +52,7 @@ class FXBrowseSerializer(serializers.Serializer):
     page_size = serializers.IntegerField(min_value=1, max_value=31, default=10)
 
 
-class PropertySerializer(serializers.ModelSerializer):
+class PropertySerializer(ValidatedModelSerializer):
     """Serializer for the ``Property`` model.
 
     Exposes every user-facing field on the model. ``owned_by`` is the FK
@@ -83,7 +99,7 @@ class TenantSerializer(serializers.ModelSerializer):
         ]
 
 
-class TransactionSerializer(serializers.ModelSerializer):
+class TransactionSerializer(ValidatedModelSerializer):
     """Serializer for the ``Transaction`` model.
 
     ``type`` is derived from ``category`` inside ``Transaction.save`` (see
@@ -111,6 +127,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "type",
             "comment",
             "deposit_movement",
+            "loan",
         ]
 
 
@@ -128,7 +145,7 @@ class FXSerializer(serializers.ModelSerializer):
         ]
 
 
-class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
+class PropertyCapitalStructureSerializer(ValidatedModelSerializer):
     """Serializer for the ``Property_capital_structure`` model (Task 5).
 
     Backs the ``/api/v1/property-valuations/`` ViewSet — the last CRUD
@@ -137,13 +154,6 @@ class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
     match the model definition in ``rentals/models.py`` (line ~123).
     """
 
-    def validate(self, attrs):
-        if (
-            attrs.get("capital_structure_debt") in ("", None)
-            and (self.instance is None or "capital_structure_debt" in attrs)
-        ):
-            attrs["capital_structure_debt"] = Decimal("0")
-        return attrs
 
     class Meta:
         model = Property_capital_structure
@@ -153,6 +163,7 @@ class PropertyCapitalStructureSerializer(serializers.ModelSerializer):
             "capital_structure_date",
             "capital_structure_value",
             "capital_structure_debt",
+            "loan",
         ]
 
 
@@ -267,3 +278,74 @@ class UserSerializer(serializers.ModelSerializer):
             "is_landlord",
             "is_tenant",
         ]
+
+
+class LoanSerializer(ValidatedModelSerializer):
+    class Meta:
+        model = Loan
+        fields = ["id", "property", "lender", "currency", "reference", "start_date",
+                  "end_date", "original_principal", "interest_rate", "rate_type",
+                  "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class LoanProductFilterSerializer(serializers.Serializer):
+    loan = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+    property = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+
+
+class LoanProductSerializer(ValidatedModelSerializer):
+    class Meta:
+        model = LoanProduct
+        fields = ["id", "loan", "name", "lender", "start_date", "end_date", "interest_rate",
+                  "rate_type", "opening_balance", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        self.fields["loan"].queryset = Loan.objects.filter(property__owned_by__user=request.user) if request else Loan.objects.none()
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except ModelValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+
+    def update(self, instance, validated_data):
+        try:
+            return super().update(instance, validated_data)
+        except ModelValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+
+
+class LoanCapitalisedFeeFilterSerializer(serializers.Serializer):
+    loan = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+    property = serializers.IntegerField(required=False, min_value=1, max_value=2**63 - 1)
+
+
+class LoanCapitalisedFeeSerializer(ValidatedModelSerializer):
+    class Meta:
+        model = LoanCapitalisedFee
+        fields = ["id", "loan", "property", "date", "amount", "description", "created_at", "updated_at"]
+        read_only_fields = ["property", "created_at", "updated_at"]
+
+
+class LoanPaymentSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    interest = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"))
+    total = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"), required=False)
+    principal = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"), required=False)
+    comment = serializers.CharField(max_length=250, required=False, allow_blank=True)
+    period = serializers.CharField(max_length=20, required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if ("total" in attrs) == ("principal" in attrs):
+            raise serializers.ValidationError("Supply total and interest, or interest and principal.")
+        if "total" in attrs:
+            attrs["principal"] = attrs.pop("total") - attrs["interest"]
+            if attrs["principal"] < 0:
+                raise serializers.ValidationError({"total": "Must be at least the interest."})
+        if attrs["principal"] + attrs["interest"] <= 0:
+            raise serializers.ValidationError("The payment must be positive.")
+        return attrs

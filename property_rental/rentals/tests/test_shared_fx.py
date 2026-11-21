@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -50,6 +50,47 @@ def test_identity_requires_covered_anchor():
 
 @pytest.mark.django_db
 @override_settings(FX_BACKEND='mirror')
+@pytest.mark.parametrize('preloaded', [False, True])
+@pytest.mark.parametrize('amount', [Decimal('2000.00'), Decimal('0.000'), Decimal('-12.3400')])
+def test_mirror_identity_preserves_decimal_amount_and_exponent(preloaded, amount):
+    from rentals.models import FXAnchor
+    from rentals.services.fx import convert, PreloadedConverter
+
+    day = date(2026, 1, 6)
+    FXAnchor.objects.create(date=day, currency='GBP', value='0.8', snapshot_id='s')
+    converter = PreloadedConverter([], 'GBP').convert if preloaded else convert
+    result = converter(amount, 'GBP', 'GBP', day)
+    assert result is amount
+    assert result == amount
+    assert result.as_tuple().exponent == amount.as_tuple().exponent
+
+
+@pytest.mark.django_db
+@override_settings(FX_BACKEND='mirror')
+@pytest.mark.parametrize('preloaded', [False, True])
+@pytest.mark.parametrize('currency,day,code', [
+    ('GBP', date(2026, 1, 5), 'before_coverage'),
+    ('GBP', date(2026, 1, 7), 'outside_applicability'),
+    ('EUR', date(2026, 1, 8), 'unsupported_currency'),
+])
+def test_mirror_identity_conversion_requires_coverage(preloaded, currency, day, code):
+    from rentals.models import FXAnchor, FXSyncState
+    from rentals.services.fx import convert, MissingFXRate, PreloadedConverter
+
+    covered = [date(2026, 1, 6), date(2026, 1, 8)]
+    FXSyncState.objects.create(pk=1, release_id='s', seq=1, history_epoch=1,
+                               coverage={'GBP': [{'start': on.isoformat(), 'end': on.isoformat()}
+                                                 for on in covered]})
+    for on in covered:
+        FXAnchor.objects.create(date=on, currency='GBP', value='0.8', snapshot_id='s')
+    converter = PreloadedConverter([], currency).convert if preloaded else convert
+    with pytest.raises(MissingFXRate) as error:
+        converter(Decimal('2000.00'), currency, currency, day)
+    assert error.value.code == code
+
+
+@pytest.mark.django_db
+@override_settings(FX_BACKEND='mirror')
 def test_provisional_rejects_observation_newer_than_snapshot():
     from rentals.models import FXAnchor
     from rentals.services.fx import get_rate, MissingFXRate
@@ -60,7 +101,7 @@ def test_provisional_rejects_observation_newer_than_snapshot():
         get_rate('USD', 'EUR', date(2026, 1, 3))
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror')
 def test_report_retains_captured_release_when_database_state_changes(landlord_user):
     from rest_framework.response import Response
@@ -182,7 +223,7 @@ def test_comparison_export_covers_native_transaction_without_writing_it(tmp_path
     assert row.amount == Decimal('10') and row.currency == 'EUR'
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror')
 def test_property_statistics_retain_captured_release(auth_client, sample_property, monkeypatch):
     from rentals.models import FXSyncState
@@ -296,7 +337,7 @@ def test_all_golden_rate_outcomes(monkeypatch):
             assert result['cacheable'] == case['cacheable'], case['name']
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror')
 def test_property_native_report_rejects_unconvertible_foreign_row(auth_client, sample_property):
     from rentals.tests.factories import TransactionFactory
@@ -343,12 +384,13 @@ def test_native_save_and_sqlite_import_do_not_use_network(tmp_path, monkeypatch,
     def offline(*args, **kwargs):
         raise AssertionError('network access during native write')
     monkeypatch.setattr(requests.sessions.Session, 'request', offline)
+    monkeypatch.setattr('django.utils.timezone.now', lambda: datetime(2026, 1, 5, 12, tzinfo=timezone.utc))
     prop = PropertyFactory(id=41)
     row = TransactionFactory(id=73, property=prop, tenant=None, category='rent', period='2026-01', currency='EUR', amount=Decimal('10.00'), date=date(2026, 1, 5), comment='fixed')
     FX.objects.create(date=date(2026, 1, 5), from_currency='EUR', to_currency='USD', rate=Decimal('2'))
     row.refresh_from_db()
     original_hash = business_hash(row)
-    assert original_hash == 'babf126e752f3cedc21c4658b2bf51ebd73b14a9de7ddc6235745a9f469f5907'
+    assert original_hash == 'd7c584d464adccf4348fb46e8cb087ba7476e33217c51bb45ecf66a9b73c4b04'
     source = tmp_path / 'source.sqlite3'
     _write_source_sqlite(source)
     _clear_destination_rows()
@@ -358,7 +400,7 @@ def test_native_save_and_sqlite_import_do_not_use_network(tmp_path, monkeypatch,
     call_command('export_fx_comparison', output=str(output))
     import json
     assert any(record['kind'] == 'transaction' and record['business_hash'] == original_hash for record in json.loads(output.read_text())['records'])
-    assert business_hash(Transaction.objects.get(pk=row.pk)) == 'babf126e752f3cedc21c4658b2bf51ebd73b14a9de7ddc6235745a9f469f5907'
+    assert business_hash(Transaction.objects.get(pk=row.pk)) == 'd7c584d464adccf4348fb46e8cb087ba7476e33217c51bb45ecf66a9b73c4b04'
     assert FXAnchor.objects.count() == 0
     assert FX.objects.count() == (1 if backend == 'legacy' else 0)
 
@@ -397,7 +439,7 @@ def test_mirror_conversion_ignores_hostile_decimal_context():
         assert getcontext().prec == 6 and getcontext().traps[Inexact]
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror')
 def test_provisional_analytics_response_is_not_http_cacheable(landlord_user):
     from rest_framework.response import Response
@@ -529,7 +571,7 @@ def test_sync_rejects_invalid_ceiling_hash_and_incomplete_metadata(bad_release, 
     assert (state.release_id, state.seq, state.history_epoch, state.synced_at) == ('old', 1, 1, timestamp)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 @override_settings(FX_BACKEND='mirror', ROOT_URLCONF=__name__)
 def test_report_state_change_keeps_single_captured_release(client, landlord_user, monkeypatch):
     import sys

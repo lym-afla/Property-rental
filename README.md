@@ -65,6 +65,10 @@ npm run lint
 npm run build
 ```
 
+### Loans and Wealth export
+
+Track lenders, mortgage interest/principal and dated debt balances from each property’s Loans and Valuations tabs. See [the Wealth export guide](docs/wealth-export.md) for history CSV imports, reconciliation, and read-only v1.1 exports.
+
 ### Production container and Life OS handoff
 
 The application is prepared for Life OS deployment at `https://rent.linik.ru`.

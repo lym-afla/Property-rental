@@ -29,6 +29,12 @@ by the operator (null when absent), release ID/sequence/history epoch, explicit
 report horizon, and allowlisted backend settings. Only `header.generated_at`
 varies for identical inputs. Output files are mode 0600. Never commit exports.
 
+Native business hashes exclude exactly `created_at` and `updated_at`; every
+other concrete field is included. The business inventory covers Property,
+Tenant, Transaction, DepositMovement, Lease_rent, Property_capital_structure,
+Loan, LoanProduct and LoanCapitalisedFee. Loan records add business evidence
+without adding FX conversion rows.
+
 ```sh
 python manage.py export_fx_comparison --output /private/comparison.json \
   --source-commit "$RENT_SOURCE_COMMIT" --image-digest "$RENT_IMAGE_DIGEST" \
@@ -139,8 +145,8 @@ strictly validated mirror metadata; unknown response fields still fail validatio
 
 This is an opt-in extension under `FX_BACKEND=mirror`, introduced in the same
 unmerged feature as the mirror backend. Existing default/legacy API clients and
-data remain compatible. The branch therefore retains version **2.3.0**, rather
-than introducing a major version for a new mode that has not been cut over.
+data remain compatible. Version **2.6.0** introduces the mirror, sync command and browsing as new
+features in a mode that has not been cut over.
 Clients opting into mirror must consume the documented envelope. Changelog
 entries describe both mirror calculations and browsing under that version.
 

@@ -74,10 +74,10 @@ def test_transaction_api_normalizes_cost_signs(
 
 
 @pytest.mark.django_db
-def test_property_valuation_api_defaults_blank_debt_to_zero(
+def test_property_valuation_api_preserves_blank_debt_as_unknown(
     auth_client, sample_property
 ):
-    """Blank debt inputs represent an explicit zero-debt valuation."""
+    """A blank debt is unknown; an explicit zero records a payoff."""
     response = auth_client.post(
         "/api/v1/property-valuations/",
         {
@@ -90,7 +90,7 @@ def test_property_valuation_api_defaults_blank_debt_to_zero(
     )
 
     assert response.status_code == 201
-    assert Decimal(response.json()["capital_structure_debt"]) == Decimal("0.00")
+    assert response.json()["capital_structure_debt"] is None
 
 
 @pytest.mark.django_db

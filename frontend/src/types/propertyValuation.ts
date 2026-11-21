@@ -3,6 +3,7 @@
 // `/api/v1/property-valuations/` endpoint). Field names MUST match the
 // serializer exactly (snake_case preserved on purpose).
 export type PropertyValuation = {
+  loan?: number | null
   id: number
   property: number
   capital_structure_date: string

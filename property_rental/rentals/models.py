@@ -1,5 +1,6 @@
+from decimal import Decimal
+from django.db import models, transaction
 from rentals.services.fx_context import behavior as fx_behavior
-from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -122,7 +123,20 @@ class OIDCLogoutReplay(models.Model):
 class Landlord(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='landlord')
 
-class Property(models.Model):
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if kwargs.get("update_fields"):
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"updated_at"}
+        return super().save(*args, **kwargs)
+
+
+class Property(TimestampedModel):
     owned_by = models.ForeignKey(Landlord, on_delete=models.CASCADE, related_name='properties')
     name = models.CharField(max_length=50)
     location = models.CharField(max_length=50)
@@ -131,6 +145,10 @@ class Property(models.Model):
     area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     sold = models.DateField(null=True, blank=True)
+
+    def clean(self):
+        if self.pk and self.loans.exclude(currency=self.currency).exists():
+            raise ValidationError({"currency": "Cannot change currency while loans use another currency."})
 
     def __str__(self):
         return self.name
@@ -187,14 +205,140 @@ class Property(models.Model):
 
         return average_value, average_debt
     
+class Loan(TimestampedModel):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="loans")
+    lender = models.CharField(max_length=200)
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES)
+    reference = models.CharField(max_length=200, blank=True, default="")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    original_principal = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    interest_rate = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
+    rate_type = models.CharField(max_length=8, choices=(("fixed", "Fixed"), ("variable", "Variable")), blank=True, default="")
+
+    def clean(self):
+        if self.property_id and self.currency != self.property.currency:
+            raise ValidationError({"currency": "Must equal the property's currency."})
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            raise ValidationError({"end_date": "Must be on or after the start date."})
+        if not self.lender.strip():
+            raise ValidationError({"lender": "A lender is required."})
+        if self.interest_rate is not None and not self.rate_type:
+            raise ValidationError({"rate_type": "Choose fixed or variable for the rate."})
+        if self.pk:
+            original = type(self).objects.get(pk=self.pk)
+            if (original.property_id, original.currency) != (self.property_id, self.currency) and (
+                self.transactions.exists() or self.capital_observations.exists() or self.capitalised_fees.exists()
+            ):
+                raise ValidationError({"property": "A loan with history cannot change property or currency."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.lender
+
+
+class LoanProduct(TimestampedModel):
+    loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="products")
+    name = models.CharField(max_length=200)
+    lender = models.CharField(max_length=200)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    interest_rate = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(0)])
+    rate_type = models.CharField(max_length=8, choices=(("fixed", "Fixed"), ("variable", "Variable")), blank=True, default="")
+    opening_balance = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True, default="", max_length=2000)
+
+    class Meta:
+        ordering = ["start_date", "id"]
+        constraints = [
+            models.CheckConstraint(check=Q(interest_rate__isnull=True) | Q(interest_rate__gte=0), name="loan_product_rate_nonnegative"),
+            models.CheckConstraint(check=Q(opening_balance__isnull=True) | Q(opening_balance__gte=0), name="loan_product_balance_nonnegative"),
+            models.CheckConstraint(check=Q(end_date__isnull=True) | Q(end_date__gte=models.F("start_date")), name="loan_product_dates_ordered"),
+        ]
+
+    @property
+    def property(self):
+        return self.loan.property
+
+    def clean(self):
+        errors = {}
+        for field in ("name", "lender"):
+            value = getattr(self, field).strip()
+            setattr(self, field, value)
+            if not value:
+                errors[field] = "This field may not be blank."
+        if self.pk and type(self).objects.filter(pk=self.pk).exclude(loan_id=self.loan_id).exists():
+            errors["loan"] = "A product cannot change loan."
+        if self.interest_rate is not None and not self.rate_type:
+            errors["rate_type"] = "Choose fixed or variable for the rate."
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            errors["end_date"] = "Must be on or after the start date."
+        if self.loan_id and self.start_date:
+            others = type(self).objects.filter(loan_id=self.loan_id).exclude(pk=self.pk)
+            others = others.filter(Q(end_date__isnull=True) | Q(end_date__gte=self.start_date))
+            if self.end_date:
+                others = others.filter(start_date__lte=self.end_date)
+            if others.exists():
+                errors["start_date"] = "Product dates overlap another product for this loan."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            # Serialize switches so competing requests validate against committed products.
+            Loan.objects.select_for_update().get(pk=self.loan_id)
+            self.full_clean()
+            return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        with transaction.atomic():
+            Loan.objects.select_for_update().get(pk=self.loan_id)
+            return super().delete(*args, **kwargs)
+
+
+class LoanCapitalisedFee(TimestampedModel):
+    loan = models.ForeignKey(Loan, on_delete=models.RESTRICT, related_name="capitalised_fees")
+    # Property deletion removes all loan history together; direct loan deletion is restricted.
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="loan_capitalised_fees", editable=False)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=18, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    description = models.CharField(max_length=250, blank=True, default="")
+
+    class Meta:
+        constraints = [models.CheckConstraint(check=Q(amount__gt=0), name="loan_capitalised_fee_positive")]
+
+    def save(self, *args, **kwargs):
+        self.property_id = self.loan.property_id
+        self.full_clean()
+        if kwargs.get("update_fields"):
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"property"}
+        return super().save(*args, **kwargs)
+
+
 # Keep track of captital structure for the property
-class Property_capital_structure(models.Model):
+class Property_capital_structure(TimestampedModel):
+    loan = models.ForeignKey(Loan, null=True, blank=True, on_delete=models.RESTRICT, related_name='capital_observations')
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='capital')
     capital_structure_date = models.DateField(default=timezone.now)
     capital_structure_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     capital_structure_debt = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
-class Tenant(models.Model):
+    def clean(self):
+        if self.capital_structure_debt and not self.loan_id:
+            original = type(self).objects.filter(pk=self.pk).first() if self.pk else None
+            if not original or original.loan_id or (
+                original.property_id != self.property_id
+                or original.capital_structure_debt != self.capital_structure_debt
+            ):
+                raise ValidationError({"loan": "A loan is required for nonzero debt."})
+        if self.loan_id and self.loan.property_id != self.property_id:
+            raise ValidationError({"loan": "Loan must belong to this property."})
+
+
+class Tenant(TimestampedModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant', blank=True, null=True)
     
     # Fields specific to the tenant user type
@@ -326,13 +470,14 @@ class Tenant(models.Model):
         else:
             return 'No rent history for the Tenant'
 
-class Lease_rent(models.Model):
+class Lease_rent(TimestampedModel):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='rent_history')
     date_rent_set = models.DateField(null=False, blank=False)
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', null=True, blank=False)
     rent = models.DecimalField(max_digits=10, decimal_places=2)
     
-class Transaction(models.Model):
+class Transaction(TimestampedModel):
+    loan = models.ForeignKey(Loan, null=True, blank=True, on_delete=models.RESTRICT, related_name='transactions')
     date = models.DateField(default=timezone.now)
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='transactions')
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='transactions', null=True, blank=True)
@@ -344,11 +489,24 @@ class Transaction(models.Model):
     TRANSACTION_TYPES = (
         ('income', 'Income'),
         ('expense', 'Expense'),
+        ('balance_sheet', 'Balance sheet'),
     )
     
     type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     comment = models.TextField(max_length=250, blank=True, null=True)
     
+    def clean(self):
+        is_payment = self.category in ("loan_interest", "loan_principal")
+        if is_payment and not self.loan_id:
+            raise ValidationError({"loan": "A loan is required for interest and principal."})
+        if self.loan_id:
+            if not is_payment:
+                raise ValidationError({"loan": "Only interest and principal can reference a loan."})
+            if self.loan.property_id != self.property_id:
+                raise ValidationError({"loan": "Loan must belong to this property."})
+            if self.currency != self.loan.currency:
+                raise ValidationError({"currency": "Must equal the loan currency."})
+
     @classmethod
     def financials(cls, end_date, target_currency=None, properties=None, tenants=None, start_date=None, transaction_type=None, category=None):
         """Delegate to ``services.financials.aggregate`` (Task 11).
@@ -377,12 +535,13 @@ class Transaction(models.Model):
         return self.property.name + ": " + self.category
 
     def save(self, *args, **kwargs):
+        self.clean()
         self.type = category_kind(self.category)
         self.amount = normalize_transaction_amount(self.category, self.amount)
         self.comment = '–' if not self.comment else self.comment
         super(Transaction, self).save(*args, **kwargs)
         
-class DepositMovement(models.Model):
+class DepositMovement(TimestampedModel):
     """Security-deposit ledger entry; amount is positive, sign comes from kind."""
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='deposit_movements')
